@@ -20,9 +20,17 @@ import {
   EVAL_RUNS_TABLE_BASE_SELECTION_STATE,
   EvalRunsTableKeyedColumnPrefix,
 } from './ExperimentEvaluationRunsTable.constants';
+import { invalidateMlflowSearchTracesCache } from '@databricks/web-shared/genai-traces-table';
+import { useQueryClient } from '@databricks/web-shared/query-client';
 import { FormattedMessage } from 'react-intl';
-import { useSelectedRunUuid } from '../../components/evaluations/hooks/useSelectedRunUuid';
-import { useCompareToRunUuid } from '../../components/evaluations/hooks/useCompareToRunUuid';
+import {
+  useSelectedRunUuid,
+  SELECTED_RUN_UUID_QUERY_PARAM,
+} from '../../components/evaluations/hooks/useSelectedRunUuid';
+import {
+  useCompareToRunUuid,
+  COMPARE_TO_RUN_UUID_QUERY_PARAM,
+} from '../../components/evaluations/hooks/useCompareToRunUuid';
 import { RunEvaluationButton } from './RunEvaluationButton';
 import { isUserFacingTag } from '../../../common/utils/TagUtils';
 import { createEvalRunsTableKeyedColumnKey } from './ExperimentEvaluationRunsTable.utils';
@@ -64,6 +72,7 @@ const ExperimentEvaluationRunsPageImpl = () => {
     EVAL_RUNS_TABLE_BASE_SELECTION_STATE,
   );
 
+  const queryClient = useQueryClient();
   const enableImprovedComparison = shouldEnableImprovedEvalRunsComparison();
   const showIssuesPanelFlag = shouldShowEvalRunsIssuesPanel();
 
@@ -102,6 +111,11 @@ const ExperimentEvaluationRunsPageImpl = () => {
     enabled: true,
     filter: searchFilter,
   });
+
+  const refetchAll = useCallback(() => {
+    refetch();
+    invalidateMlflowSearchTracesCache({ queryClient });
+  }, [refetch, queryClient]);
 
   const runUuids = useMemo(() => runs?.map((run) => run.info.runUuid) ?? [], [runs]);
 
@@ -274,8 +288,8 @@ const ExperimentEvaluationRunsPageImpl = () => {
       // Set both URL params atomically to avoid race conditions
       setSearchParams(
         (params) => {
-          params.set('selectedRunUuid', runUuid1);
-          params.set('compareToRunUuid', runUuid2);
+          params.set(SELECTED_RUN_UUID_QUERY_PARAM, runUuid1);
+          params.set(COMPARE_TO_RUN_UUID_QUERY_PARAM, runUuid2);
           return params;
         },
         { replace: true },
@@ -326,7 +340,7 @@ const ExperimentEvaluationRunsPageImpl = () => {
   const renderTableControls = () => (
     <ExperimentEvaluationRunsTableControls
       runs={runs ?? []}
-      refetchRuns={refetch}
+      refetchRuns={refetchAll}
       isFetching={isFetching || isLoading}
       searchRunsError={error}
       searchFilter={searchFilter}
@@ -359,8 +373,16 @@ const ExperimentEvaluationRunsPageImpl = () => {
           : undefined
       }
       setSelectedRunUuid={(runUuid: string) => {
-        setSelectedRunUuid(runUuid);
-        setCompareToRunUuid(undefined);
+        // Update both params atomically to avoid race conditions
+        // where separate setSearchParams calls overwrite each other
+        setSearchParams(
+          (params) => {
+            params.set(SELECTED_RUN_UUID_QUERY_PARAM, runUuid);
+            params.delete(COMPARE_TO_RUN_UUID_QUERY_PARAM);
+            return params;
+          },
+          { replace: true },
+        );
         // When flag is ON, also set isViewingSelectedRun to show the split view
         if (showIssuesPanelFlag) {
           setIsViewingSelectedRun(true);
@@ -411,8 +433,10 @@ const ExperimentEvaluationRunsPageImpl = () => {
                 css={{ whiteSpace: 'nowrap' }}
                 openInNewTab
               >
-                {/* eslint-disable-next-line formatjs/enforce-description */}
-                <FormattedMessage defaultMessage="Learn more" />
+                <FormattedMessage
+                  defaultMessage="Learn more"
+                  description="Link text to learn more about evaluation runs"
+                />
               </Typography.Link>
             ),
           }}
@@ -540,6 +564,9 @@ const ExperimentEvaluationRunsPageImpl = () => {
                 flex: 1,
                 minHeight: '0px',
                 paddingLeft: theme.spacing.sm,
+                alignItems: 'center',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
               }}
             >
               {renderActiveTab(selectedRunUuid)}

@@ -37,6 +37,10 @@ export const SPAN_CONTENT_COLUMN_ID = 'span.content';
 export const SIMULATION_GOAL_COLUMN_ID = 'simulation_goal';
 export const SIMULATION_PERSONA_COLUMN_ID = 'simulation_persona';
 export const LINKED_PROMPTS_COLUMN_ID = 'prompt';
+export const ISSUE_ID_COLUMN_ID = 'issue.id';
+export const ISSUES_COLUMN_ID = 'issues';
+export const GIT_BRANCH_COLUMN_ID = 'git_branch';
+export const GIT_COMMIT_COLUMN_ID = 'git_commit';
 
 export const SORTABLE_INFO_COLUMNS = [EXECUTION_DURATION_COLUMN_ID, REQUEST_TIME_COLUMN_ID, SESSION_COLUMN_ID];
 // Columns that are sortable by the server. Server-side sorting should be prioritized over client-side sorting.
@@ -172,6 +176,10 @@ export const useTableColumns = (
             defaultMessage: 'Session',
             description: 'Column label for session',
           }),
+          filterLabel: intl.formatMessage({
+            defaultMessage: 'Session ID',
+            description: 'Filter label for session ID',
+          }),
           type: TracesTableColumnType.TRACE_INFO,
           group: TracesTableColumnGroup.INFO,
         },
@@ -211,6 +219,24 @@ export const useTableColumns = (
           label: intl.formatMessage({
             defaultMessage: 'Source',
             description: 'Column label for source',
+          }),
+          type: TracesTableColumnType.TRACE_INFO,
+          group: TracesTableColumnGroup.INFO,
+        },
+        {
+          id: GIT_BRANCH_COLUMN_ID,
+          label: intl.formatMessage({
+            defaultMessage: 'Git branch',
+            description: 'Column label for the git branch the trace was produced on',
+          }),
+          type: TracesTableColumnType.TRACE_INFO,
+          group: TracesTableColumnGroup.INFO,
+        },
+        {
+          id: GIT_COMMIT_COLUMN_ID,
+          label: intl.formatMessage({
+            defaultMessage: 'Git commit',
+            description: 'Column label for the git commit hash the trace was produced on',
           }),
           type: TracesTableColumnType.TRACE_INFO,
           group: TracesTableColumnGroup.INFO,
@@ -372,7 +398,18 @@ export const useTableColumns = (
         : [];
     }
 
-    return [...inputCols, ...infoCols, ...assessmentColumns, ...Object.values(expectationColumns)].filter(
+    // Issues column is placed at the end of INFO group
+    const issuesCol = {
+      id: ISSUES_COLUMN_ID,
+      label: intl.formatMessage({
+        defaultMessage: 'Issues',
+        description: 'Column label for issues',
+      }),
+      type: TracesTableColumnType.TRACE_INFO,
+      group: TracesTableColumnGroup.INFO,
+    };
+
+    return [...inputCols, ...infoCols, issuesCol, ...assessmentColumns, ...Object.values(expectationColumns)].filter(
       (col): col is TracesTableColumn => Boolean(col),
     );
   }, [currentEvaluationResults, intl, assessmentInfos, runUuid, otherEvaluationResults, isTraceInfoV3Override]);

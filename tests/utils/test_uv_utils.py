@@ -31,13 +31,13 @@ def test_get_uv_version_returns_none_when_uv_not_installed():
 
 def test_get_uv_version_returns_version_when_uv_installed():
     mock_result = mock.Mock()
-    mock_result.stdout = "uv 0.5.0 (abc123 2024-01-01)"
+    mock_result.stdout = "uv 0.6.10 (abc123 2024-01-01)"
     with (
         mock.patch("mlflow.utils.uv_utils.shutil.which", return_value="/usr/bin/uv"),
         mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result) as mock_run,
     ):
         version = get_uv_version()
-        assert version == Version("0.5.0")
+        assert version == Version("0.6.10")
         mock_run.assert_called_once()
 
 
@@ -80,7 +80,7 @@ def test_is_uv_available_returns_false_when_version_below_minimum():
         assert is_uv_available() is False
 
 
-@pytest.mark.parametrize("version_str", ["0.5.0", "1.0.0"])
+@pytest.mark.parametrize("version_str", ["0.6.10", "1.0.0"])
 def test_is_uv_available_returns_true_when_version_meets_or_exceeds_minimum(version_str):
     mock_result = mock.Mock()
     mock_result.stdout = f"uv {version_str} (abc123 2024-01-01)"
@@ -223,6 +223,45 @@ numpy==1.24.0
         assert "numpy==1.24.0" in result
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["cwd"] == tmp_path
+
+
+# --- export_uv_requirements groups/extras tests ---
+
+
+def test_export_uv_requirements_passes_groups_to_command(tmp_path):
+    mock_result = mock.Mock()
+    mock_result.stdout = "requests==2.28.0\n"
+
+    with (
+        mock.patch("mlflow.utils.uv_utils._get_uv_binary", return_value="/usr/bin/uv"),
+        mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result) as mock_run,
+    ):
+        export_uv_requirements(tmp_path, groups=["serving", "ml"])
+
+        call_args = mock_run.call_args[0][0]
+        assert "--group" in call_args
+        serving_idx = call_args.index("--group")
+        assert call_args[serving_idx + 1] == "serving"
+        second_group_idx = call_args.index("--group", serving_idx + 1)
+        assert call_args[second_group_idx + 1] == "ml"
+
+
+def test_export_uv_requirements_passes_extras_to_command(tmp_path):
+    mock_result = mock.Mock()
+    mock_result.stdout = "uvicorn==0.29.0\n"
+
+    with (
+        mock.patch("mlflow.utils.uv_utils._get_uv_binary", return_value="/usr/bin/uv"),
+        mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result) as mock_run,
+    ):
+        export_uv_requirements(tmp_path, extras=["api", "gpu"])
+
+        call_args = mock_run.call_args[0][0]
+        assert "--extra" in call_args
+        api_idx = call_args.index("--extra")
+        assert call_args[api_idx + 1] == "api"
+        second_extra_idx = call_args.index("--extra", api_idx + 1)
+        assert call_args[second_extra_idx + 1] == "gpu"
 
 
 # --- copy_uv_project_files tests ---
@@ -398,6 +437,39 @@ def test_export_uv_requirements_returns_none_when_uv_binary_missing(tmp_path):
         assert result is None
 
 
+def test_infer_pip_requirements_passes_groups_and_extras_to_uv_export(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MLFLOW_UV_AUTO_DETECT", "true")
+    (tmp_path / _UV_LOCK_FILE).touch()
+    (tmp_path / _PYPROJECT_FILE).touch()
+
+    uv_output = "fastapi==0.100.0\nuvicorn==0.29.0\n"
+    mock_result = mock.Mock()
+    mock_result.stdout = uv_output
+
+    with (
+        mock.patch("mlflow.utils.uv_utils._get_uv_binary", return_value="/usr/bin/uv"),
+        mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result) as mock_run,
+    ):
+        result = infer_pip_requirements(
+            str(tmp_path),
+            "sklearn",
+            uv_groups=["serving"],
+            uv_extras=["api"],
+        )
+
+        assert "fastapi==0.100.0" in result
+        assert "uvicorn==0.29.0" in result
+
+        call_args = mock_run.call_args[0][0]
+        assert "--group" in call_args
+        group_idx = call_args.index("--group")
+        assert call_args[group_idx + 1] == "serving"
+        assert "--extra" in call_args
+        extra_idx = call_args.index("--extra")
+        assert call_args[extra_idx + 1] == "api"
+
+
 def test_detect_uv_project_not_detected_when_files_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert detect_uv_project() is None
@@ -493,6 +565,70 @@ def test_infer_pip_requirements_explicit_uv_project_dir_overrides_disabled_auto_
         result = infer_pip_requirements(str(tmp_path), "sklearn", uv_project_dir=uv_project)
 
         assert "numpy==1.24.0" in result
+
+
+def test_infer_pip_requirements_prepends_extra_index_urls_for_private_indexes(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MLFLOW_UV_AUTO_DETECT", "true")
+
+    uv_lock_content = """version = 1
+requires-python = ">=3.10"
+
+[[package]]
+name = "my-internal-utils"
+version = "0.2.7"
+source = { registry = "https://pypi.internal.example.com/simple" }
+
+[[package]]
+name = "scikit-learn"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+"""
+    (tmp_path / _UV_LOCK_FILE).write_text(uv_lock_content)
+    (tmp_path / _PYPROJECT_FILE).touch()
+
+    mock_result = mock.Mock()
+    mock_result.stdout = "my-internal-utils==0.2.7\nscikit-learn==1.3.0\n"
+
+    with (
+        mock.patch("mlflow.utils.uv_utils._get_uv_binary", return_value="/usr/bin/uv"),
+        mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result),
+    ):
+        result = infer_pip_requirements("runs:/fake/model", "sklearn")
+
+    assert "--extra-index-url https://pypi.internal.example.com/simple" in result
+    assert "my-internal-utils==0.2.7" in result
+    assert "scikit-learn==1.3.0" in result
+
+
+def test_infer_pip_requirements_no_extra_index_urls_when_no_private_indexes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MLFLOW_UV_AUTO_DETECT", "true")
+
+    uv_lock_content = """version = 1
+requires-python = ">=3.10"
+
+[[package]]
+name = "scikit-learn"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+"""
+    (tmp_path / _UV_LOCK_FILE).write_text(uv_lock_content)
+    (tmp_path / _PYPROJECT_FILE).touch()
+
+    mock_result = mock.Mock()
+    mock_result.stdout = "scikit-learn==1.3.0\n"
+
+    with (
+        mock.patch("mlflow.utils.uv_utils._get_uv_binary", return_value="/usr/bin/uv"),
+        mock.patch("mlflow.utils.uv_utils.subprocess.run", return_value=mock_result),
+    ):
+        result = infer_pip_requirements("runs:/fake/model", "sklearn")
+
+    assert not any(req.startswith("--extra-index-url") for req in result)
+    assert "scikit-learn==1.3.0" in result
 
 
 def test_export_uv_requirements_strips_comment_lines(tmp_path):
@@ -704,3 +840,28 @@ def test_run_uv_sync_returns_false_on_failure(tmp_path):
     ):
         result = run_uv_sync(tmp_path)
         assert result is False
+
+
+def test_infer_pip_requirements_warns_when_groups_set_but_no_uv_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MLFLOW_UV_AUTO_DETECT", "true")
+
+    with (
+        mock.patch(
+            "mlflow.utils.environment._infer_requirements",
+            return_value=["scikit-learn==1.0"],
+        ),
+        mock.patch("mlflow.utils.environment._logger") as mock_logger,
+    ):
+        result = infer_pip_requirements(
+            str(tmp_path),
+            "sklearn",
+            uv_groups=["serving"],
+            uv_extras=["api"],
+        )
+
+        assert "scikit-learn==1.0" in result
+        mock_logger.warning.assert_any_call(
+            "uv_groups and/or uv_extras were specified but no uv project was detected. "
+            "These parameters will be ignored. Falling back to package capture based inference."
+        )

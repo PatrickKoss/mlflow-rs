@@ -1,5 +1,5 @@
 ---
-title: Version Tracking for Agents and LLMs | MLflow AI Platform
+title: Version Tracking for Agents and LLMs
 description: Understand how MLflow enables version tracking for your complete agent and LLM applications using LoggedModels, linking code, configurations, evaluations, and traces.
 last_update:
   date: 2025-05-23
@@ -166,12 +166,10 @@ Context manager automatically handles version switching—clean, explicit, and e
 import pandas as pd
 
 # Evaluate multiple versions against the same test set
-eval_data = pd.DataFrame(
-    {
-        "inputs": test_questions,
-        "expected_categories": ["account", "business_info", "billing"],
-    }
-)
+eval_data = pd.DataFrame({
+    "inputs": test_questions,
+    "expected_categories": ["account", "business_info", "billing"],
+})
 
 # Version A: Original configuration
 results_v1 = mlflow.evaluate(
@@ -204,13 +202,13 @@ Objective metrics remove guesswork from version selection.
 
 Ready to implement systematic version tracking? You'll need:
 
-- **MLflow 3.0+** (`pip install --upgrade 'mlflow[genai]>=3.1'`)
+- **MLflow 3.0+** (`pip install --upgrade 'mlflow>=3.1'`)
 - **Git repository** for your application code
 - **Python 3.10+**
 - **LLM API access** (OpenAI, Anthropic, etc.)
 
 :::tip
-For Databricks-hosted MLflow Tracking: `pip install --upgrade 'mlflow[genai,databricks]>=3.1'`
+For Databricks-hosted MLflow Tracking: `pip install --upgrade 'mlflow[databricks]>=3.1'`
 :::
 
 ---

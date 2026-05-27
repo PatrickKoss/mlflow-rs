@@ -1,5 +1,6 @@
 import base64
 import logging
+import time
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -8,7 +9,16 @@ from urllib.parse import quote, urlencode
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from pydantic import BaseModel
 
-from mlflow.entities import Assessment, Span, Trace, TraceInfo, TraceLocation
+from mlflow.entities import (
+    Assessment,
+    Issue,
+    IssueSeverity,
+    IssueStatus,
+    Span,
+    Trace,
+    TraceInfo,
+    TraceLocation,
+)
 from mlflow.entities.assessment import ExpectationValue, FeedbackValue
 from mlflow.entities.trace_location import (
     UCSchemaLocation as UCSchemaLocationEntity,
@@ -43,10 +53,12 @@ from mlflow.protos.databricks_tracing_pb2 import (
     DeleteTraceTag,
     GetAssessment,
     GetLocation,
+    GetOperationRequest,
     GetTraceInfo,
     LinkExperimentToUCTraceLocation,
     LinkTraceLocation,
-    SearchTraces,
+    SearchTracesLongRunning,
+    SearchTracesOperation,
     SetTraceTag,
     UnLinkExperimentToUCTraceLocation,
     UpdateAssessment,
@@ -83,6 +95,8 @@ from mlflow.utils.rest_utils import (
 
 DATABRICKS_UC_TABLE_HEADER = "X-Databricks-UC-Table-Name"
 _V5_TRACE_LOCATION_ENDPOINT = "/api/5.0/mlflow/tracing/locations"
+
+_SEARCH_TRACES_POLL_INTERVAL_SECONDS = 1.0
 
 _logger = logging.getLogger(__name__)
 
@@ -155,6 +169,20 @@ class DatabricksTracingRestStore(RestStore):
     def __init__(self, get_host_creds):
         super().__init__(get_host_creds)
 
+    def _resolve_sql_warehouse_id(self, explicit: str | None = None) -> str | None:
+        """
+        Return the SQL warehouse id to use for a tracing RPC, ensuring the warehouse is RUNNING.
+
+        Used exclusively by V4/V5 MLflow tracing endpoints that pass a warehouse id to the
+        backend. Non-tracing and /api/2.0 endpoints do not route through this method.
+        """
+        wh_id = explicit or MLFLOW_TRACING_SQL_WAREHOUSE_ID.get()
+        if wh_id:
+            from mlflow.utils.databricks_sql_warehouse import ensure_sql_warehouse_running
+
+            ensure_sql_warehouse_running(wh_id)
+        return wh_id
+
     def _call_endpoint(
         self,
         api,
@@ -207,7 +235,7 @@ class DatabricksTracingRestStore(RestStore):
     ) -> UnityCatalogEntity:
         request_proto = CreateLocation(
             uc_table_prefix=uc_table_prefix_location_to_proto(location),
-            sql_warehouse_id=sql_warehouse_id or MLFLOW_TRACING_SQL_WAREHOUSE_ID.get(),
+            sql_warehouse_id=self._resolve_sql_warehouse_id(sql_warehouse_id),
         )
         req_body = message_to_json(request_proto)
         response_proto = self._call_endpoint(
@@ -295,7 +323,7 @@ class DatabricksTracingRestStore(RestStore):
             BatchGetTraces(
                 location_id=location,
                 trace_ids=trace_ids,
-                sql_warehouse_id=MLFLOW_TRACING_SQL_WAREHOUSE_ID.get(),
+                sql_warehouse_id=self._resolve_sql_warehouse_id(),
             )
         )
         response_proto = self._call_endpoint(
@@ -304,6 +332,11 @@ class DatabricksTracingRestStore(RestStore):
             endpoint=f"{_V4_TRACE_REST_API_PATH_PREFIX}/{location}/batchGet",
         )
         return [trace_from_proto(proto, location) for proto in response_proto.traces]
+
+    def batch_get_trace_infos(
+        self, trace_ids: list[str], location: str | None = None
+    ) -> list[TraceInfo]:
+        raise MlflowNotImplementedException()
 
     def get_trace_info(self, trace_id: str) -> TraceInfo:
         """
@@ -317,7 +350,7 @@ class DatabricksTracingRestStore(RestStore):
         """
         location, trace_id = parse_trace_id_v4(trace_id)
         if location is not None:
-            sql_warehouse_id = MLFLOW_TRACING_SQL_WAREHOUSE_ID.get()
+            sql_warehouse_id = self._resolve_sql_warehouse_id()
             trace_v4_req_body = message_to_json(
                 GetTraceInfo(
                     trace_id=trace_id, location=location, sql_warehouse_id=sql_warehouse_id
@@ -377,11 +410,11 @@ class DatabricksTracingRestStore(RestStore):
         """
         location, trace_id = parse_trace_id_v4(trace_id)
         if location is not None:
-            sql_warehouse_id = MLFLOW_TRACING_SQL_WAREHOUSE_ID.get()
             encoded_key = quote(key, safe="")
-            endpoint = f"{get_single_trace_endpoint_v4(location, trace_id)}/tags/{encoded_key}"
-            req_body = message_to_json(DeleteTraceTag(sql_warehouse_id=sql_warehouse_id))
-            self._call_endpoint(DeleteTraceTag, req_body, endpoint=endpoint)
+            endpoint = self._append_sql_warehouse_id_param(
+                f"{get_single_trace_endpoint_v4(location, trace_id)}/tags/{encoded_key}"
+            )
+            self._call_endpoint(DeleteTraceTag, endpoint=endpoint)
             return
         return super().delete_trace_tag(trace_id, key)
 
@@ -444,20 +477,21 @@ class DatabricksTracingRestStore(RestStore):
                         "`<catalog_name>.<schema_name>[.<table_prefix>]` or `<experiment_id>`."
                     )
 
-        request = SearchTraces(
+        request = SearchTracesLongRunning(
             locations=trace_locations,
             filter=filter_string,
             max_results=max_results,
             order_by=order_by,
             page_token=page_token,
-            sql_warehouse_id=MLFLOW_TRACING_SQL_WAREHOUSE_ID.get(),
+            sql_warehouse_id=self._resolve_sql_warehouse_id(),
         )
         req_body = message_to_json(request)
         try:
-            response_proto = self._call_endpoint(
-                SearchTraces,
+            operation = self._call_endpoint(
+                SearchTracesLongRunning,
                 req_body,
-                endpoint=f"{_V4_TRACE_REST_API_PATH_PREFIX}/search",
+                endpoint=f"{_V4_TRACE_REST_API_PATH_PREFIX}/search-long-running",
+                response_proto=SearchTracesOperation(),
             )
         except MlflowException as e:
             # There are 2 expected failure cases:
@@ -493,8 +527,31 @@ class DatabricksTracingRestStore(RestStore):
                 page_token=page_token,
             )
 
+        operation = self._poll_search_traces_operation(operation)
+        response_proto = operation.response
         trace_infos = [TraceInfo.from_proto(t) for t in response_proto.trace_infos]
         return trace_infos, response_proto.next_page_token or None
+
+    def _poll_search_traces_operation(
+        self,
+        operation: SearchTracesOperation,
+        *,
+        poll_interval_seconds: float = _SEARCH_TRACES_POLL_INTERVAL_SECONDS,
+    ) -> SearchTracesOperation:
+        while not operation.done:
+            time.sleep(poll_interval_seconds)
+            operation = self._call_endpoint(
+                GetOperationRequest,
+                None,
+                endpoint=f"{_V4_TRACE_REST_API_PATH_PREFIX}/search/operations/{operation.name}",
+                response_proto=SearchTracesOperation(),
+            )
+        if operation.HasField("error"):
+            raise MlflowException(
+                operation.error.message or "Failed to search traces",
+                error_code=operation.error.error_code or ErrorCode.Name(INTERNAL_ERROR),
+            )
+        return operation
 
     def _search_unified_traces(
         self,
@@ -552,7 +609,7 @@ class DatabricksTracingRestStore(RestStore):
         req_body = message_to_json(
             CreateTraceUCStorageLocation(
                 uc_schema=uc_schema_location_to_proto(location),
-                sql_warehouse_id=sql_warehouse_id or MLFLOW_TRACING_SQL_WAREHOUSE_ID.get(),
+                sql_warehouse_id=self._resolve_sql_warehouse_id(sql_warehouse_id),
             )
         )
         try:
@@ -1076,7 +1133,96 @@ class DatabricksTracingRestStore(RestStore):
 
         return PagedList(results_to_return, next_token)
 
+    def create_issue(
+        self,
+        experiment_id: str,
+        name: str,
+        description: str,
+        status: IssueStatus = IssueStatus.PENDING,
+        severity: IssueSeverity | None = None,
+        root_causes: list[str] | None = None,
+        source_run_id: str | None = None,
+        categories: list[str] | None = None,
+        created_by: str | None = None,
+    ) -> Issue:
+        """
+        Create a new issue.
+
+        Args:
+            experiment_id: The experiment ID.
+            name: Short descriptive name for the issue.
+            description: Detailed description of the issue.
+            status: Issue status. Defaults to IssueStatus.PENDING.
+            severity: Optional severity level indicator.
+            root_causes: Optional list of root cause analyses.
+            source_run_id: Optional MLflow run ID that discovered this issue.
+            categories: Optional list of categories for the issue.
+            created_by: Optional identifier for who created this issue.
+
+        Returns:
+            The created Issue entity.
+        """
+        raise MlflowNotImplementedException("Issue management is not supported in Databricks")
+
+    def get_issue(self, issue_id: str) -> Issue:
+        """
+        Get an issue by ID.
+
+        Args:
+            issue_id: The ID of the issue to retrieve.
+
+        Returns:
+            The Issue entity.
+        """
+        raise MlflowNotImplementedException("Issue management is not supported in Databricks")
+
+    def update_issue(
+        self,
+        issue_id: str,
+        status: IssueStatus | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        severity: IssueSeverity | None = None,
+    ) -> Issue:
+        """
+        Update an existing issue.
+
+        Args:
+            issue_id: The ID of the issue to update.
+            status: Optional new status.
+            name: Optional new name for the issue.
+            description: Optional new description.
+            severity: Optional new severity level.
+
+        Returns:
+            The updated Issue entity.
+        """
+        raise MlflowNotImplementedException("Issue management is not supported in Databricks")
+
+    def search_issues(
+        self,
+        experiment_id: str | None = None,
+        filter_string: str | None = None,
+        max_results: int | None = None,
+        page_token: str | None = None,
+        include_trace_count: bool = False,
+    ) -> PagedList[Issue]:
+        """
+        Search for issues matching the given filters.
+
+        Args:
+            experiment_id: Optional experiment ID to filter by.
+            filter_string: Optional filter string for advanced filtering.
+            max_results: Maximum number of results to return.
+            page_token: Token for pagination.
+            include_trace_count: Whether to include the count of traces impacted by each issue.
+
+        Returns:
+            A PagedList of Issue entities.
+        """
+        raise MlflowNotImplementedException("Issue management is not supported in Databricks")
+
     def _append_sql_warehouse_id_param(self, endpoint: str) -> str:
-        if sql_warehouse_id := MLFLOW_TRACING_SQL_WAREHOUSE_ID.get():
+        if sql_warehouse_id := self._resolve_sql_warehouse_id():
             return f"{endpoint}?sql_warehouse_id={sql_warehouse_id}"
         return endpoint

@@ -12,6 +12,7 @@ from mlflow.utils.os import is_windows
 from mlflow.utils.validation import (
     MAX_TAG_VAL_LENGTH,
     _is_numeric,
+    _parse_trace_archival_duration_config,
     _validate_batch_log_data,
     _validate_batch_log_limits,
     _validate_db_type_string,
@@ -22,6 +23,8 @@ from mlflow.utils.validation import (
     _validate_metric_name,
     _validate_model_alias_name,
     _validate_model_alias_name_reserved,
+    _validate_model_name,
+    _validate_model_renaming,
     _validate_param_name,
     _validate_run_id,
     _validate_tag_name,
@@ -104,6 +107,33 @@ BAD_ALIAS_NAMES = [
 )
 def test_path_not_unique(path, expected):
     assert path_not_unique(path) is expected
+
+
+def test_parse_trace_archival_duration_config_archive_now():
+    assert (
+        _parse_trace_archival_duration_config(
+            '{"older_than": " 7d "}',
+            duration_key="older_than",
+            allow_missing_duration=True,
+        )
+        == "7d"
+    )
+
+
+def test_parse_trace_archival_duration_config_experiment_retention():
+    assert (
+        _parse_trace_archival_duration_config(
+            '{"type": "duration", "value": "12h"}',
+            duration_key="value",
+            expected_type="duration",
+        )
+        == "12h"
+    )
+
+
+def test_parse_trace_archival_duration_config_rejects_non_object():
+    with pytest.raises(MlflowException, match="JSON object"):
+        _parse_trace_archival_duration_config('["1d"]', duration_key="value")
 
 
 @pytest.mark.parametrize(
@@ -503,3 +533,23 @@ def test_validate_webhook_url_allow_private_ips_env_var(monkeypatch):
         side_effect=_mock_getaddrinfo("127.0.0.1"),
     ):
         _validate_webhook_url("https://localhost/callback")
+
+
+@pytest.mark.parametrize("invalid_name", ["my/model", "model:v1", "name/with:both"])
+def test_validate_model_name_invalid_chars(invalid_name):
+    with pytest.raises(
+        MlflowException,
+        match="Names cannot contain '/' or ':'",
+        check=lambda e: e.error_code == ErrorCode.Name(INVALID_PARAMETER_VALUE),
+    ):
+        _validate_model_name(invalid_name)
+
+
+@pytest.mark.parametrize("invalid_name", ["my/model", "model:v1", "name/with:both"])
+def test_validate_model_renaming_invalid_chars(invalid_name):
+    with pytest.raises(
+        MlflowException,
+        match="Names cannot contain '/' or ':'",
+        check=lambda e: e.error_code == ErrorCode.Name(INVALID_PARAMETER_VALUE),
+    ):
+        _validate_model_renaming(invalid_name)

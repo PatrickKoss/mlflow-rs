@@ -31,7 +31,8 @@ def _get_mlflow_install_specifier():
 def assert_dockerfiles_equal(actual_dockerfile_path: Path, expected_dockerfile_path: Path):
     actual_dockerfile = actual_dockerfile_path.read_text()
     expected_dockerfile = (
-        expected_dockerfile_path.read_text()
+        expected_dockerfile_path
+        .read_text()
         .replace("${{ MLFLOW_INSTALL }}", _get_mlflow_install_specifier())
         .replace("${{ PYTHON_VERSION }}", PYTHON_VERSION)
     )
@@ -70,7 +71,6 @@ class Param:
     env_manager: str | None = None
     mlflow_home: str | None = None
     install_mlflow: bool = False
-    enable_mlserver: bool = False
     # If True, image is built with --model-uri param
     specify_model_uri: bool = True
 
@@ -83,7 +83,6 @@ class Param:
         Param(expected_dockerfile="Dockerfile_java_flavor", env_manager=VIRTUALENV),
         Param(expected_dockerfile="Dockerfile_conda", env_manager=CONDA),
         Param(install_mlflow=True, expected_dockerfile="Dockerfile_install_mlflow"),
-        Param(enable_mlserver=True, expected_dockerfile="Dockerfile_enable_mlserver"),
         Param(mlflow_home=".", expected_dockerfile="Dockerfile_with_mlflow_home"),
         Param(specify_model_uri=False, expected_dockerfile="Dockerfile_no_model_uri"),
     ],
@@ -118,7 +117,6 @@ def test_build_image(tmp_path, params):
             image_name="test_image",
             mlflow_home=params.mlflow_home,
             install_mlflow=params.install_mlflow,
-            enable_mlserver=params.enable_mlserver,
         )
 
     actual = dst_dir / "Dockerfile"

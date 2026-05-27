@@ -142,13 +142,13 @@ Here we use three scorers:
 - <APILink fn="mlflow.genai.scorers.Guidelines">Guidelines</APILink>: Evaluates if the answer meets the given guidelines.
 - `is_concise`: A custom scorer defined using the <APILink fn="mlflow.genai.scorers.scorer">scorer</APILink> decorator to judge if the answer is concise (less than 5 words).
 
-The first two scorers use LLMs to evaluate the response, so-called **LLM-as-a-Judge**. This is a powerful technique to assess the quality of the response, because it provides a human-like evaluation for complex language tasks while being more scalable and cost-effective than human evaluation.
+The first two scorers use LLMs to evaluate the response, so-called **[LLM-as-a-Judge](https://mlflow.org/llm-evaluation)**. This is a powerful technique to assess the quality of the response, because it provides a human-like evaluation for complex language tasks while being more scalable and cost-effective than human evaluation.
 
 The Scorer interface allows you to define various types of quality metrics for your application in a simple way. From a simple natural language guideline to a code function with the full control of the evaluation logic.
 
 :::tip
 
-The default model used for LLM-as-a-Judge scorers such as Correctness and Guidelines is OpenAI `gpt-4o-mini`. MLflow supports all major LLM providers, such as Anthropic, Bedrock, Google, xAI, and more, through the built-in adopters and LiteLLM.
+The default model used for LLM-as-a-Judge scorers such as Correctness and Guidelines is OpenAI `gpt-4o-mini`. MLflow supports all major LLM providers, such as Anthropic, Bedrock, Google, xAI, and more through the built-in adapters.
 
 <details>
 <summary>Example of using different model providers for the judge model</summary>
@@ -166,11 +166,9 @@ Correctness(model="bedrock:/amazon.nova-lite-v1:0")
 Correctness(model="bedrock:/amazon.nova-micro-v1:0")
 
 # Google
-# Run `pip install litellm` to use Google as the judge model
 Correctness(model="gemini:/gemini-2.5-flash")
 
 # xAI
-# Run `pip install litellm` to use xAI as the judge model
 Correctness(model="xai:/grok-2-latest")
 ```
 
@@ -316,4 +314,4 @@ Congratulations! You've successfully:
 - ✅ Created custom evaluation guidelines
 - ✅ Learned to analyze results in the MLflow UI
 
-MLflow's evaluation framework provides comprehensive tools for assessing LLM application and AI agent quality, helping you build more reliable and effective AI systems.
+MLflow's evaluation framework provides comprehensive tools for [assessing LLM application and AI agent quality](https://mlflow.org/llm-evaluation), helping you build more reliable and effective AI systems.

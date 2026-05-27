@@ -254,11 +254,6 @@ class Feedback(Assessment):
         overrides: str | None = None,
         valid: bool = True,
     ):
-        if value is None and error is None:
-            raise MlflowException.invalid_parameter_value(
-                "Either `value` or `error` must be provided.",
-            )
-
         # Default to CODE source if not provided
         if source is None:
             source = AssessmentSource(source_type=AssessmentSourceType.CODE)
@@ -502,6 +497,7 @@ class IssueReference(Assessment):
         source: The source of the assessment. If not provided, the default source is CODE.
         trace_id: The ID of the trace associated with the assessment.
         run_id: The ID of the run that discovered the issue.
+        rationale: The rationale / justification for the issue reference.
         span_id: The ID of the span associated with the assessment, if applicable.
         create_time_ms: The creation time of the assessment in milliseconds.
         last_update_time_ms: The last update time of the assessment in milliseconds.
@@ -514,6 +510,7 @@ class IssueReference(Assessment):
         source: AssessmentSource | None = None,
         trace_id: str | None = None,
         run_id: str | None = None,
+        rationale: str | None = None,
         metadata: dict[str, str] | None = None,
         span_id: str | None = None,
         create_time_ms: int | None = None,
@@ -534,6 +531,7 @@ class IssueReference(Assessment):
             source=source,
             trace_id=trace_id,
             run_id=run_id,
+            rationale=rationale,
             metadata=metadata,
             span_id=span_id,
             create_time_ms=create_time_ms,
@@ -569,6 +567,7 @@ class IssueReference(Assessment):
             source=AssessmentSource.from_proto(proto.source),
             create_time_ms=proto.create_time.ToMilliseconds(),
             last_update_time_ms=proto.last_update_time.ToMilliseconds(),
+            rationale=proto.rationale or None,
             metadata=metadata,
             span_id=proto.span_id or None,
         )
@@ -589,6 +588,7 @@ class IssueReference(Assessment):
             source=AssessmentSource.from_dictionary(d["source"]),
             create_time_ms=proto_timestamp_to_milliseconds(d["create_time"]),
             last_update_time_ms=proto_timestamp_to_milliseconds(d["last_update_time"]),
+            rationale=d.get("rationale"),
             metadata=d.get("metadata"),
             span_id=d.get("span_id"),
         )

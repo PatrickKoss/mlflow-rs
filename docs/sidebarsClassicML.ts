@@ -438,20 +438,6 @@ const sidebarsClassicML: SidebarsConfig = {
               id: 'deployment/deploy-model-locally/index',
             },
             {
-              type: 'category',
-              label: 'Deploy MLflow Model to Kubernetes',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'deployment/deploy-model-to-kubernetes/tutorial',
-                },
-              ],
-              link: {
-                type: 'doc',
-                id: 'deployment/deploy-model-to-kubernetes/index',
-              },
-            },
-            {
               type: 'doc',
               id: 'deployment/deploy-model-to-sagemaker/index',
             },
@@ -471,11 +457,6 @@ const sidebarsClassicML: SidebarsConfig = {
           label: 'Docker',
         },
       ],
-    },
-    {
-      type: 'doc',
-      id: 'webhooks/index',
-      label: 'Webhooks',
     },
     {
       type: 'category',

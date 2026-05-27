@@ -102,6 +102,11 @@ def _set_span_attributes(span: LiveSpan, instance):
             span.set_attributes({k: v for k, v in model_attrs.items() if v is not None})
             if model_name := getattr(instance, "model_name", None):
                 span.set_attribute(SpanAttributeKey.MODEL, model_name)
+                # Pydantic AI model_name uses "provider:model" format
+                # e.g., "openai:gpt-4o", "anthropic:claude-3-5-haiku"
+                match model_name.split(":", 1):
+                    case [provider, _]:
+                        span.set_attribute(SpanAttributeKey.MODEL_PROVIDER, provider)
     except Exception as e:
         _logger.warning("Failed saving InstrumentedModel attributes: %s", e)
 
@@ -349,9 +354,10 @@ def _get_span_type(instance) -> str:
         return SpanType.TOOL
 
     try:
-        from pydantic_ai._tool_manager import ToolManager
+        from mlflow.pydantic_ai import _get_tool_manager_module_path
 
-        if isinstance(instance, ToolManager):
+        _tm_mod = __import__(_get_tool_manager_module_path(), fromlist=["ToolManager"])
+        if isinstance(instance, _tm_mod.ToolManager):
             return SpanType.TOOL
     except ImportError:
         pass

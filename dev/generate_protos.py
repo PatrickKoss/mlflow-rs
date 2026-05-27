@@ -25,16 +25,14 @@ def gen_protos(
 ) -> None:
     assert lang in ["python", "java"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.check_call(
-        [
-            protoc_bin,
-            "--fatal_warnings",
-            *(f"-I={p}" for p in protoc_include_paths),
-            f"-I={proto_dir}",
-            f"--{lang}_out={out_dir}",
-            *[proto_dir / pf for pf in proto_files],
-        ]
-    )
+    subprocess.check_call([
+        protoc_bin,
+        "--fatal_warnings",
+        *(f"-I={p}" for p in protoc_include_paths),
+        f"-I={proto_dir}",
+        f"--{lang}_out={out_dir}",
+        *[proto_dir / pf for pf in proto_files],
+    ])
 
 
 def gen_stub_files(
@@ -45,16 +43,14 @@ def gen_stub_files(
     out_dir: Path,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.check_call(
-        [
-            protoc_bin,
-            "--fatal_warnings",
-            *(f"-I={p}" for p in protoc_include_paths),
-            f"-I={proto_dir}",
-            f"--pyi_out={out_dir}",
-            *[proto_dir / pf for pf in proto_files],
-        ]
-    )
+    subprocess.check_call([
+        protoc_bin,
+        "--fatal_warnings",
+        *(f"-I={p}" for p in protoc_include_paths),
+        f"-I={proto_dir}",
+        f"--pyi_out={out_dir}",
+        *[proto_dir / pf for pf in proto_files],
+    ])
 
 
 def gen_proto_docs(
@@ -65,16 +61,14 @@ def gen_proto_docs(
     out_dir: Path,
 ) -> None:
     plugin_path = Path("dev/proto-plugin.sh").resolve()
-    subprocess.check_call(
-        [
-            protoc_bin,
-            f"-I={protoc_include_path}",
-            f"-I={proto_dir}",
-            f"--plugin=protoc-gen-doc={plugin_path}",
-            f"--doc_out={out_dir}",
-            *[proto_dir / pf for pf in proto_files],
-        ]
-    )
+    subprocess.check_call([
+        protoc_bin,
+        f"-I={protoc_include_path}",
+        f"-I={proto_dir}",
+        f"--plugin=protoc-gen-doc={plugin_path}",
+        f"--doc_out={out_dir}",
+        *[proto_dir / pf for pf in proto_files],
+    ])
 
 
 def apply_python_gencode_replacement(file_path: Path) -> None:
@@ -120,7 +114,10 @@ uc_proto_files = to_paths(
     "unity_catalog_prompt_messages.proto",
     "unity_catalog_prompt_service.proto",
 )
-tracing_proto_files = to_paths("databricks_tracing.proto")
+tracing_proto_files = to_paths(
+    "databricks_exception_with_details.proto",
+    "databricks_tracing.proto",
+)
 facet_proto_files = to_paths("facet_feature_statistics.proto")
 python_proto_files = basic_proto_files + uc_proto_files + facet_proto_files + tracing_proto_files
 test_proto_files = to_paths("test_message.proto")
@@ -180,6 +177,11 @@ python_gencode_replacements = [
     (
         "import prompt_optimization_pb2 as prompt__optimization__pb2",
         "from . import prompt_optimization_pb2 as prompt__optimization__pb2",
+    ),
+    (
+        "import databricks_exception_with_details_pb2 as databricks__exception__with__details__pb2",
+        "from . import databricks_exception_with_details_pb2 as databricks_exception_"
+        "with_details_pb2",
     ),
 ]
 

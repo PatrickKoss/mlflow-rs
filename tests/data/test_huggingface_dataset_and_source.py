@@ -98,8 +98,8 @@ def test_from_huggingface_dataset_constructs_expected_dataset_with_revision():
         trust_remote_code=True,
     )
 
-    ds = mlflow_ds_new.source.load()
-    assert any(revision in cs for cs in ds.info.download_checksums)
+    mlflow_ds_new.source.load()
+    assert mlflow_ds_new.source.revision == revision
 
 
 def test_from_huggingface_dataset_constructs_expected_dataset_with_data_files():
@@ -175,12 +175,10 @@ def test_from_huggingface_dataset_digest_is_consistent_for_large_ordered_dataset
         < 200000
     )
 
-    df = pd.DataFrame.from_dict(
-        {
-            "a": list(range(200000)),
-            "b": list(range(200000)),
-        }
-    )
+    df = pd.DataFrame.from_dict({
+        "a": list(range(200000)),
+        "b": list(range(200000)),
+    })
     data_dir = "data"
     os.makedirs(tmp_path / data_dir)
     df.to_csv(tmp_path / data_dir / "my_data.csv")

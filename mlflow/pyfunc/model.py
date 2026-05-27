@@ -11,6 +11,7 @@ import lzma
 import os
 import shutil
 from abc import ABCMeta, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Generator, Iterator
 
@@ -553,12 +554,10 @@ class ChatAgent(PythonModel, metaclass=ABCMeta):
     .. code-block:: python
 
         chat_agent = MyChatAgent()
-        chat_agent.predict(
-            {
-                "messages": [{"role": "user", "content": "What is 10 + 10?"}],
-                "context": {"conversation_id": "123", "user_id": "456"},
-            }
-        )
+        chat_agent.predict({
+            "messages": [{"role": "user", "content": "What is 10 + 10?"}],
+            "context": {"conversation_id": "123", "user_id": "456"},
+        })
 
     See an example implementation of ``predict`` and ``predict_stream`` for a LangGraph agent in
     the :py:class:`ChatAgentState <mlflow.langchain.chat_agent_langgraph.ChatAgentState>`
@@ -589,12 +588,10 @@ class ChatAgent(PythonModel, metaclass=ABCMeta):
     .. code-block:: python
 
         loaded_model = mlflow.pyfunc.load_model(tmp_path)
-        loaded_model.predict(
-            {
-                "messages": [{"role": "user", "content": "What is 10 + 10?"}],
-                "context": {"conversation_id": "123", "user_id": "456"},
-            }
-        )
+        loaded_model.predict({
+            "messages": [{"role": "user", "content": "What is 10 + 10?"}],
+            "context": {"conversation_id": "123", "user_id": "456"},
+        })
 
     To make logging ChatAgent models as easy as possible, MLflow has built in the following
     features:
@@ -728,12 +725,10 @@ class ChatAgent(PythonModel, metaclass=ABCMeta):
         .. code-block:: python
 
             chat_agent = ChatAgent()
-            chat_agent.predict(
-                {
-                    "messages": [{"role": "user", "content": "What is 10 + 10?"}],
-                    "context": {"conversation_id": "123", "user_id": "456"},
-                }
-            )
+            chat_agent.predict({
+                "messages": [{"role": "user", "content": "What is 10 + 10?"}],
+                "context": {"conversation_id": "123", "user_id": "456"},
+            })
 
         Args:
             messages (List[:py:class:`ChatAgentMessage <mlflow.types.agent.ChatAgentMessage>`]):
@@ -771,12 +766,10 @@ class ChatAgent(PythonModel, metaclass=ABCMeta):
         .. code-block:: python
 
             chat_agent = ChatAgent()
-            for event in chat_agent.predict_stream(
-                {
-                    "messages": [{"role": "user", "content": "What is 10 + 10?"}],
-                    "context": {"conversation_id": "123", "user_id": "456"},
-                }
-            ):
+            for event in chat_agent.predict_stream({
+                "messages": [{"role": "user", "content": "What is 10 + 10?"}],
+                "context": {"conversation_id": "123", "user_id": "456"},
+            }):
                 print(event)
 
         To support streaming the output of your agent, override this method in your subclass of
@@ -1001,7 +994,7 @@ class ResponsesAgent(PythonModel, metaclass=ABCMeta):
 
     @staticmethod
     def prep_msgs_for_cc_llm(
-        responses_input: list[dict[str, Any] | Message | OutputItem],
+        responses_input: Sequence[dict[str, Any] | Message | OutputItem],
     ) -> list[dict[str, Any]]:
         "Convert from Responses input items to ChatCompletion dictionaries"
         return to_chat_completions_input(responses_input)
@@ -1036,6 +1029,8 @@ def _save_model_with_class_artifacts_params(
     model_code_path=None,
     infer_code_paths=False,
     uv_project_path=None,
+    uv_groups=None,
+    uv_extras=None,
 ):
     """
     Args:
@@ -1106,10 +1101,13 @@ def _save_model_with_class_artifacts_params(
                 python_model, os.path.join(path, saved_python_model_subpath), compression
             )
         except Exception as e:
+            # error_code is INVALID_PARAMETER_VALUE but this is a model serialization failure
             raise MlflowException(
                 "Failed to serialize Python model. Please save the model into a python file "
                 "and use code-based logging method instead. See"
-                "https://mlflow.org/docs/latest/models.html#models-from-code for more information."
+                "https://mlflow.org/docs/latest/models.html#models-from-code for more information.",
+                error_code=INVALID_PARAMETER_VALUE,
+                error_class="MODEL_SERIALIZATION_FAILED",
             ) from e
 
         custom_model_config_kwargs[CONFIG_KEY_PYTHON_MODEL] = saved_python_model_subpath
@@ -1233,6 +1231,8 @@ def _save_model_with_class_artifacts_params(
                 fallback=default_reqs,
                 extra_env_vars=extra_env_vars,
                 uv_project_dir=uv_source_dir,
+                uv_groups=uv_groups,
+                uv_extras=uv_extras,
             )
             default_reqs = sorted(set(inferred_reqs).union(default_reqs))
         else:
