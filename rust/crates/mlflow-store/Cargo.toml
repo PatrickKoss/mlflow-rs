@@ -1,0 +1,40 @@
+[package]
+name = "mlflow-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+# `macros` enables `#[derive(sqlx::FromRow)]` for the schema structs. It is
+# additive with the workspace-level sqlx features (runtime/drivers/chrono/json).
+sqlx = { workspace = true, features = ["macros"] }
+tokio = { workspace = true }
+chrono = { workspace = true }
+# The MLflow error model (codes/messages/wire shape). The store returns
+# `MlflowError`s directly so handler layers surface Python-identical errors.
+mlflow-error = { workspace = true }
+# The parsed filter/order-by AST for `search_runs` (T2.6). The store turns the
+# AST into EXISTS semi-joins + keyset SQL; parse errors are mapped to
+# `MlflowError` at the boundary.
+mlflow-search = { workspace = true }
+# Run UUIDs (uuid4 hex) and the randomness source for random run-name generation
+# (avoids pulling in the `rand` crate — see `store::names`).
+uuid = { workspace = true }
+# `log` provides the `LevelFilter` accepted by `ConnectOptions::log_statements`
+# (sqlx logs SQL through the `log` facade).
+log = "0.4"
+
+[dev-dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true, features = ["macros"] }
+# Used by tests/sampling_corpus.rs to read the Python-generated differential
+# corpus (query cases + expected sampled outputs).
+serde = { workspace = true }
+serde_json = { workspace = true }

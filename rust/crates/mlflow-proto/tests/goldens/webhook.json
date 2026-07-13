@@ -1,0 +1,15 @@
+{
+  "webhook_id": "wh-1",
+  "name": "notify",
+  "description": "on model version create",
+  "url": "https://example.com/hook",
+  "events": [
+    {
+      "entity": "REGISTERED_MODEL",
+      "action": "CREATED"
+    }
+  ],
+  "status": "ACTIVE",
+  "creation_timestamp": 1700000000000,
+  "last_updated_timestamp": 1700000009000
+}

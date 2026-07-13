@@ -1,0 +1,56 @@
+{
+  "werkzeug_version": "3.1.8",
+  "default_method_example": "scrypt:32768:8:1$iiN4UKAlo0nfjf4Y$1072c18335b17a3eab14405360586b0e1158b31af7551803db035e8e66c8f852db319a9c8635fee95e581c93c748f1296be079520069256b004ff825c1549263",
+  "entries": [
+    {
+      "password": "test",
+      "method": "scrypt",
+      "hash": "scrypt:32768:8:1$W6aYtWiY0WqQKtMw$b98268ea1e5799f939e7cb8caff47da4832c637773507942cdfc180cba5b8983de767ad845f0a8c9722c6ff5004f5b1216f0e473810c0a2d5566622dedcf82a5"
+    },
+    {
+      "password": "test",
+      "method": "pbkdf2:sha256",
+      "hash": "pbkdf2:sha256:1000000$yyeDtqF60MimbkOT$79f36e58a3e81f5a87ddf2064e9de92d094eecf141a835d358a8ba15f690af80"
+    },
+    {
+      "password": "correct horse battery staple",
+      "method": "scrypt",
+      "hash": "scrypt:32768:8:1$mRdgGA1Le8TAaaLh$3735949b741dd3a877dbc4505c750fb0ad37863af9c988c4e3aa4b4a28db6f088a027218ba1be365865941f04b5e0de328a940ec7825ac85537f9cafd9270aff"
+    },
+    {
+      "password": "correct horse battery staple",
+      "method": "pbkdf2:sha256",
+      "hash": "pbkdf2:sha256:1000000$Y68gJzVpLZPiRyTj$99816edad572e696510297374dd0adb40ca8f357994d6874432a9fd78c12972c"
+    },
+    {
+      "password": "",
+      "method": "scrypt",
+      "hash": "scrypt:32768:8:1$KJvcLHErUEdoIHCk$7d4f52d8d9737d473ee00de565806abb77fead373649ab3137b24d397dada20c913c0f52c30d894478fc5db7b32f29fa2be8631f3b0709837ef62cd459c5db76"
+    },
+    {
+      "password": "",
+      "method": "pbkdf2:sha256",
+      "hash": "pbkdf2:sha256:1000000$ub5HyU8uQPGw6zP2$735e4b6d9a32d567ff5fa8cb9c1f0a8fe3735475dd6e345199ca10f03acdd070"
+    },
+    {
+      "password": "pässwörd-ünïcöde-🔐",
+      "method": "scrypt",
+      "hash": "scrypt:32768:8:1$JDVtGZ2ykSmj0WMt$557b008f6f88143f8c93c1853ca290d3506651720b8cc8e4cc3d029d5ec9f09dd2144671b15dc68e84a7b015ef11fc33865d98be552c79d1d75a218a4c2029c2"
+    },
+    {
+      "password": "pässwörd-ünïcöde-🔐",
+      "method": "pbkdf2:sha256",
+      "hash": "pbkdf2:sha256:1000000$fkMnCyWeXCnEQKxX$16a6c5d477d3514a70de96ffc9cd91fb85a2ca8b12476a05432340fbddcd822b"
+    },
+    {
+      "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "method": "scrypt",
+      "hash": "scrypt:32768:8:1$EPnBSbzkBX2bX0sq$c8e09faeaeab34212a3339d3b14a091020d39fd6a9e8a1d8b739c5450ede763a88bea165754a7bbe9b91d0e425de82eab75cfeb8d119a1676c9889e32eb2bc12"
+    },
+    {
+      "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "method": "pbkdf2:sha256",
+      "hash": "pbkdf2:sha256:1000000$AWBTwFw2nrRsDyQE$d6d53e4b282a2cad84f730d4f97733d8c608a3ca8df8fddd5e8dbde0b0b26e22"
+    }
+  ]
+}

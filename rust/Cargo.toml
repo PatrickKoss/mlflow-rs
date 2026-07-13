@@ -1,0 +1,87 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/mlflow-server",
+  "crates/mlflow-proto",
+  "crates/mlflow-error",
+  "crates/mlflow-store",
+  "crates/mlflow-registry",
+  "crates/mlflow-auth",
+  "crates/mlflow-search",
+  "crates/mlflow-artifacts",
+  "crates/mlflow-webhooks",
+]
+# `spikes/` is a standalone project (its own Cargo.toml, not a workspace member).
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89.0"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/mlflow/mlflow"
+
+# Centralized dependency versions for the Rust tracking server (see
+# RUST_TRACKING_SERVER_PLAN.md §2.3). Individual crates opt into only what
+# they need; most stub crates below intentionally depend on nothing or only
+# the cheap utility crates so `cargo build --workspace` stays fast during
+# early scaffolding (T1.1). Heavier deps (tokio, axum, sqlx, prost, ...) are
+# wired up as each task actually needs them.
+[workspace.dependencies]
+mlflow-proto = { path = "crates/mlflow-proto" }
+mlflow-error = { path = "crates/mlflow-error" }
+mlflow-store = { path = "crates/mlflow-store" }
+mlflow-registry = { path = "crates/mlflow-registry" }
+mlflow-auth = { path = "crates/mlflow-auth" }
+mlflow-search = { path = "crates/mlflow-search" }
+mlflow-artifacts = { path = "crates/mlflow-artifacts" }
+mlflow-webhooks = { path = "crates/mlflow-webhooks" }
+
+# Async runtime / HTTP
+tokio = { version = "1.52", features = ["full"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = "0.7"
+hyper = "1.10"
+
+# Database
+sqlx = { version = "0.8.6", default-features = false, features = [
+  "runtime-tokio",
+  "sqlite",
+  "postgres",
+  "mysql",
+  "chrono",
+  "json",
+] }
+
+# Protobuf (protox is a pure-Rust proto compiler; no system `protoc` needed)
+prost = "0.14"
+prost-types = "0.14"
+prost-build = "0.14"
+protox = "0.9"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4.6", features = ["derive"] }
+
+# Misc
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.23", features = ["v4", "serde"] }
+base64 = "0.22"
+bytes = "1.12"
+futures = "0.3"
+
+[workspace.lints.clippy]
+all = "warn"

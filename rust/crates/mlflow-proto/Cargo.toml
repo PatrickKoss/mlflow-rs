@@ -1,0 +1,51 @@
+[package]
+name = "mlflow-proto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+# The prost-generated modules carry proto comments verbatim as Rust doc
+# comments; some contain example JSON that is not valid Rust, so `rustdoc`
+# would try (and fail) to compile them as doctests. There are no real doctests
+# in this crate's hand-written code, so disable doctests entirely.
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+# Runtime reflection over the extension-preserving FileDescriptorSet, driving the
+# MLflow-compatible JSON codec (T1.3): prost message -> DynamicMessage -> JSON.
+# Not in [workspace.dependencies] yet; pinned here (matching the build-dep) to
+# avoid a concurrent edit to rust/Cargo.toml. 0.16 tracks prost 0.14. `serde`
+# powers the JSON deserializer (unknown-field-tolerant parse); serialization is
+# hand-rolled in src/json.rs for exact Python byte-parity.
+prost-reflect = { version = "0.16", features = ["text-format", "serde"] }
+
+[build-dependencies]
+prost = { workspace = true }
+prost-build = { workspace = true }
+prost-types = { workspace = true }
+protox = { workspace = true }
+# Reflection over the FileDescriptorSet so we can decode the custom
+# `databricks.rpc` MethodOptions extension (field 51310) at build time. Not in
+# [workspace.dependencies] yet; pinned here per T1.2 instructions to avoid a
+# concurrent edit to rust/Cargo.toml. 0.16 tracks prost 0.14.
+prost-reflect = { version = "0.16", features = ["text-format"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[[example]]
+name = "dump_routes"
+path = "examples/dump_routes.rs"

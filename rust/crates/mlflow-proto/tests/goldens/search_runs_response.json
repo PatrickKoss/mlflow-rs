@@ -1,0 +1,27 @@
+{
+  "runs": [
+    {
+      "info": {
+        "start_time": 100,
+        "run_id": "r1"
+      },
+      "data": {
+        "metrics": [
+          {
+            "key": "m",
+            "value": 1.0,
+            "timestamp": 1,
+            "step": 0
+          }
+        ]
+      }
+    },
+    {
+      "info": {
+        "start_time": 200,
+        "run_id": "r2"
+      }
+    }
+  ],
+  "next_page_token": "next-123"
+}

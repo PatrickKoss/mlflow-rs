@@ -1,0 +1,7 @@
+{
+  "body": "{\"error_code\": \"INTERNAL_ERROR\", \"message\": \"Unexpected internal error\", \"sqlstate\": \"XXM00\", \"error_class\": \"CLIENT_INTERNAL_ERROR\"}",
+  "content_type": "application/json",
+  "headers": {},
+  "name": "internal_error",
+  "status": 500
+}

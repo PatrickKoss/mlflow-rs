@@ -1,0 +1,63 @@
+{
+  "info": {
+    "run_uuid": "run-abc-123",
+    "experiment_id": "42",
+    "user_id": "alice",
+    "status": "FINISHED",
+    "start_time": 1700000000000,
+    "end_time": 1700000005000,
+    "artifact_uri": "s3://bucket/run-abc-123/artifacts",
+    "lifecycle_stage": "active",
+    "run_id": "run-abc-123"
+  },
+  "data": {
+    "metrics": [
+      {
+        "key": "rmse",
+        "value": 0.123,
+        "timestamp": 1700000001000,
+        "step": 1
+      },
+      {
+        "key": "big",
+        "value": 1e+20,
+        "timestamp": 1700000002000,
+        "step": 1000000000000
+      }
+    ],
+    "params": [
+      {
+        "key": "alpha",
+        "value": "0.5"
+      },
+      {
+        "key": "model_class",
+        "value": "LogisticRegression"
+      }
+    ],
+    "tags": [
+      {
+        "key": "mlflow.source.name",
+        "value": "train.py"
+      }
+    ]
+  },
+  "inputs": {
+    "dataset_inputs": [
+      {
+        "tags": [
+          {
+            "key": "context",
+            "value": "training"
+          }
+        ],
+        "dataset": {
+          "name": "training",
+          "digest": "abc123",
+          "source_type": "local",
+          "source": "/data/train.csv"
+        }
+      }
+    ]
+  }
+}

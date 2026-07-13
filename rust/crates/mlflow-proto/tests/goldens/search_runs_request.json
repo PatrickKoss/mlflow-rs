@@ -1,0 +1,15 @@
+{
+  "experiment_ids": [
+    "1",
+    "2",
+    "3"
+  ],
+  "run_view_type": "ACTIVE_ONLY",
+  "filter": "metrics.rmse < 1",
+  "max_results": 500,
+  "order_by": [
+    "metrics.rmse ASC",
+    "start_time DESC"
+  ],
+  "page_token": "dG9rZW4="
+}

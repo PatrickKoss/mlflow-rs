@@ -1,0 +1,7 @@
+{
+  "body": "{\"error_code\": \"UNAUTHENTICATED\", \"message\": \"Not authenticated\"}",
+  "content_type": "application/json",
+  "headers": {},
+  "name": "unauthenticated_mlflow_exception",
+  "status": 401
+}

@@ -1,0 +1,9 @@
+{
+  "body": "You are not authenticated. Please see https://www.mlflow.org/docs/latest/auth/index.html#authenticating-to-mlflow on how to authenticate.",
+  "content_type": "text/html; charset=utf-8",
+  "headers": {
+    "WWW-Authenticate": "Basic realm=\"mlflow\""
+  },
+  "name": "unauthenticated_401",
+  "status": 401
+}

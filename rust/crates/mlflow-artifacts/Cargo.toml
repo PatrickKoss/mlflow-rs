@@ -1,0 +1,51 @@
+[package]
+name = "mlflow-artifacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Cloud object-store backends are wired structurally (see `repo::factory`) but the
+# SDK-bearing `object_store` features stay off by default so no cloud deps are
+# pulled. Phase 5 enables these once credentials/config plumbing lands.
+default = []
+aws = ["object_store/aws"]
+gcp = ["object_store/gcp"]
+azure = ["object_store/azure"]
+
+[dependencies]
+mlflow-error = { workspace = true }
+mlflow-proto = { workspace = true }
+prost = { workspace = true }
+
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Local filesystem object store (`fs` feature only — no cloud SDKs by default).
+object_store = { version = "0.14.0", default-features = false, features = ["fs"] }
+# Streaming adapters between `bytes`/`futures` streams and async readers.
+tokio-util = { version = "0.7.18", features = ["io"] }
+# Exact port of Python's `urllib.parse.unquote` decode loop in `validate_path_is_safe`.
+percent-encoding = "2.3.2"
+# MIME guessing by extension, mirroring Python's `mimetypes.guess_type`.
+mime_guess = "2.0.5"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3.27.0"
+mlflow-proto = { workspace = true }

@@ -1,0 +1,25 @@
+{
+  "trace_id": "tr-1",
+  "client_request_id": "req-9",
+  "trace_location": {
+    "type": "MLFLOW_EXPERIMENT",
+    "mlflow_experiment": {
+      "experiment_id": "42"
+    }
+  },
+  "request_time": "2023-11-14T22:13:20.123Z",
+  "execution_duration": "1.500s",
+  "state": "OK",
+  "trace_metadata": {
+    "apple": "A",
+    "mango": "M",
+    "run_id": "r1",
+    "zebra": "Z"
+  },
+  "tags": {
+    "another_tag": "value",
+    "question_topic": "DBSQL"
+  },
+  "request_preview": "{\"q\": \"hi\"}",
+  "response_preview": "{\"a\": \"yo\"}"
+}

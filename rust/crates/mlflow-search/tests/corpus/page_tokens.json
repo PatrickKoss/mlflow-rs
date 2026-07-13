@@ -1,0 +1,55 @@
+[
+  {
+    "input": null,
+    "result": {
+      "ok": true,
+      "value": 0
+    }
+  },
+  {
+    "input": "",
+    "result": {
+      "ok": true,
+      "value": 0
+    }
+  },
+  {
+    "input": "eyJvZmZzZXQiOiA1fQ==",
+    "result": {
+      "ok": true,
+      "value": 5
+    }
+  },
+  {
+    "input": "eyJvZmZzZXQiOiAwfQ==",
+    "result": {
+      "error_code": "INVALID_PARAMETER_VALUE",
+      "message": "Invalid page token, parsed value={'offset': 0}",
+      "ok": false
+    }
+  },
+  {
+    "input": "e30=",
+    "result": {
+      "error_code": "INVALID_PARAMETER_VALUE",
+      "message": "Invalid page token, parsed value={}",
+      "ok": false
+    }
+  },
+  {
+    "input": "eyJvZmZzZXQiOiAiYSJ9",
+    "result": {
+      "error_code": "INVALID_PARAMETER_VALUE",
+      "message": "Invalid page token, not stringable a",
+      "ok": false
+    }
+  },
+  {
+    "input": "eyJvZmZzb290IjogN30=",
+    "result": {
+      "error_code": "INVALID_PARAMETER_VALUE",
+      "message": "Invalid page token, parsed value={'offsoot': 7}",
+      "ok": false
+    }
+  }
+]

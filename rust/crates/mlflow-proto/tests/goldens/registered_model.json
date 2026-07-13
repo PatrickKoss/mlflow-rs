@@ -1,0 +1,31 @@
+{
+  "name": "my-model",
+  "creation_timestamp": 1700000000000,
+  "last_updated_timestamp": 1700000009000,
+  "description": "A model",
+  "latest_versions": [
+    {
+      "name": "my-model",
+      "version": "3",
+      "creation_timestamp": 1700000000000,
+      "current_stage": "Production",
+      "status": "READY"
+    }
+  ],
+  "tags": [
+    {
+      "key": "team",
+      "value": "ml"
+    },
+    {
+      "key": "env",
+      "value": "prod"
+    }
+  ],
+  "aliases": [
+    {
+      "alias": "champion",
+      "version": "3"
+    }
+  ]
+}

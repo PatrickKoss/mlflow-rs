@@ -1,0 +1,17 @@
+{
+  "info": {
+    "run_id": "unicode"
+  },
+  "data": {
+    "params": [
+      {
+        "key": "text",
+        "value": "h\u00e9llo \u4e16\u754c \ud83d\ude00 \"quote\" \\back / slash\n\ttab"
+      },
+      {
+        "key": "ctrl",
+        "value": "bell\u0007 null\u0000 esc\u001b"
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+[package]
+name = "mlflow-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+# The registry store reuses `mlflow-store`'s connection/dialect infrastructure
+# (the `Db` pool enum and `Dialect` SQL helpers). Query-execution helpers
+# (`Val`/`Tx`/`RowLike`) are `pub(crate)` in `mlflow-store`, so a small local
+# copy lives in this crate's `dbutil` module (see its docs) pending
+# consolidation into a shared crate.
+mlflow-store = { workspace = true }
+# The MLflow error model (codes/messages/wire shape); the store returns
+# `MlflowError`s so handler layers surface Python-identical errors.
+mlflow-error = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+mlflow-store = { workspace = true }

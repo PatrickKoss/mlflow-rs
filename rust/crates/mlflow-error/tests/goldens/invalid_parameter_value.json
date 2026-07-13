@@ -1,0 +1,7 @@
+{
+  "body": "{\"error_code\": \"INVALID_PARAMETER_VALUE\", \"message\": \"Invalid value for parameter 'max_results': must be positive\", \"sqlstate\": \"KAM00\", \"error_class\": \"INVALID_PARAMETER_VALUE\"}",
+  "content_type": "application/json",
+  "headers": {},
+  "name": "invalid_parameter_value",
+  "status": 400
+}

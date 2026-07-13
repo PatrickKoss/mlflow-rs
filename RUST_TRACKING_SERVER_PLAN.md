@@ -1,0 +1,1226 @@
+# Rust MLflow Server — Implementation Plan (everything except genai)
+
+Status: **in progress (Phase 0/1)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-13
+
+This document is the master plan for reimplementing the MLflow server in Rust for all
+**non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
+webhooks, auth/RBAC (incl. the admin/account UI backend), and workspaces** — fronted by
+nginx, with full wire-level feature parity against the Python implementation. GenAI
+features (gateway, scorers, evaluation, issues, label schemas, review queues, prompt
+optimization, assistant, jobs) stay on the Python server.
+
+It is written so that individual tasks can be picked up by other contributors/models:
+every task has a checkbox, acceptance criteria (AC), and a verification method (VER).
+All facts were derived from the current codebase (file/line references included).
+When in doubt, the Python implementation is the spec.
+
+---
+
+## 1. Goal and Non-Goals
+
+### Goals
+
+- Rust HTTP server serving the tracking + tracing + registry + auth + workspaces API with
+  **byte-compatible JSON wire behavior** (same paths, field names, error format,
+  pagination semantics).
+- nginx in front routes **everything to Rust by default**; only genai paths go to Python.
+- The React frontend is a **separate static deliverable** served by nginx directly
+  (fully static, `mlflow/server/__init__.py:186-198`, no templating).
+- Same backend databases: **SQLite, PostgreSQL, MySQL, MSSQL** (`mlflow/store/db/db_types.py`).
+- Auth/RBAC enforcement in Rust for all Rust-served routes, sharing the auth DB with
+  Python (which keeps enforcing for the genai routes it still serves).
+- Drastically lower memory footprint vs. `N × Python worker` processes.
+- Query layer designed for a **~100 GB database**: keyset pagination, semi-joins instead
+  of join+DISTINCT, proper indexes, no unindexable full-text LIKE scans.
+- A **compliance test harness** that runs the existing Python test suites against the
+  Rust server (proven pattern from the Go store effort, see §6).
+
+### Non-Goals (genai — stay in Python, routed there by nginx)
+
+- Gateway (`/gateway/*`, `gateway-proxy`, secrets/endpoints/model-definitions/budget/guardrails)
+- Scorers (`/3.0/mlflow/scorers/*`, scorer invoke, online scoring configs)
+- GenAI evaluate (`/3.0/mlflow/genai/evaluate/invoke`), evaluation datasets
+  (`/3.0/mlflow/datasets/*`)
+- Issues CRUD + detection, label schemas, review queues
+- Prompt **optimization** jobs and the UC prompt protos (note: the Prompts *registry* UI
+  works purely on registry endpoints — covered by the Rust registry, §3.14)
+- Assistant (`/ajax-api/3.0/mlflow/assistant/*`, SSE), promptlab
+  (`create-promptlab-run`), server-side jobs API + Huey runner (`/ajax-api/3.0/jobs/*`) —
+  jobs exist to run genai workloads (scorers/eval), so they stay Python (D10)
+- Databricks-only endpoints (`unified-traces`, `get-online-trace-details`), Unity Catalog
+  registry/prompt services
+- Trace archival (`ARCHIVE_REPO`, `--trace-archival-config`) — v1 treats all spans as
+  `TRACKING_STORE` (see D6)
+
+---
+
+## 2. Target Architecture
+
+```
+                        ┌──────────────────────────────────────────────┐
+                        │                    nginx                     │
+                        │  - serves React build (static)               │
+                        │  - default route → Rust                     │
+                        │  - genai paths → Python                     │
+                        └───────┬──────────────────────────┬───────────┘
+                                │ default                  │ genai only
+                                ▼                          ▼
+                    ┌───────────────────┐        ┌────────────────────┐
+                    │   Rust server     │        │   Python mlflow    │
+                    │  tracking/tracing │        │   server (uvicorn) │
+                    │  registry/webhooks│        │   gateway, scorers │
+                    │  auth/RBAC        │        │   eval, assistant, │
+                    │  workspaces       │        │   jobs, issues …   │
+                    └────┬─────────┬────┘        └────┬──────────┬────┘
+                         │         │                  │          │
+                         ▼         ▼                  ▼          ▼
+              ┌────────────────┐ ┌──────────────────────┐ ┌────────────┐
+              │ backend DB     │ │ auth DB              │ │ artifact   │
+              │ (tracking +    │ │ (users/roles/grants, │ │ store      │
+              │  registry +    │ │  alembic_version_auth│ │ (FS/S3/…)  │
+              │  workspaces)   │ │  — shared by both)   │ │            │
+              └────────────────┘ └──────────────────────┘ └────────────┘
+```
+
+Both servers point at the **same** backend DB, the same auth DB, and the same artifact
+storage. Schema ownership stays with Python/alembic (§5.4); Rust verifies both alembic
+heads at startup (`alembic_version` for the backend store, `alembic_version_auth` for the
+auth DB) and refuses to run on a mismatch (mirrors `_verify_schema`,
+`mlflow/store/db/utils.py:123-134`, and `mlflow/server/auth/db/utils.py`).
+
+### 2.1 Routing insights
+
+- Every proto endpoint is registered under **both** `/api/{v}.0/...` and
+  `/ajax-api/{v}.0/...` with identical handlers (`mlflow/server/handlers.py:6737-6744`);
+  the auth app mirrors the same dual registration for its own routes
+  (`mlflow/server/auth/routes.py`). SDK uses `/api/`, UI uses `/ajax-api/`.
+- With registry + auth + workspaces in Rust, the split becomes **"Rust by default,
+  enumerate the genai exceptions"** — far simpler and more future-proof than enumerating
+  Rust paths (new upstream genai endpoints fail safe to Python).
+- `POST /v1/traces` (OTLP) exists only in the FastAPI wrapper
+  (`mlflow/server/otel_api.py:92`) — high-volume tracing write path, Rust-native.
+- `/graphql` serves tracking + registry reads (`mlflow/server/graphql/autogenerated_graphql_schema.py:303,341`)
+  — fully in Rust scope now, including `mlflowSearchModelVersions`.
+- `MLFLOW_STATIC_PREFIX` (`--static-prefix`) prepends a path prefix to *every* route
+  (`handlers.py:6731`) — nginx config and Rust server must both honor it.
+- **Auth enforcement is per-request inside each app**, so it must exist in both planes:
+  Rust enforces for Rust-served routes; Python's existing auth app keeps enforcing for
+  genai routes. Both read the same auth DB, so users/roles/grants are consistent (D1).
+- SSE/streaming only exists on Python routes (assistant, gateway) — nginx needs
+  `proxy_buffering off` + long timeouts for those locations only.
+
+### 2.2 nginx routing table (the contract)
+
+Default rule: **everything not listed below goes to Rust.**
+
+| Route pattern (under optional static prefix) | Backend |
+|---|---|
+| `/`, `/static-files/*` | nginx static (React build from `mlflow/server/js/build/`) |
+| `/(api\|ajax-api)/3.0/mlflow/{gateway,scorers,datasets,issues,genai,label-schemas,review-queues}/*` | Python |
+| `/ajax-api/3.0/mlflow/assistant/*` (SSE) | Python |
+| `/ajax-api/3.0/jobs/*` | Python |
+| `/gateway/*` (streaming), `/ajax-api/2.0/mlflow/gateway-proxy` | Python |
+| `/ajax-api/2.0/mlflow/runs/create-promptlab-run` | Python |
+| `/ajax-api/3.0/mlflow/scorer/invoke`, genai-evaluate/issues invoke routes | Python |
+| `/python/health` (rewritten `/health` for ops) | Python |
+| **everything else** — tracking, tracing, OTLP `/v1/traces`, metrics, artifacts (`/get-artifact`, `/model-versions/get-artifact`, `/mlflow-artifacts/*`), logged models, registry (`registered-models/*`, `model-versions/*`), webhooks, `/graphql`, users/roles/permissions, `/signup`, workspaces, `server-info`, ui-telemetry, `/health`, `/version`, `/metrics` | **Rust** |
+
+Frontend feasibility confirmed: all UI API calls are relative URLs
+(`mlflow/server/js/src/common/utils/FetchUtils.ts:60`), hash router, un-templated
+`index.html`. The admin (`src/admin/`) and account (`src/account/`) UIs call
+users/roles/permissions endpoints that Rust now serves; the workspace selector sends the
+`X-MLFLOW-WORKSPACE` header per request (`src/workspaces/utils/WorkspaceUtils.ts`).
+
+### 2.3 Tech stack decision (proposed defaults)
+
+| Concern | Choice | Rationale |
+|---|---|---|
+| HTTP framework | `axum` (tokio + tower + hyper) | tower middleware fits the before/after-request auth model |
+| DB access | `sqlx` + hand-built SQL AST for the search DSLs | sqlite/postgres/mysql native; MSSQL via `tiberius` adapter (D2) |
+| Protobuf | `prost` compiling `service.proto`, `model_registry.proto`, `webhooks.proto`, `assessments.proto`, `databricks.proto`, `mlflow_artifacts.proto`, OTLP protos | single source of truth shared with Python |
+| JSON | custom serializer over prost types replicating `message_to_json` quirks (§4) | serde-default output will NOT match the wire |
+| Object storage | `object_store` crate (S3/GCS/Azure/local) | one API, all major backends |
+| Password hashing | `pbkdf2`/`scrypt` crates emitting/verifying **werkzeug's format** (`method$salt$hash`) | credential compatibility with existing auth DBs (§4.13) |
+| Secrets encryption | `fernet` crate | webhook secrets are Fernet-encrypted (`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`) |
+| Webhook signing | HMAC-SHA256, `v1,<b64>` Standard-Webhooks format | parity with `mlflow/webhooks/delivery.py:121` |
+| Metrics | `metrics` + prometheus exporter on `/metrics` | replaces gunicorn prometheus multiprocess |
+| Config | clap CLI + env vars matching `mlflow server` flags | drop-in ops compatibility |
+
+---
+
+## 3. API Surface to Implement (complete inventory)
+
+Authoritative endpoint definitions: `mlflow/protos/service.proto`,
+`mlflow/protos/model_registry.proto`, `mlflow/protos/webhooks.proto` (`databricks.rpc`
+options), route generation `mlflow/server/handlers.py:6723-6807`, `HANDLERS` dict
+(`handlers.py:7663`), auth routes `mlflow/server/auth/routes.py`. Every proto endpoint is
+served on both `/api/` and `/ajax-api/` prefixes unless marked ajax-only.
+
+### 3.1 Experiments (9 endpoints)
+
+create, get, get-by-name, search (POST **and** GET), delete, restore, update,
+set-experiment-tag, delete-experiment-tag. Search: `max_results` (int64, default 1000),
+`page_token`, `filter`, `order_by[]`, `view_type` (`ACTIVE_ONLY=1, DELETED_ONLY=2, ALL=3`).
+
+### 3.2 Runs (14 endpoints)
+
+create, update, delete, restore, get, search, log-metric, log-parameter, set-tag,
+delete-tag, log-batch, log-model (legacy), log-inputs, outputs (log-outputs).
+
+Limits to replicate exactly: search `max_results` int32 default 1000 max **50000**
+(`handlers.py:1934`); log-batch ≤1000 metrics / ≤1000 total entities; param value ≤6000
+bytes; default view `ACTIVE_ONLY`; tiebreak ordering `start_time DESC, run_id`.
+
+### 3.3 Metrics (2 + 2 ajax-only endpoints)
+
+- `GET /mlflow/metrics/get-history` (paginated, store cap 25000)
+- `GET /mlflow/metrics/get-history-bulk-interval` (proto + ajax route;
+  `MAX_RESULTS_PER_RUN=2500`, sampling in `handlers.py:2223`; UI default 320 pts/chart)
+- ajax-only: `GET /ajax-api/2.0/mlflow/metrics/get-history-bulk` (≤100 run_ids, cap
+  25000; hand-rolled JSON, **not** proto-serialized, `handlers.py:2112`)
+
+### 3.4 Datasets / inputs
+
+- `POST (mlflow/)experiments/search-datasets` (proto path lacks leading `/`,
+  `service.proto:684`; explicit ajax route `mlflow/server/__init__.py:135`)
+
+### 3.5 Logged models (10 endpoints)
+
+CRUD + finalize (PATCH), search (POST, default 50 max 50, dataset-scoped metric ordering,
+encoded token `SearchLoggedModelsPaginationToken`), tags set/delete, artifact directory
+listing, log-params; ajax-only artifact file download.
+
+### 3.6 Tracing V3 (13 endpoints)
+
+startTraceV3, getTraceInfoV3, getTrace (`?allow_partial=`), batchGetTraces,
+batchGetTraceInfos, searchTracesV3 (default 100, max 500), deleteTracesV3 (time-based OR
+id-based, `HasField` semantics), setTraceTagV3/deleteTraceTagV3, linkTracesToRun (≤100),
+linkPromptsToTrace (stores name/version link only), calculateTraceFilterCorrelation
+(NPMI), queryTraceMetrics (aggregations over traces/spans/assessments).
+
+### 3.7 Tracing V2 (deprecated but still served — 7 endpoints)
+
+startTrace, endTrace, getTraceInfo, searchTraces (GET), deleteTraces, setTraceTag,
+deleteTraceTag under `/api/2.0/mlflow/traces...`. Thin adapters over V3 store paths.
+The UI still calls `GET /ajax-api/2.0/mlflow/traces` for "contains traces".
+
+### 3.8 OTLP ingestion
+
+`POST /v1/traces` — `ExportTraceServiceRequest` as `application/x-protobuf` or JSON,
+gzip `Content-Encoding`, required header `x-mlflow-experiment-id`, optional
+`x-mlflow-run-id` (links completed traces to run). Persists via `log_spans` semantics
+(`sqlalchemy_store.py:4971-5362`). Status codes 200/400/422/501
+(`mlflow/server/otel_api.py:95-231`). Under auth: requires experiment UPDATE resolved
+from the header (`auth/__init__.py:4441`).
+
+### 3.9 Assessments (4 endpoints)
+
+create / get / update (FieldMask paths: `assessment_name`, `expectation`, `feedback`,
+`rationale`, `metadata`, `valid`) / delete under
+`/api/3.0/mlflow/traces/{trace_id}/assessments...`. Override/supersede model
+(`overrides` + `valid`).
+
+### 3.10 Trace artifact fetch (ajax-only)
+
+`GET /ajax-api/{2,3}.0/mlflow/get-trace-artifact?request_id=&path=` — span JSON
+(`traces.json`) or trace attachment. Dispatch on `mlflow.trace.spansLocation` tag:
+`TRACKING_STORE` → DB; `ARTIFACT_REPO` → artifact store; `ARCHIVE_REPO` → out of scope v1
+(`handlers.py:4177-4234`).
+
+### 3.11 Artifacts
+
+- `GET /get-artifact?run_id=&path=` — stream run artifact (`validate_path_is_safe`,
+  `handlers.py:1519`).
+- `GET /model-versions/get-artifact?name=&version=&path=` — resolves
+  `storage_location or source` via the registry store, then streams from the resolved
+  repo, honoring `mlflow-artifacts:` proxying + workspace prefixes (`handlers.py:3033`).
+- `MlflowArtifactsService` (8 endpoints): download/upload/list/delete under
+  `/(api|ajax-api)/2.0/mlflow-artifacts/artifacts...`, multipart create/complete/abort,
+  presigned URL. Gated by `--serve-artifacts`.
+- ajax-only `POST /ajax-api/2.0/mlflow/upload-artifact`.
+
+### 3.12 GraphQL (`/graphql`, GET+POST)
+
+Query: `mlflowGetExperiment`, `mlflowGetRun`, `mlflowGetMetricHistoryBulkInterval`,
+`mlflowListArtifacts`, `mlflowSearchModelVersions`.
+Mutation: `mlflowSearchRuns`, `mlflowSearchDatasets`. All delegate to the same store
+logic — with registry in Rust, **all resolvers are now in scope** (no proxying).
+Replicate the query-safety/no-batching guard (`graphql_no_batching.py`) and the GraphQL
+auth middleware behavior (§3.16, `auth/__init__.py:4139`).
+
+### 3.13 Misc
+
+`/health`, `/version`, `GET/POST /(api|ajax-api)/3.0/mlflow/server-info` (UI boot — Rust
+owns it now, must report feature flags consistent with the split, D5),
+`/ajax-api/3.0/mlflow/ui-telemetry` (GET/POST sink), `/metrics` (prometheus).
+
+### 3.14 Model Registry (21 endpoints)
+
+Proto `mlflow/protos/model_registry.proto:13-380`, handlers `handlers.py:7705-7726`.
+All `since.major=2`.
+
+**Registered models:** create, rename (POST), update (PATCH), delete (DELETE), get,
+search (GET; default 100, threshold 1000), get-latest-versions (**POST and GET**),
+set-tag, delete-tag.
+
+**Model versions:** create (resolves `models:/`/`runs:/` sources to `storage_location`,
+MAX+1 versioning with retry, `sqlalchemy_store.py:981-1096`), update (PATCH),
+transition-stage (canonical stage names; `archive_existing_versions` archives all other
+versions in the target stage, only valid for Staging/Production,
+`sqlalchemy_store.py:1192-1230`), delete (soft-delete → `Deleted_Internal` stage with
+source/run_id redaction and alias removal, `:1244`), get, search (GET; **store default
+10000 / threshold 200000** — proto says default 200000, the store wins), get-download-uri,
+set-tag, delete-tag.
+
+**Aliases:** `/mlflow/registered-models/alias` is **HTTP-method-overloaded**: POST=set,
+DELETE=delete, GET=get-version-by-alias.
+
+Entity quirks: `ModelVersion.version` is a string in proto but Integer in DB;
+`latest_versions` only contains READY versions per stage; OSS
+`SqlModelVersion.to_mlflow_entity` populates aliases separately; `user_id` not returned
+on RegisteredModel.
+
+**Prompts ride on the registry** (`mlflow/store/model_registry/abstract_store.py:517-1160`):
+no separate OSS prompt endpoints. The Rust registry must support: arbitrary tags
+(template text lives in `mlflow.prompt.text`); the **prompt-exclusion anti-join** —
+default searches EXCLUDE rows tagged `mlflow.prompt.is_prompt='true'` unless the filter
+explicitly queries that tag (`sqlalchemy_store.py:776-832`); and the special semantics
+where `is_prompt != 'true'` / `= 'false'` matches rows lacking the tag entirely
+(`search_utils.py:1304,1499`). Get that right and the Prompts UI works for free.
+
+**copy_model_version** is client-side composition (create RM + create MV with
+`models:/{src}/{ver}` source) — no extra endpoint, but `models:/` source resolution in
+create must work.
+
+### 3.15 Webhooks (6 endpoints + delivery engine)
+
+Proto `mlflow/protos/webhooks.proto:14-116`, handlers `handlers.py:3367-3462`. REST-style
+path params: `POST/GET /mlflow/webhooks`, `GET/PATCH/DELETE /mlflow/webhooks/{webhook_id}`,
+`POST /mlflow/webhooks/{webhook_id}/test`.
+
+Delivery engine (`mlflow/webhooks/delivery.py`): async in-process pool (fire-and-forget,
+no durable queue), HMAC-SHA256 signature `v1,<b64>` over `"{delivery_id}.{timestamp}.{payload}"`
+when a secret is set, headers `X-MLflow-Signature`/`X-MLflow-Timestamp`/`X-MLflow-Delivery-Id`,
+HTTP retries on [429,500,502,503,504] with backoff, **SSRF protection** (public-IP
+validation at connect time, no proxy env), TTL cache of webhooks-by-event. Events fired
+from registry mutations (registered model created; model version created; MV tag
+set/deleted; MV alias set/deleted; PROMPT_* mirrors) — trigger sites
+`handlers.py:2638-3334`. Secrets stored Fernet-encrypted
+(`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`). Under auth: all webhook endpoints are
+admin-only (`WEBHOOK_BEFORE_REQUEST_HANDLERS`, `auth/__init__.py:2772`).
+
+### 3.16 Auth & RBAC (`--app-name basic-auth` equivalent)
+
+Important: this repo's auth app is a full **RBAC system**, not upstream's per-resource
+basic-auth. Legacy per-resource permission tables exist on disk but are dead at runtime —
+model the RBAC design only (`mlflow/server/auth/`).
+
+**Users API** (`/api/2.0/mlflow/users/*` + ajax, `auth/routes.py:3-34`): create,
+create-ui (form + CSRF), get, current (returns `{user, is_basic_auth}`), list (with
+roles), update-password (self-service requires `current_password`), update-admin,
+delete (cannot delete self). Hand-rolled JSON shapes (not proto).
+
+**Per-user permission APIs** (v3): current/permissions, permissions/list, grant, revoke,
+get (`{allowed, permission}`). Grants write to a **synthetic `__user_<id>__` role** per
+workspace — the single most non-obvious mechanism
+(`auth/sqlalchemy_store.py:259-543`).
+
+**Roles API** (`/api/3.0/mlflow/roles/*`): create/get/list/update/delete role;
+add/remove/list/update role permissions; assign/unassign; list user-roles / role-users.
+Role names with prefix `__user_` are rejected.
+
+**Permission model** (`auth/permissions.py`): `READ < USE < EDIT < MANAGE` (+
+`NO_PERMISSIONS`); resource types `experiment, registered_model, prompt, scorer,
+gateway_secret, gateway_endpoint, gateway_model_definition, workspace`; workspace-scope
+grants only USE (member) or MANAGE (workspace admin) with pattern `*`. Resolution: scan
+user's roles in the resource's workspace, max-merge matching grants
+(`resource_pattern IN ('*', resource_id)`; workspace-`*` grants fold in only when MANAGE),
+then floor against `default_permission`, preserving `NO_PERMISSIONS` as the
+workspace-boundary deny (`auth/__init__.py:556-1022`,
+`auth/sqlalchemy_store.py:2010`).
+
+**Enforcement** (before-request): skip unprotected routes → authenticate (HTTP Basic
+against werkzeug-hashed passwords; pluggable `authorization_function`) → **admin bypass**
+→ validator lookup (exact map from `BEFORE_REQUEST_HANDLERS` `auth/__init__.py:2480-2617`
++ regex matchers for parameterized trace/logged-model/webhook paths + artifact-proxy path
+inspection; unknown `/mlflow/traces/` paths **fail closed**). Permission-per-endpoint
+matrix documented in the validators map (runs inherit experiment perms; model versions
+inherit registered-model perms; createModelVersion additionally requires READ on the
+source run/model).
+
+**After-request hooks** (`auth/__init__.py:3594-3650`): creator gets MANAGE on create;
+**search/list responses are filtered to readable rows and re-fetched to fill
+max_results** (`_role_based_read_predicate`, filter_search_experiments /
+registered_models / model_versions / logged_models); grant cleanup/rename cascades on
+delete/rename; workspace role seeding/cleanup on workspace create/delete.
+
+**GraphQL auth middleware**: per-field READ checks + experiment-id narrowing for
+`mlflowSearchRuns`, post-filter for `mlflowSearchModelVersions`
+(`auth/__init__.py:4139-4262`).
+
+**Signup UI**: server-rendered `/signup` HTML form + CSRF token posting to
+`create-user-ui`; requires a static `MLFLOW_FLASK_SERVER_SECRET_KEY`. No login page —
+HTTP Basic only. The React **admin console** (`src/admin/`) and **account page**
+(`src/account/`) consume the users/roles/permissions endpoints above.
+
+**Auth config** (`basic_auth.ini` / `MLFLOW_AUTH_CONFIG_PATH`): default_permission,
+database_uri, read_database_uri (read-replica routing), admin bootstrap user
+(`create_admin_user`), grant_default_workspace_access, cache sizes/TTLs,
+authorization_function pluggability (Rust v1: basic-auth built-in; custom Python
+functions are out of scope — D9).
+
+### 3.17 Workspaces (5 endpoints + scoping layer)
+
+Proto `service.proto:1051-1132`; handlers `handlers.py:1351-1496`, registered at
+`/api/3.0/mlflow/workspaces...`: list, create (201), get, update (PATCH), delete (204,
+`?mode=RESTRICT|CASCADE|SET_DEFAULT`). Disabled → 503 (`_disable_if_workspaces_disabled`).
+Name rules: k8s-style regex, len 2-63, reserved names `{workspaces, api, ajax-api,
+static-files}`; `default` is reserved/undeletable.
+
+Scoping mechanics: request workspace from **`X-MLFLOW-WORKSPACE` header** (fallback
+`default`); workspace-aware store variants add `WHERE workspace = ?` to every query and
+prefix artifact locations with `workspaces/<name>/`
+(`mlflow/store/tracking/sqlalchemy_workspace_store.py:62`,
+`mlflow/store/model_registry/sqlalchemy_workspace_store.py`); `workspaces` table is
+provider-pluggable via a separate store URI (`--workspace-store-uri`). Single-tenant mode
+(workspaces disabled): pin `workspace='default'`, refuse startup if non-default
+workspaces exist (`sqlalchemy_store.py:446-462`).
+
+---
+
+## 4. Wire-Compatibility Contract (must-match behaviors)
+
+Source: `mlflow/utils/proto_json_utils.py`, `mlflow/exceptions.py`,
+`mlflow/utils/search_utils.py`, `mlflow/server/auth/`.
+
+1. **snake_case JSON** (`preserving_proto_field_name=True`). No camelCase.
+2. **int64 as JSON numbers** — MLflow un-does Google's string encoding
+   (`_mark_int64_fields`, `proto_json_utils.py:47`). Exception: int64 **map keys** stay
+   strings.
+3. **Pretty-printed output** (`indent=2`) — replicate (D4).
+4. **Enums serialize by name** (`"FINISHED"`, `"READY"`).
+5. **Unknown request fields are ignored** (`ParseDict(..., ignore_unknown_fields=True)`).
+6. **Error format**: `{"error_code": "<ENUM_NAME>", "message": "..."}` with the exact
+   status map in `ERROR_CODE_TO_HTTP_STATUS` (`exceptions.py:30`). Unknown endpoints →
+   proto-style 404 (`_not_implemented`). Auth failures: 401 with
+   `WWW-Authenticate: Basic realm="mlflow"`; authorization failures: 403.
+7. **Pagination tokens** are opaque; currently base64(JSON `{"offset": N}`)
+   (`search_utils.py:942-987`). Rust may switch to keyset tokens (opaque strings) since
+   nginx routes each endpoint to exactly one backend (D3).
+8. **Search filter DSL** — full grammar parity for runs, experiments, logged models,
+   traces, registered models (`SearchModelUtils:1267` — name only, LIKE auto-wrapped
+   `%x%` per proto doc), model versions (`SearchModelVersionUtils:1452` — name,
+   version_number, run_id (+IN), source_path aliases).
+9. **GET-with-body quirk**: several search endpoints accept POST and GET; GET handlers
+   parse query args into proto messages (repeated fields via repeated query params).
+10. **`HasField` semantics**: unset-vs-zero distinctions (deleteTraces
+    `max_timestamp_millis`, run search `run_view_type`) — prost `Option<T>` covers this.
+11. **Trace write ordering discipline**: sorted metadata/metric keys, sorted trace ids,
+    bounded deadlock retry (2 retries, backoff) — Postgres correctness requirement
+    (commit `4c5548c39`).
+12. **Workspace plumbing**: `experiments.workspace` + unique `(workspace, name)`;
+    registry tables have workspace-leading composite PKs; `X-MLFLOW-WORKSPACE` header is
+    the wire contract.
+13. **Werkzeug password hash format** (`method$salt$hash`, pbkdf2:sha256 or scrypt
+    depending on pinned werkzeug — verify at implementation time): Rust must **verify**
+    existing hashes and **generate** hashes Python can verify (shared auth DB).
+14. **Registry constants**: store-side max_results defaults/thresholds win over proto
+    declarations (RM 100/1000, MV 10000/200000).
+15. **Prompt anti-join semantics** (§3.14) are part of the observable search contract.
+16. **Webhook signature**: `v1,<base64(hmac_sha256(id.ts.payload))>` + the three
+    `X-MLflow-*` headers; receivers already verify this format.
+17. **Auth JSON endpoints are hand-rolled** (users/roles/permissions) — match the exact
+    shapes in `auth/entities.py` (`Role.to_json:358`, `RolePermission.to_json:410`,
+    `UserRoleAssignment.to_json:448`) and the handler dicts, not proto rules.
+
+---
+
+## 5. Storage & Database Strategy
+
+### 5.1 Backend-store tables owned by the Rust server (read+write)
+
+Tracking/tracing (`mlflow/store/tracking/dbmodels/models.py`): `experiments`,
+`experiment_tags`, `runs`, `params`, `tags`, `metrics`, `latest_metrics`, `datasets`,
+`inputs`, `input_tags`, `logged_models`, `logged_model_params`, `logged_model_tags`,
+`logged_model_metrics`, `trace_info`, `trace_tags`, `trace_request_metadata`,
+`trace_metrics`, `spans`, `span_metrics`, `assessments`, `entity_associations`.
+
+Registry (`mlflow/store/model_registry/dbmodels/models.py`): `registered_models`,
+`model_versions`, `registered_model_tags`, `model_version_tags`,
+`registered_model_aliases` — all with **workspace-leading composite PKs**. Webhooks:
+`webhooks` (Fernet-encrypted `secret`, soft-delete `deleted_timestamp`),
+`webhook_events`. Workspaces: `workspaces` (PK `name`).
+
+Semantics to replicate exactly:
+
+- **Wide composite PKs as dedup**: `metrics` 6-col PK; `logged_model_metrics` 5-col PK.
+- **`latest_metrics` maintenance**: Python does select-for-update + compare
+  (`sqlalchemy_store.py:1366-1483`); Rust implements the atomic form (§5.2 Q5) with
+  identical observable semantics.
+- **`spans.duration_ns`** stored generated column (`models.py:2010`).
+- **Dialect upserts**: `ON CONFLICT DO UPDATE` (sqlite/pg), `ON DUPLICATE KEY UPDATE`
+  (mysql), per-row merge (mssql) (`sqlalchemy_store.py:9806`).
+- **SQLite session config**: `PRAGMA foreign_keys=ON`, `busy_timeout=20000`,
+  `case_sensitive_like=true` (`store/db/utils.py:154-157`).
+- **Registry**: `model_versions.storage_location` is DB-only (resolved artifact path,
+  distinct from proto `source`); MV soft-delete redacts source/run_id/run_link; version
+  numbering is `MAX(version)+1` in a retry loop (contention→retry, not a sequence);
+  stage transition archiving is transactional over sibling versions.
+
+### 5.2 Known query inefficiencies to fix (the 100 GB story)
+
+From `mlflow/store/tracking/sqlalchemy_store.py` and
+`mlflow/store/model_registry/sqlalchemy_store.py`:
+
+| # | Problem | Location | Fix in Rust |
+|---|---|---|---|
+| Q1 | OFFSET pagination everywhere (O(offset)/page) | `_search_runs` L2054/2067, `search_traces` L3812, `get_metric_history` L1506, `search_logged_models` L3429, registry searches (offset via page token, `model_registry/sqlalchemy_store.py:518-557`) | keyset/seek pagination behind opaque tokens |
+| Q2 | `SELECT DISTINCT` over full run rows after N filter joins | tracking L2059 | EXISTS semi-joins → no fan-out, no DISTINCT |
+| Q3 | One subquery JOIN per filter clause and per order-by clause | `_get_sqlalchemy_filter_clauses` L9151, `_get_orderby_clauses` L9194 | correlated EXISTS per predicate; single CTE for order-by keys |
+| Q4 | Missing indexes: `runs(experiment_id, lifecycle_stage, start_time)`, `logged_models.experiment_id`, `inputs.source_id`, `model_versions.run_id`, `model_versions.current_stage`; two empty `Index()` decls (tracking models.py L832/L863) | schema | alembic migrations (Python-owned, §5.4) |
+| Q5 | `latest_metrics` read-lock-compare-write holds FOR UPDATE locks | L1366-1483 | atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE excluded.(step,timestamp,value) > current` |
+| Q6 | `log_batch` non-atomic (separate sessions per entity type) + redundant run lookup | L1240/L1322/L1241 | one transaction per log-batch |
+| Q7 | Span attribute search via `content LIKE '%"attr"value%'` (full scan) | L9550 (TODO L9526) | indexed `span_attributes` table or DB JSON operators (Phase 13) |
+| Q8 | Eager loading returns ALL metrics/params/tags per run per page | `_get_eager_run_query_options` L1056 | batched IN-queries + streamed serialization |
+| Q9 | Prompt-exclusion anti-join added to **every** registry search | `model_registry/sqlalchemy_store.py:776` | keep semantics; consider partial index / `NOT EXISTS` form measured per dialect |
+| Q10 | Auth after-request search filtering re-fetches pages in a loop to fill max_results | `auth/__init__.py:1586` (`_role_based_read_predicate` + refetch) | push readable-resource filter into the search query (semi-join against grants) when auth is native to the same process |
+
+Rules: **wire-invisible query improvements land with the port** (Q1-Q3, Q5, Q6, Q10);
+**schema changes** (Q4, Q7, Q9-index) go to Phase 13 via alembic.
+
+### 5.3 Auth DB
+
+Separate database (default `sqlite:///basic_auth.db`, `basic_auth.ini`), 4 live tables
+(`mlflow/server/auth/db/models.py`): `users` (id, username unique, password_hash,
+is_admin), `roles` (unique `(workspace, name)`), `role_permissions` (unique
+`(role_id, resource_type, resource_pattern)`), `user_role_assignments` (unique
+`(user_id, role_id)`). Version table **`alembic_version_auth`**, head `f1a2b3c4d5e6`.
+Legacy per-resource permission tables are dead at runtime — Rust ignores them.
+Read-replica routing supported (`read_database_uri`). Synthetic `__user_<id>__` roles
+carry per-user grants (§3.16).
+
+### 5.4 Schema/migration ownership
+
+- Alembic remains the schema owner for **both** DBs; migrations live in
+  `mlflow/store/db_migrations/` (head `b7e4c1a90f23`) and
+  `mlflow/server/auth/db/migrations/` (head `f1a2b3c4d5e6`); run via Python.
+- Rust embeds both expected head revisions, reads the version tables at startup, refuses
+  to start on mismatch with a "run `mlflow db upgrade`" message. Rust never writes the
+  version tables.
+- New indexes/tables needed by Rust are contributed as normal alembic migrations so both
+  servers stay on one lineage.
+
+### 5.5 Connection/memory model
+
+- One async pool per database (backend, auth, optional read replicas), replacing
+  `workers × (pool_size + max_overflow)` Python connections.
+- Streaming JSON serialization for large responses.
+- In-process TTL caches with Python-equivalent semantics: resource→workspace cache,
+  optional credential cache (HMAC-keyed, off by default), webhooks-by-event cache,
+  workspace artifact-root cache.
+- Target: idle RSS < 100 MB (Python baseline measured in Phase 14).
+
+---
+
+## 6. Compliance Testing Strategy
+
+Everything needed already exists in the repo:
+
+1. **`tests/tracking/test_rest_tracking.py`** (5,529 lines): live-server HTTP tests for
+   experiments, runs, metrics, search, errors, traces, spans, assessments, OTLP, GraphQL,
+   **and registry-over-HTTP** (model version source validation, lifecycle, GraphQL
+   search, lines 1597-2525). Fixture boots the server via `ServerThread`/`_init_server`
+   (`tests/tracking/integration_test_utils.py`) — parametrize to launch the Rust binary.
+2. **Go-store precedent**: `_MLFLOW_GO_STORE_TESTING`
+   (`mlflow/environment_variables.py:1074`) gates representational-difference assertions.
+   Add `MLFLOW_RUST_STORE_TESTING` identically.
+3. **`MLFLOW_TRACKING_URI=http://rust-server`** re-points the whole Python client stack
+   (`mlflow/tracking/_tracking_service/utils.py:252`) — fluent/client suites become
+   conformance suites (silence `tests/conftest.py:326` warning).
+4. **Wire spec**: `tests/store/tracking/test_rest_store.py` + registry
+   `tests/store/model_registry/test_rest_store.py` / `test_rest_store_webhooks.py` assert
+   exact request payloads per endpoint.
+5. **Registry behavior**: `tests/store/model_registry/test_sqlalchemy_store.py`
+   (2,518 lines — CRUD, search, tags, aliases, stages, pagination) mirrored over HTTP;
+   `test_sqlalchemy_workspace_store.py` for workspace variants.
+6. **Auth**: `tests/server/auth/` — `auth_test_utils.py` launches a real server with an
+   isolated `basic_auth.ini` (`MLFLOW_AUTH_CONFIG_PATH`) and provides
+   `create_user`/`grant_role_permission`/`User` helpers; suites `test_auth.py`,
+   `test_permissions.py`, `test_client_rbac.py`, `test_auth_workspace.py`,
+   `test_sqlalchemy_store_rbac.py`. Point the launcher at the Rust binary.
+7. **Workspaces**: `tests/server/test_workspace_endpoints.py`,
+   `test_workspace_middleware.py`, `tests/store/workspace/*`,
+   workspace store variants in tracking/registry test trees.
+8. **DB matrix CI**: copy the `database` job in `.github/workflows/master.yml`
+   (postgres/mysql/mssql/sqlite via `tests/db/compose.yml`), add `mlflow-rust` service.
+9. **Artifacts**: `tests/tracking/test_mlflow_artifacts.py` (subprocess `mlflow server`
+   fixture) against the Rust artifact proxy.
+10. **Differential (golden) testing**: new harness replaying identical requests against
+    Python and Rust and diffing normalized responses — catches drift assertions miss.
+
+---
+
+## 7. Work Breakdown
+
+Legend: every task has **AC** (acceptance criteria) and **VER** (how to confirm).
+Tick a box only when both hold. Suggested execution order is phase order; Phases 5-10
+have internal independence (artifacts/GraphQL/registry can proceed in parallel once
+Phase 2 lands; auth needs registry + tracking APIs to protect).
+
+### Phase 0 — Decisions & foundations
+
+- [x] **T0.1 Confirm scope freeze**: "everything except genai" per §1/§3, with the genai
+      exception list (§2.2) approved.
+      **AC:** endpoint tables in §3 marked approved; ambiguous items (queryTraceMetrics,
+      correlation, ui-telemetry) have in/out decisions in §9.
+      **VER:** review sign-off recorded in this file. *(Approved 2026-07-13 —
+      implementation kicked off on this scope; queryTraceMetrics, correlation, and
+      ui-telemetry are IN scope as listed in §3.6/§3.13.)*
+- [x] **T0.2 Auth enforcement architecture** (D1): Rust enforces natively for Rust routes;
+      Python keeps its auth app for genai routes; both share the auth DB. Confirm
+      custom `authorization_function` plugins are out of scope for Rust v1 (D9).
+      **AC:** decision + consequences documented (incl. `MLFLOW_FLASK_SERVER_SECRET_KEY`
+      only needed on Python side; Rust needs its own CSRF secret for /signup).
+      **VER:** §9 updated. *(D1/D9 already decided; consequences as documented in §9.)*
+- [x] **T0.3 MSSQL support tier** (D2): full via `tiberius`, or postgres/mysql/sqlite v1
+      with mssql fast-follow.
+      **AC/VER:** decision in §9; CI matrix reflects it. *(Decided: v1 =
+      sqlite/postgres/mysql via sqlx; MSSQL fast-follow via tiberius.)*
+- [x] **T0.4 Crate stack** per §2.3 or record deviations; verify a Rust
+      werkzeug-compatible password-hash implementation and a Fernet crate exist and are
+      audited (both are hard blockers for auth/webhooks).
+      **AC:** `rust/` workspace `Cargo.toml` lists deps; spike code verifies a werkzeug
+      hash from a real `basic_auth.db` and decrypts a Fernet token from Python.
+      **VER:** `rust/spikes/` proof tests green. *(Done 2026-07-13: werkzeug 3.1.8,
+      default method scrypt N=32768/r=8/p=1 dklen=64; pbkdf2:sha256:1000000 also covered;
+      RustCrypto `scrypt`+`pbkdf2`+`sha2` verify AND generate hashes accepted by Python
+      both directions; `fernet` 0.2.2 round-trips with `cryptography` 46. Deviation:
+      sqlx pinned 0.8.6 — 0.9 needs Rust ≥1.94, toolchain pinned 1.89.)*
+
+### Phase 1 — Scaffolding & protocol layer
+
+- [x] **T1.1 Cargo workspace** at `rust/`: `mlflow-server` (bin), `mlflow-proto`,
+      `mlflow-store` (tracking store), `mlflow-registry` (registry store), `mlflow-auth`,
+      `mlflow-search` (filter DSLs), `mlflow-artifacts`, `mlflow-webhooks`.
+      **AC:** `cargo build --workspace` green; CI with clippy + rustfmt.
+      **VER:** GitHub Actions run green. *(Done 2026-07-13: workspace + 8 crates,
+      toolchain pinned 1.89.0, `.github/workflows/rust.yml` (fmt/clippy/build/test);
+      local gates green — Actions run pending first push.)*
+- [x] **T1.2 Proto codegen** from `service.proto`, `model_registry.proto`,
+      `webhooks.proto`, `assessments.proto`, `databricks.proto`, `mlflow_artifacts.proto`
+      + OTLP protos; extract `databricks.rpc` endpoint options at build time to generate
+      the route table.
+      **AC:** generated route table covers every §3 proto endpoint (method/path/version);
+      snapshot test against a dump of Python `get_endpoints()`.
+      **VER:** `rust/tools/route_parity.py` diff empty (modulo documented Python-only routes).
+      *(Done 2026-07-13: protox+prost via extension-preserving descriptor pool
+      (prost-reflect) — the `protox::compile()` convenience API silently drops the
+      `mlflow.rpc` extension, so build.rs drives `protox::Compiler` directly. 186 raw →
+      372 expanded routes; parity vs Python's 391 endpoints exact for all 372
+      proto-backed; 19 allowlisted non-proto routes (15 genai out-of-scope, 4 in-scope
+      hand-crafted: /graphql ×2, server-info ×2 — to be implemented in T6.1/T11.5).
+      OTLP trace_service.proto vendored under `rust/crates/mlflow-proto/vendor/` (only
+      compiled _pb2 ships in the opentelemetry-proto wheel). The §3.4 missing-leading-
+      slash quirk (`/api/2.0mlflow/experiments/search-datasets`) reproduced + tested.)*
+- [x] **T1.3 MLflow-compatible JSON codec** (§4 items 1-5) + deserializer with
+      unknown-field tolerance and `HasField` awareness.
+      **AC:** golden round-trips over Run, TraceInfoV3, SearchRuns, RegisteredModel,
+      ModelVersion, Webhook messages byte-identical to Python `message_to_json`.
+      **VER:** `rust/tests/json_golden.rs`; goldens generated by `rust/tools/gen_goldens.py`.
+      *(Done 2026-07-13: hand-rolled walker over prost-reflect DynamicMessage +
+      Python-json.dumps-parity formatter (ensure_ascii, indent=2, repr floats, field
+      order = field number); 13 goldens byte-identical. Known deviations, documented in
+      json.rs: (1) map keys emitted sorted — Python's own map order is
+      process-nondeterministic, so byte-parity there is impossible for either side;
+      (2) float last-digit dtoa tie-break on ~0.01% of bit patterns; (3) bare
+      Infinity/NaN doubles untested vs real MLflow. Parse side = prost-reflect
+      deserializer, unknown-field tolerant.)*
+- [x] **T1.4 Error model** with the full `ErrorCode`→HTTP map + auth 401/403 forms.
+      **AC:** table-driven test covers every code; `_not_implemented` 404 parity;
+      `WWW-Authenticate` header on 401.
+      **VER:** golden diff against Python for forced errors. *(Done 2026-07-13: new
+      `mlflow-error` crate. Findings: error bodies use json.dumps DEFAULT separators
+      (not indent=2) and conditionally carry `sqlstate`/`error_class` derived from
+      error_code via mlflow/error_classification.py client tables; 21-entry status map,
+      remaining 58 of 79 ErrorCode variants default to 500; `_not_implemented` = empty
+      body, 404, text/html; auth 401/403 are plain-text responses, not
+      MlflowException-shaped. 8 golden fixtures byte-identical; exhaustive
+      variant-coverage test guards new proto enum values.)*
+- [x] **T1.5 Server skeleton**: axum app, `/health`, `/version`, request logging,
+      `MLFLOW_STATIC_PREFIX`, graceful shutdown, `/metrics`.
+      **AC:** `curl /health` → `OK`; `/version` matches the targeted MLflow version.
+      **VER:** integration test. *(Done 2026-07-13: lib+bin split (`build_app(config)`),
+      /health + /version byte/content-type-matched to Flask (version parsed from
+      mlflow/version.py at build time), /metrics via metrics-exporter-prometheus with
+      http_requests_total + duration histogram, --static-prefix/MLFLOW_STATIC_PREFIX
+      with Python's verbatim validation errors, TraceLayer logging, SIGINT/SIGTERM
+      graceful shutdown; 16 tests incl. real-socket + manual curl verification.)*
+
+### Phase 2 — Tracking/tracing storage layer
+
+- [x] **T2.1 Schema model + startup verification** for the backend store: structs for all
+      §5.1 tracking tables; verify `alembic_version` head on boot.
+      **AC:** starts on a Python-migrated DB; refuses stale DB with "run `mlflow db upgrade`".
+      **VER:** test with head and head-minus-one sqlite DBs. *(Done 2026-07-13: 22 tables
+      in `mlflow-store::schema`; head `b7e4c1a90f23` verified against a real
+      alembic-migrated fixture (`rust/tools/make_test_db.py` →
+      tests/fixtures/tracking.db); stale-head + uninitialized-DB refusal with
+      Python-matching wording; Rust never creates DB files.)*
+- [ ] **T2.2 Dialect abstraction** (sqlite/postgres/mysql via sqlx, + mssql per T0.3):
+      upsert forms, LIKE/ILIKE case semantics, pagination SQL, SQLite PRAGMAs.
+      **AC:** store suite (T2.4+) passes on all enabled dialects.
+      **VER:** `tests/db/compose.yml`-based matrix locally + CI. *(Foundation landed
+      2026-07-13: `Db` pool enum + `Dialect` (upsert per backend, BINARY LIKE for mysql,
+      quoting, placeholders, capability flags), SQLAlchemy pool env-var mapping,
+      SQLAlchemy-URI parser incl. +driver suffixes, SQLite PRAGMAs via after_connect.
+      Live pg/mysql tests gated behind MLFLOW_RUST_TEST_{PG,MYSQL}_URI — box stays
+      unticked until the T2.4+ suite runs on the full dialect matrix in CI.)*
+- [x] **T2.3 Search DSL parser** (`mlflow-search`): runs, experiments, logged models,
+      traces grammars from `mlflow/utils/search_utils.py` incl. aliases, quoting,
+      comparator validation, order_by.
+      **AC:** ported Python parser test corpus passes 1:1 incl. error classification.
+      **VER:** `cargo test -p mlflow-search`; error-message parity in Phase 12.
+      *(Done 2026-07-13: observable-behavior port of sqlparse 0.5.5 (lexer SQL_REGEX,
+      grouping passes, embedded 801-entry keyword table) + all six Search*Utils domains
+      incl. registered models + model versions. 1,816-case corpus (460 valid/1,356
+      invalid) generated from the REAL Python parsers replays 1:1, plus ported
+      test_search_utils.py cases. Two genuine Python bugs reproduced faithfully:
+      the _join_in_comparison_tokens duplicate-token fall-through, and tags.x IS NULL
+      on registry domains raising an uncaught ValueError (→ 500 not 400; flagged for
+      the Phase 12 differential allowlist). Known gaps documented for Phase 12: exotic
+      `;` statement-splitting, shlex unterminated-quote parity.)*
+- [x] **T2.4 Store: experiments + runs + params/tags** (CRUD, lifecycle,
+      `(workspace,name)` uniqueness, cascades, param immutability).
+      **AC:** parity with `tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_{core,experiments,runs}.py`
+      behaviors over HTTP.
+      **VER:** Rust unit tests + Phase 12 suite. *(Store layer done 2026-07-13:
+      `TrackingStore` in mlflow-store/src/store/, all methods workspace-scoped;
+      validation.py caps/messages ported verbatim; runName↔tag sync both directions;
+      deleted-experiment name conflict; 78 tests green. HTTP-parity re-check in
+      Phase 12.)*
+- [x] **T2.5 Store: metrics + latest_metrics**: atomic upsert (Q5), exact compare
+      semantics on (step, timestamp, value), single-transaction `log_batch` (Q6),
+      duplicate-metric idempotency.
+      **AC:** concurrent-logging stress produces correct latest_metrics, no deadlocks on
+      pg + mysql.
+      **VER:** `rust/tests/stress_latest_metrics.rs` against dockerized pg + mysql.
+      *(Done 2026-07-13: atomic upsert — sqlite/pg row-value `ON CONFLICT ... DO UPDATE
+      ... WHERE (excluded.step,timestamp,value) > (...)`; mysql per-column `IF(<greater>)`
+      expansion. NaN→(0.0,is_nan) / ±Inf→f64::MAX clamp per sanitize_metric_value;
+      lexicographic (step,timestamp,value) tie-break on sanitized values. 200-writer
+      stress PASSED on real Postgres 16 (migrated container); mysql variant written,
+      env-gated (MLFLOW_RUST_TEST_MYSQL_URI), pending CI. Found+fixed pg INT4 widening
+      gotcha via RowLike::get_int.)*
+- [ ] **T2.6 Store: search_runs**: EXISTS semi-joins (Q2/Q3), keyset pagination behind
+      opaque tokens (Q1), NULLS LAST emulation parity, inline
+      params/metrics/tags/inputs/outputs per page.
+      **AC:** ordering + page boundaries identical to Python across dialects; postgres
+      EXPLAIN shows index usage once Q4 indexes exist.
+      **VER:** differential harness (T12.4) on seeded DB; EXPLAIN artifacts in PR.
+- [x] **T2.7 Store: metric history** (get-history, bulk, bulk-interval sampling ported
+      exactly from `handlers.py:2223`).
+      **AC:** identical sampled point sets vs Python on dense histories.
+      **VER:** differential test (>2500 points). *(Done 2026-07-13: verbatim port of the
+      SqlAlchemyStore SQL-override path (sqlalchemy_store.py:1611) incl. f64
+      interval-index truncation + forced endpoint + min/max union; 17-case/8,079-point
+      corpus generated via the real Python store replays byte-identical. Handler-level
+      caps/validation documented for Phase 3 (bulk = hand-rolled JSON, bulk-interval =
+      proto).)*
+- [x] **T2.8 Store: datasets/inputs/outputs**.
+      **AC/VER:** parity via Phase 12 suite. *(Store layer done 2026-07-13: log_inputs
+      (dataset dedup on (experiment_id,name,digest), input dedup, input_tags),
+      log_outputs (RUN_OUTPUT→MODEL_OUTPUT edges in `inputs` table — NOT
+      entity_associations), search_datasets (DISTINCT + LEFT JOIN context tag, cap
+      1000), Run.inputs/outputs assembly. mlflow-store at 93 tests. HTTP parity in
+      Phase 12.)*
+- [ ] **T2.9 Store: logged models** (CRUD, finalize state machine, search with
+      dataset-scoped ordering + encoded token, tags, params).
+      **AC/VER:** Phase 12 suite.
+- [ ] **T2.10 Store: traces** (start_trace V3 with sorted-merge discipline, get/batch-get,
+      search filters incl. span/assessment/run_id special cases, delete both modes, tags,
+      entity_associations, deadlock retry).
+      **AC:** parity with `test_sqlalchemy_store_traces.py` over HTTP; 1000-iteration
+      parallel start_trace+log_spans on postgres with zero deadlock failures.
+      **VER:** Phase 12 suite + `rust/tests/stress_trace_writes.rs`.
+- [ ] **T2.11 Store: spans** (`log_spans` bulk upsert, trace time-range update,
+      span_metrics, lazy content reads, `content=""` = cleared payload).
+      **AC:** OTLP payload → both servers → identical `traces/get` output.
+      **VER:** differential test.
+- [ ] **T2.12 Store: assessments** (FieldMask update, overrides/valid,
+      feedback/expectation/issue JSON encoding).
+      **AC/VER:** parity with `test_sqlalchemy_store_assessments.py` via Phase 12.
+
+### Phase 3 — Tracking HTTP API
+
+- [ ] **T3.1 Experiments endpoints** (§3.1) incl. POST+GET search.
+      **AC:** experiment sections of `test_rest_tracking.py` pass against Rust.
+      **VER:** Phase 12 runner `-k experiment`.
+- [ ] **T3.2 Runs endpoints** (§3.2) incl. limits, param-length errors, view-type,
+      deprecated `user_id`.
+      **AC:** run sections pass; limit-violation error payloads byte-match.
+      **VER:** Phase 12 runner `-k run` + golden diffs.
+- [ ] **T3.3 Metrics endpoints** (§3.3) incl. both ajax-only bulk routes with hand-rolled
+      JSON shape.
+      **AC:** UI charts render identically; metric suite sections pass.
+      **VER:** Phase 12 runner `-k metric` + UI smoke (T11.6).
+- [ ] **T3.4 Logged models + search-datasets endpoints** (§3.4, §3.5).
+      **AC/VER:** Phase 12 runner `-k "logged_model or dataset"`.
+- [ ] **T3.5 GET-request proto parsing** (repeated params, nested fields).
+      **AC:** V2 trace search via GET and experiments/get round-trip correctly.
+      **VER:** unit tests + suite.
+
+### Phase 4 — Tracing HTTP API
+
+- [ ] **T4.1 V3 trace endpoints** (§3.6).
+      **AC:** trace sections of `test_rest_tracking.py` pass (start/search/delete/tags/
+      link/correlation/metrics).
+      **VER:** Phase 12 runner `-k trace`.
+- [ ] **T4.2 V2 trace endpoints** (§3.7) as adapters.
+      **AC:** UI contains-traces check works; V2 tests pass.
+      **VER:** Phase 12 runner + UI smoke.
+- [ ] **T4.3 OTLP `/v1/traces`** (§3.8): protobuf + JSON, gzip, headers, all-or-nothing,
+      200/400/422/501.
+      **AC:** `test_rest_store_logs_spans_via_otel_endpoint` passes; Rust + Python OTel
+      exporters both ingest.
+      **VER:** Phase 12 runner + `rust/tests/otlp_ingest.rs`.
+- [ ] **T4.4 Assessments endpoints** (§3.9).
+      **AC:** `test_assessments_end_to_end` passes.
+      **VER:** Phase 12 runner `-k assessment`.
+- [ ] **T4.5 get-trace-artifact** (§3.10): DB spans + ARTIFACT_REPO fallback + attachments
+      with path validation.
+      **AC:** `test_get_trace_artifact_handler` passes; trace explorer renders both
+      storage locations.
+      **VER:** Phase 12 runner + UI smoke.
+
+### Phase 5 — Artifacts
+
+- [ ] **T5.1 `/get-artifact` streaming download** with artifact-URI resolution and path
+      safety.
+      **AC:** artifact browser works; traversal attempts → 400.
+      **VER:** artifact suite sections + explicit traversal tests.
+- [ ] **T5.2 `mlflow-artifacts` proxy** (§3.11) over `object_store`: full surface,
+      streamed both directions (Python's WSGI bridge buffers whole bodies —
+      `fastapi_app.py:41` — Rust must not).
+      **AC:** `tests/tracking/test_mlflow_artifacts.py` passes; 5 GB upload keeps Rust
+      RSS growth < 100 MB.
+      **VER:** Phase 12 runner + memory probe.
+- [ ] **T5.3 ajax `upload-artifact` + logged-model artifact routes.**
+      **AC/VER:** UI artifact upload/download smoke + suite sections.
+- [ ] **T5.4 `/model-versions/get-artifact`** (§3.11): registry-store URI resolution
+      (`storage_location or source`), proxied-artifact handling, workspace prefixes.
+      **AC:** model artifact downloads work for `models:/`-sourced and directly-sourced
+      versions.
+      **VER:** registry artifact tests + UI smoke on model page.
+
+### Phase 6 — GraphQL
+
+- [ ] **T6.1 `/graphql` endpoint** implementing all §3.12 operations against the Rust
+      stores (registry included); replicate no-batching guard and error shapes.
+      **AC:** run detail page + chart polling work against Rust; GraphQL depth tests in
+      `test_rest_tracking.py` pass; `mlflowSearchModelVersions` returns parity results.
+      **VER:** Phase 12 runner `-k graphql` + UI smoke of run page.
+- [ ] **T6.2 GraphQL schema parity check**: generate from the same
+      `autogenerated_schema.gql`; add schema-diff test (D8).
+      **AC:** schema diff empty for implemented fields.
+      **VER:** CI schema-diff job.
+
+### Phase 7 — Model Registry
+
+- [ ] **T7.1 Registry schema + store core**: 5 tables with workspace-leading composite
+      PKs; registered model CRUD incl. rename (cascades via FK onupdate), tag CRUD,
+      alias CRUD; `storage_location` handling.
+      **AC:** behaviors match `tests/store/model_registry/test_sqlalchemy_store.py`
+      (mirrored over HTTP in Phase 12).
+      **VER:** Rust unit tests + Phase 12 registry sections.
+- [ ] **T7.2 Model version lifecycle**: create with `models:/`/`runs:/` source resolution
+      + `MAX(version)+1` retry loop; update; **transition-stage** with canonical stage
+      names + archive_existing_versions; **soft-delete** with redaction + alias removal;
+      get-download-uri.
+      **AC:** stage-transition and soft-delete edge cases from the store suite pass;
+      copy-model-version flow (client-side) works end-to-end.
+      **VER:** Phase 12 suite + an explicit copy_model_version client test.
+- [ ] **T7.3 Registry search**: `search_registered_models` / `search_model_versions` with
+      the DSL (§4.8), AND-of-tags HAVING-count subquery, **prompt-exclusion anti-join**
+      + `_is_querying_prompt` bypass, order_by defaults and tiebreakers, offset-token
+      contract (`limit(N+1)`), latest-versions via ROW_NUMBER window batch.
+      **AC:** search parity incl. prompt in/exclusion and the "`is_prompt != 'true'`
+      matches untagged rows" semantics; `get-latest-versions` returns READY-only per
+      stage.
+      **VER:** Phase 12 suite + differential harness with a corpus mixing models and
+      prompts.
+- [ ] **T7.4 Registry REST endpoints** (§3.14, 21 endpoints) incl. the method-overloaded
+      alias route and GET+POST get-latest-versions; store-side max_results limits
+      (RM 100/1000, MV 10000/200000).
+      **AC:** registry sections of `test_rest_tracking.py` (model version source
+      validation tests, lines 1597-2018) pass against Rust.
+      **VER:** Phase 12 runner `-k "registered_model or model_version"`.
+- [ ] **T7.5 Prompts-on-registry validation**: the Prompts UI (list/create/version/alias
+      prompt) works against the Rust registry unchanged.
+      **AC:** UI smoke: prompts pages function; models pages never show prompts.
+      **VER:** T11.6 checklist items.
+
+### Phase 8 — Webhooks
+
+- [ ] **T8.1 Webhook storage**: `webhooks` + `webhook_events` tables, Fernet-encrypted
+      secrets (`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`), soft delete, workspace scoping.
+      **AC:** secrets written by Python decrypt in Rust and vice versa.
+      **VER:** cross-language crypto test in `rust/tests/`.
+- [ ] **T8.2 Webhook REST endpoints** (§3.15, 6 endpoints incl. `/test` with
+      `WebhookTestResult`).
+      **AC:** `tests/store/model_registry/test_rest_store_webhooks.py` payload parity;
+      `tests/tracking/test_client_webhooks.py` passes over HTTP.
+      **VER:** Phase 12 runner `-k webhook`.
+- [ ] **T8.3 Delivery engine**: async task pool, HMAC `v1` signing + `X-MLflow-*`
+      headers, HTTP retries on [429,5xx] with backoff, **SSRF guard** (public-IP
+      validation at connect, no proxy env), TTL cache by event, fire-and-forget error
+      logging.
+      **AC:** a local receiver verifies signatures Python receivers accept; SSRF suite
+      (RFC1918/link-local/redirect tricks) blocked identically to Python.
+      **VER:** `rust/tests/webhook_delivery.rs` incl. SSRF matrix.
+- [ ] **T8.4 Event triggers** wired into registry mutations (RM created; MV created; MV
+      tag set/deleted; MV alias set/deleted; PROMPT_* mirrors by is_prompt
+      classification).
+      **AC:** trigger matrix test: each mutation fires exactly the events Python fires
+      (entity/action pairs from `webhooks.proto` enums).
+      **VER:** differential trigger-capture test with a recording receiver.
+
+### Phase 9 — Auth & RBAC
+
+- [ ] **T9.1 Auth DB layer**: 4 RBAC tables, `alembic_version_auth` head check
+      (`f1a2b3c4d5e6`), werkzeug-compatible hash verify/generate, read-replica routing,
+      admin bootstrap (`create_admin_user` + default-password warning).
+      **AC:** Rust authenticates users created by Python and vice versa on a shared
+      `basic_auth.db`.
+      **VER:** cross-language auth-DB test.
+- [ ] **T9.2 Users API** (§3.16): all 8 endpoints incl. self-service password rules and
+      cannot-delete-self; hand-rolled JSON shapes.
+      **AC:** `tests/server/auth/test_client.py` user sections pass against Rust.
+      **VER:** Phase 12 auth runner.
+- [ ] **T9.3 Roles + permissions APIs**: role CRUD, role-permission CRUD, assignments,
+      per-user grant/revoke/get via **synthetic `__user_<id>__` roles** (SAVEPOINT-safe
+      get-or-create, `__user_` prefix rejection), scorer pattern key encoding.
+      **AC:** `test_client_rbac.py` + `test_sqlalchemy_store_rbac.py` behaviors pass over
+      HTTP.
+      **VER:** Phase 12 auth runner.
+- [ ] **T9.4 Permission resolution + enforcement middleware**: tower layer implementing
+      authenticate → admin bypass → validator dispatch (exact-path map + regex matchers
+      for trace/logged-model/webhook paths + artifact-proxy path inspection with
+      experiment-id extraction incl. `workspaces/<ws>/` prefixes); fail-closed on unknown
+      `/mlflow/traces/` paths; permission matrix per §3.16 (runs/logged-models inherit
+      experiment; MV create requires model UPDATE + source READ; webhooks admin-only;
+      OTLP requires experiment UPDATE from header).
+      **AC:** `tests/server/auth/test_auth.py` + `test_permissions.py` pass against Rust
+      (server launched with `MLFLOW_AUTH_CONFIG_PATH`).
+      **VER:** Phase 12 auth runner; fail-closed paths covered by explicit tests.
+- [ ] **T9.5 After-request hooks**: creator-MANAGE grants on create; search/list response
+      filtering for experiments/registered-models/model-versions/logged-models — prefer
+      the query-integrated form (Q10) with a flag-gated fallback to Python-identical
+      refetch behavior; grant cascade on delete/rename; workspace role seed/cleanup.
+      **AC:** a non-admin user sees exactly the same filtered search results from Rust
+      and Python on a seeded permission fixture, including page-fill behavior.
+      **VER:** differential test with multi-user fixtures.
+- [ ] **T9.6 GraphQL auth middleware**: per-field READ checks, experiment-id narrowing
+      for searchRuns, post-filter for searchModelVersions, admin bypass,
+      `MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH` toggle.
+      **AC:** GraphQL requests by non-admin users match Python results/errors.
+      **VER:** auth GraphQL tests in Phase 12.
+- [ ] **T9.7 Signup UI + CSRF**: `/signup` server-rendered form (port template), CSRF
+      token validation on `create-user-ui`, flash-alert redirect behavior.
+      **AC:** browser signup flow works; CSRF-less POST rejected.
+      **VER:** HTTP tests + manual browser check.
+- [ ] **T9.8 Auth config + caches**: `basic_auth.ini` parsing (all fields incl.
+      `default_permission`, `grant_default_workspace_access`, cache TTLs),
+      `MLFLOW_AUTH_CONFIG_PATH`, optional credential cache (HMAC-keyed, default off),
+      resource→workspace TTL cache.
+      **AC:** same config file drives both servers; defaults identical.
+      **VER:** config-parity unit tests.
+- [ ] **T9.9 Admin/account UI validation**: React admin console (`src/admin/`) and
+      account page (`src/account/`) fully functional against Rust (user CRUD, role CRUD,
+      grants via EditAccessModal, current-user permissions list, `is_basic_auth` logout
+      behavior).
+      **AC:** UI smoke checklist items green with auth enabled.
+      **VER:** T11.6 with auth-enabled deployment.
+
+### Phase 10 — Workspaces
+
+- [ ] **T10.1 Workspace store + table**: `workspaces` table, name validation (k8s regex,
+      reserved names, `default` undeletable), delete modes RESTRICT/CASCADE/SET_DEFAULT
+      walking all workspace-root models, artifact-root + trace-archival config
+      resolution with TTL caches.
+      **AC:** parity with `tests/store/workspace/test_sqlalchemy_store.py` +
+      `test_workspace_validator.py`.
+      **VER:** Phase 12 workspace runner.
+- [ ] **T10.2 Workspace REST endpoints** (§3.17) incl. 201/204 status codes, `?mode=`,
+      503-when-disabled.
+      **AC:** `tests/server/test_workspace_endpoints.py` passes against Rust.
+      **VER:** Phase 12 workspace runner.
+- [ ] **T10.3 Request workspace context + scoping**: `X-MLFLOW-WORKSPACE` header
+      resolution (skip for server-info), per-request context threaded through tracking
+      **and** registry queries (`WHERE workspace = ?` on every scoped model), artifact
+      location prefixing `workspaces/<name>/`, forbid explicit artifact_location on
+      experiment create when enabled, single-tenant startup guard.
+      **AC:** `test_workspace_middleware.py` + workspace-store variants
+      (`tests/store/tracking/sqlalchemy_store/test_sqlalchemy_workspace_store.py`,
+      `tests/store/model_registry/test_sqlalchemy_workspace_store.py`) pass over HTTP;
+      cross-workspace leakage tests all negative.
+      **VER:** Phase 12 workspace runner + explicit isolation tests.
+- [ ] **T10.4 Workspace-aware auth integration**: role workspace partitioning, workspace
+      USE/MANAGE grants, default-workspace inheritance, `NO_PERMISSIONS` boundary deny,
+      workspace admin capabilities, `filter_list_workspaces`.
+      **AC:** `test_auth_workspace.py` + `test_client_workspace.py` pass against Rust.
+      **VER:** Phase 12 auth+workspace runner; UI workspace selector smoke.
+
+### Phase 11 — Server config, nginx, deployment
+
+- [ ] **T11.1 CLI/env parity**: `--backend-store-uri`, `--read-replica-backend-store-uri`,
+      `--registry-store-uri`, `--default-artifact-root`, `--serve-artifacts`,
+      `--artifacts-destination`, `--artifacts-only`, `--host/--port/--workers` (threads),
+      `--static-prefix`, `--allowed-hosts`, `--cors-allowed-origins`,
+      `--x-frame-options`, `--expose-prometheus`, `--app-name basic-auth` equivalent
+      (auth-enabled flag + `MLFLOW_AUTH_CONFIG_PATH`), `--workspace-store-uri`,
+      `--enable-workspaces/--disable-workspaces`, `MLFLOW_SQLALCHEMYSTORE_POOL_SIZE`
+      family mapped to the Rust pool.
+      **AC:** documented parity matrix; unsupported flags fail loudly.
+      **VER:** CLI integration tests.
+- [ ] **T11.2 Security middleware parity**: host-header allowlist, CORS, X-Frame-Options
+      (mirror `mlflow/server/security.py`).
+      **AC:** identical responses to disallowed Host/CORS preflights.
+      **VER:** table-driven HTTP tests vs both servers.
+- [ ] **T11.3 nginx reference config** implementing §2.2 ("default → Rust, genai →
+      Python"), `proxy_buffering off` for Python SSE/streaming locations,
+      client_max_body_size for artifact uploads; `rust/deploy/nginx.conf` +
+      docker-compose (nginx + rust + python + postgres).
+      **AC:** `docker compose up` yields working MLflow at `:80`; UI works end to end;
+      genai requests observably hit Python, everything else Rust (access logs).
+      **VER:** `rust/deploy/smoke.sh` (SDK: experiments/runs/metrics/traces/models/
+      webhooks/users; asserts backend attribution via distinctive server headers).
+- [ ] **T11.4 Frontend split**: nginx serves `mlflow/server/js/build/`; document
+      `yarn build`, cache headers (28-day hashed assets, no-cache `index.html`).
+      **AC:** UI fully loads with the Python container stopped, except genai pages.
+      **VER:** compose smoke with Python paused.
+- [ ] **T11.5 `server-info` in Rust** (D5): serve
+      `/(api|ajax-api)/3.0/mlflow/server-info` with flags consistent with the deployment
+      (workspaces on/off, auth on/off); verify `useServerInfo` consumers behave.
+      **AC:** UI boots with no console errors; feature gates render correctly.
+      **VER:** browser console check in UI smoke.
+- [ ] **T11.6 UI smoke checklist** (manual or playwright): experiment list, runs table
+      (Load more), run detail (GraphQL), charts (bulk-interval), compare runs, metric
+      page, artifact browser, traces tab (list, span tree, attachments, assessments),
+      logged models tab, datasets dropdown, **model registry pages (models list, version
+      detail, stages, aliases, model artifact download), prompts pages, admin console
+      (users/roles/grants), account page, workspace selector**.
+      **AC:** all render against Rust; network tab shows Python only for genai.
+      **VER:** recorded checklist in PR; optional Playwright under `rust/e2e/`.
+
+### Phase 12 — Compliance harness & CI
+
+- [ ] **T12.1 Server-launch integration**: extend
+      `tests/tracking/integration_test_utils.py` `_init_server` with
+      `server_type="rust"`; parametrize `mlflow_client` fixture in
+      `test_rest_tracking.py`; point `tests/server/auth/auth_test_utils.py` launcher at
+      the Rust binary (auth config env).
+      **AC:** `pytest tests/tracking/test_rest_tracking.py` and `tests/server/auth/`
+      runnable against Rust via a switch.
+      **VER:** local runs; failures triaged into a parity backlog issue.
+- [ ] **T12.2 `MLFLOW_RUST_STORE_TESTING` flag** mirroring the Go flag; every use links a
+      justification.
+      **AC:** flag exists; zero unexplained uses.
+      **VER:** grep + review.
+- [ ] **T12.3 Client-suite conformance**: `tests/tracking/test_tracking.py`, client
+      tests, and `tests/store/model_registry/test_rest_store*.py`-derived HTTP checks
+      with `MLFLOW_TRACKING_URI=http://rust`; DB reset between tests.
+      **AC:** suites green (modulo flag-gated diffs).
+      **VER:** CI logs.
+- [ ] **T12.4 Differential replay harness** (`rust/compliance/`): request corpus covering
+      every §3 endpoint (success + error + pagination walks + multi-user auth scenarios +
+      workspace headers), replayed against Python and Rust, normalized diff; token
+      fields checked for opacity only.
+      **AC:** zero non-allowlisted diffs on sqlite + postgres.
+      **VER:** CI artifact.
+- [ ] **T12.5 CI matrix** modeled on the `database` job (`master.yml`): `mlflow-rust`
+      service in `tests/db/compose.yml`, runs tracking + registry + auth + workspace
+      compliance subsets on postgres/mysql/sqlite (+ mssql per T0.3); tracing job modeled
+      on `tracing.yml`.
+      **AC:** required-check workflow green on the feature branch.
+      **VER:** GitHub Actions.
+- [ ] **T12.6 Concurrency/chaos**: parallel log-batch + start_trace + log_spans +
+      registry version creation + searches on postgres; no client-visible 5xx in 10k
+      mixed ops; MV `MAX+1` race resolves via retry like Python.
+      **AC:** 0 unexpected errors; version numbers dense and unique.
+      **VER:** `rust/tests/chaos.rs` nightly.
+
+### Phase 13 — Schema evolution for 100 GB scale (after parity is proven)
+
+- [ ] **T13.1 Index migrations** (alembic): `runs(experiment_id, lifecycle_stage,
+      start_time)`, `logged_models(experiment_id)`, `inputs(source_id)`,
+      `model_versions(run_id)`, `model_versions(current_stage)`; fix the two
+      empty `Index()` declarations (tracking models.py:832,863).
+      **AC:** upgrade+downgrade clean on all dialects (`tests/db/check_migration.sh`);
+      EXPLAIN shows index usage; no Python-suite regression.
+      **VER:** migration CI + query plans on a seeded 10M-run dataset.
+- [ ] **T13.2 `span_attributes` extraction table** (Q7): indexed key/value maintained on
+      span ingest; span-content LIKE filters rewritten; shared alembic migration with a
+      Python-compatible write path or capability-gated Rust-only (D7).
+      **AC:** span-attribute filter on 50M spans < 1s on postgres; results identical to
+      LIKE baseline on the corpus.
+      **VER:** benchmark report + differential search results.
+- [ ] **T13.3 Benchmark suite + seeded dataset generator** (`rust/bench/`): ~100 GB-scale
+      synthetic DB (millions of runs, dense metrics, 10M+ traces with spans, 100k+ model
+      versions); scenarios: runs/search with metric filters + ordering, deep pagination,
+      bulk-interval history, traces/search with span filters, OTLP ingest throughput,
+      registry search with prompt anti-join.
+      **AC:** documented p50/p95 Python vs Rust; targets: p95 run-search < 500 ms,
+      deep-page O(1), OTLP ingest ≥ 5x Python.
+      **VER:** `rust/bench/RESULTS.md` with hardware notes.
+- [ ] **T13.4 Deeper restructures** informed by T13.3 (metric partitioning, narrower
+      metrics PK with dedup hash, trace hot/cold split, auth grant semi-join
+      materialization). Out of scope until benchmarks prove need.
+      **AC:** written proposal per change with migration + rollback story.
+      **VER:** design doc reviewed.
+
+### Phase 14 — Memory & production validation
+
+- [ ] **T14.1 Memory baseline**: Python server RSS (4 uvicorn workers, idle + load) vs
+      Rust on identical workloads.
+      **AC:** report with Rust idle/loaded RSS; target ≥ 5x total reduction.
+      **VER:** `rust/bench/memory.md` (cgroup memory.current sampling).
+- [ ] **T14.2 Soak test**: 24 h mixed workload (ingest + search + UI polling + webhook
+      deliveries) at realistic rates on postgres; RSS growth, pool health, error rates.
+      **AC:** no monotonic RSS growth; error rate < 0.01%; no webhook-delivery task
+      leaks.
+      **VER:** soak dashboard/logs in release notes.
+- [ ] **T14.3 Operational docs**: deployment guide (compose + k8s), migration runbook
+      (Python-only → split; auth DB sharing; secret/key management for Fernet + CSRF),
+      rollback procedure (nginx flips routes back to Python — zero data migration, both
+      DBs shared).
+      **AC:** a fresh operator deploys the split from docs alone.
+      **VER:** doc walkthrough by someone not on the project.
+
+---
+
+## 8. Verification quick-reference (how to confirm the whole thing works)
+
+1. **Route parity**: `rust/tools/route_parity.py` — Python `get_endpoints()` +
+   auth-route dump equals the Rust route table (modulo documented genai routes).
+2. **Wire parity**: JSON golden tests (T1.3) + differential replay harness (T12.4) with
+   zero non-allowlisted diffs on sqlite and postgres, including auth'd multi-user and
+   workspace-header scenarios.
+3. **Behavioral parity**: `tests/tracking/test_rest_tracking.py`, client suites,
+   registry REST checks, `tests/server/auth/`, and workspace endpoint/middleware suites
+   green against Rust on the DB matrix (T12.1-T12.5).
+4. **UI parity**: T11.6 smoke — tracking, tracing, registry, prompts, admin/account, and
+   workspace-selector flows all green through nginx with the frontend served statically;
+   genai features still functional via Python.
+5. **Interop**: users/webhook secrets created by either server work on the other
+   (shared auth DB, Fernet, werkzeug hashes); alembic head pins enforced on both DBs.
+6. **Scale**: T13.3 benchmarks meet latency targets; EXPLAIN plans show index usage on
+   hot paths.
+7. **Memory**: T14.1/T14.2 reports demonstrate reduction and stability.
+
+Local dev loop once Phase 12 lands:
+
+```bash
+# 1. build rust server
+cargo build --release --manifest-path rust/Cargo.toml
+
+# 2. run compliance suites against it (sqlite)
+MLFLOW_RUST_SERVER_BIN=rust/target/release/mlflow-server \
+  uv run pytest tests/tracking/test_rest_tracking.py --server-impl rust
+MLFLOW_RUST_SERVER_BIN=rust/target/release/mlflow-server \
+  uv run pytest tests/server/auth --server-impl rust
+
+# 3. full stack smoke
+docker compose -f rust/deploy/compose.yaml up
+bash rust/deploy/smoke.sh
+```
+
+---
+
+## 9. Open decisions & risks
+
+| ID | Decision/Risk | Notes | Status |
+|---|---|---|---|
+| D1 | **Auth enforcement split**: Rust enforces natively for its routes; Python's auth app keeps covering genai routes; both share the auth DB. Requires werkzeug-hash + synthetic-role + resolution-chain parity (§3.16). Custom `authorization_function` plugins: Rust v1 supports built-in basic-auth only (Python already restricts custom functions on FastAPI routes too, `auth/__init__.py:4521`). | **decided by scope change (2026-07-13)** — auth is in Rust scope | decided |
+| D2 | **MSSQL**: sqlx has no MSSQL driver; needs `tiberius` adapter. | v1 = sqlite/postgres/mysql, mssql fast-follow. | **decided (2026-07-13)** |
+| D3 | **Pagination tokens**: keyset tokens change token contents (still opaque). nginx routes each endpoint to exactly one backend, so mixed-backend paging cannot occur. | Keyset tokens approved; verify no test decodes tokens; flag-gate if any do. | **decided (2026-07-13)** |
+| D4 | **Pretty-printed JSON (indent=2)**: replicate for simpler golden/differential testing. | Replicate. | **decided (2026-07-13)** |
+| D5 | **`server-info`**: Rust owns it (T11.5) and must report feature flags matching the deployment (auth, workspaces, and genai features that live on Python). | Audit `useServerInfo` consumers for flags that gate genai UI — those must still reflect Python availability. | open |
+| D6 | **Trace archival (`ARCHIVE_REPO`)**: not in v1; Rust returns clear NOT_IMPLEMENTED for archived traces. Deployments using archival keep tracing on Python until supported. | | open |
+| D7 | **`span_attributes` table** (T13.2): shared alembic migration + Python write path vs Rust-only capability. | Shared migration safer for mixed deployments. | open |
+| D8 | **Version skew**: Python and Rust evolve independently. | Route-parity test (T1.2) + dual schema-head pins (T2.1/T9.1) + GraphQL schema diff (T6.2) turn skew into CI failures. Pin supported MLflow version per Rust release. | accepted |
+| D9 | **Custom auth plugins** (`authorization_function`) are Python callables — not portable. | Rust v1: built-in basic-auth; document JWT/OIDC as nginx-level or future Rust plugin API. Deployments with custom Python auth functions can't split auth'd routes yet. | decided (v1 limitation) |
+| D10 | **Jobs API stays Python**: `/ajax-api/3.0/jobs/*` + Huey runner exist to execute genai workloads (scorer invocations, evaluations). | Revisit only if a non-genai consumer appears. | decided |
+| D11 | **Webhook delivery durability**: Python is fire-and-forget from an in-process pool — deliveries die with the process. Rust replicates this for parity; a durable outbox table is a possible improvement but changes semantics. | Keep parity in v1; log a proposal for later. | open |
+| D12 | **Key management**: `MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY` (Fernet) must be identical on both servers; Rust needs its own signup-CSRF secret; `MLFLOW_FLASK_SERVER_SECRET_KEY` remains Python-side. Document in T14.3 runbook. | | open |
+| D13 | **Werkzeug hash algorithm** depends on the pinned werkzeug version (pbkdf2:sha256 vs scrypt). | Spike result: werkzeug 3.1.8 defaults to `scrypt:32768:8:1` (salt = 16 ASCII chars, hex digest). Rust verifies scrypt + pbkdf2:sha256 (param-driven from the stored hash) and generates 3.1.8-default scrypt. Other methods (pbkdf2:sha1/sha512, legacy) rejected loudly — add if seen in real DBs. | **decided (2026-07-13)** |
+| R1 | **Behavioral corners not covered by tests** (exact error strings, odd query-arg parsing, after-request filter edge cases). | Differential replay harness (T12.4) is the safety net; grow the corpus on every wild diff. | mitigated |
+| R2 | **`spans.content` size** (LONGTEXT) — heavy row fetches for large traces. | Lazy content reads (T2.11) + Phase 13 payload evaluation. | mitigated |
+| R3 | **Auth after-request filtering is subtle** (refetch-to-fill-page, workspace deny semantics, prompt-vs-model classification per row). | Dedicated multi-user differential fixtures (T9.5); keep a Python-identical fallback mode behind a flag. | mitigated |
+
+---
+
+## 10. Research appendix (where the facts came from)
+
+Tracking/tracing:
+- Endpoint generation & handler map: `mlflow/server/handlers.py:6723-6807, 7663`;
+  proto options in `mlflow/protos/service.proto`.
+- JSON codec quirks: `mlflow/utils/proto_json_utils.py:32-168`. Error model:
+  `mlflow/exceptions.py:30-140`.
+- Search DSLs: `mlflow/utils/search_utils.py` (`SearchUtils:172`,
+  `SearchExperimentsUtils:1053`, `SearchModelUtils:1267`,
+  `SearchModelVersionUtils:1452`, `SearchTraceUtils:1688`,
+  `SearchLoggedModelsUtils:2504`).
+- Store internals: `mlflow/store/tracking/sqlalchemy_store.py` (search_runs L2006-2096,
+  latest_metrics L1366-1483, filter/orderby builders L9054-9220, search_traces
+  L3755-3839, log_spans L4971-5362, bulk upsert L9806). Schema:
+  `mlflow/store/tracking/dbmodels/models.py`; migrations `mlflow/store/db_migrations/`
+  (head `b7e4c1a90f23`); verification `mlflow/store/db/utils.py:109-134`.
+- Server runtime: `mlflow/server/__init__.py`, `mlflow/server/fastapi_app.py`,
+  `mlflow/server/otel_api.py`, `mlflow/cli/__init__.py:367-538`.
+
+Registry/webhooks:
+- Proto `mlflow/protos/model_registry.proto:13-483`, `mlflow/protos/webhooks.proto:14-116`;
+  handlers `mlflow/server/handlers.py:2638-3462, 7705-7733`.
+- Store `mlflow/store/model_registry/sqlalchemy_store.py` (search filters 589-832, prompt
+  anti-join 776, latest versions 297, create MV 981-1096, transition 1192, soft delete
+  1244); models `mlflow/store/model_registry/dbmodels/models.py`; constants
+  `mlflow/store/model_registry/__init__.py`.
+- Prompts-on-registry: `mlflow/store/model_registry/abstract_store.py:434-1160`,
+  `mlflow/prompt/constants.py`.
+- Webhook delivery: `mlflow/webhooks/delivery.py` (HMAC 121, retries 80, pool 51),
+  `mlflow/webhooks/ssrf.py`, `mlflow/webhooks/constants.py`.
+
+Auth/workspaces:
+- `mlflow/server/auth/__init__.py` (validators map 2480-2617, before_request 2912,
+  after_request 3594-3650, resolution chain 556-1022, GraphQL middleware 4139, FastAPI
+  middleware 4287-4521, create_app 4610); `auth/routes.py`, `auth/permissions.py`,
+  `auth/entities.py`, `auth/config.py`, `auth/basic_auth.ini`;
+  store `auth/sqlalchemy_store.py` (synthetic roles 259-543, resolver 2010);
+  DB `auth/db/models.py`, migrations `auth/db/migrations/` (head `f1a2b3c4d5e6`,
+  version table `alembic_version_auth`).
+- Workspaces: proto `service.proto:1051-1132`; handlers `handlers.py:1351-1496`;
+  `mlflow/store/workspace/` (abstract/sqlalchemy/rest stores);
+  `mlflow/server/workspace_helpers.py`; `mlflow/utils/workspace_utils.py`
+  (`X-MLFLOW-WORKSPACE`), `mlflow/utils/workspace_context.py`;
+  workspace-aware stores `mlflow/store/tracking/sqlalchemy_workspace_store.py:62`,
+  `mlflow/store/model_registry/sqlalchemy_workspace_store.py`.
+
+Frontend:
+- `mlflow/server/js/src/experiment-tracking/sdk/MlflowService.ts`;
+  runs table `.../experiment-page/hooks/useExperimentRuns.tsx`
+  (`RUNS_SEARCH_MAX_RESULTS=100`); charts `.../useSampledMetricHistory*.tsx` (320 pts);
+  trace source dispatch `experiment-tracking/utils/TraceUtils.ts`;
+  GraphQL `graphql/client.ts` + four hook files; registry `model-registry/services.ts`;
+  admin/account `src/admin/api.ts`, `src/account/api.ts`;
+  workspaces `src/workspaces/utils/WorkspaceUtils.ts`;
+  relative URLs `common/utils/FetchUtils.ts:60`; asset base `package.json`
+  (`"homepage": "static-files"`).
+
+Compliance infra:
+- `tests/tracking/integration_test_utils.py`, `tests/tracking/test_rest_tracking.py`,
+  `tests/tracking/test_mlflow_artifacts.py`, `tests/store/tracking/test_rest_store.py`,
+  `tests/store/model_registry/` (sqlalchemy/rest/webhooks/workspace suites),
+  `tests/server/auth/auth_test_utils.py` + suites, `tests/server/test_workspace_*.py`,
+  `tests/store/workspace/`, `tests/db/compose.yml`, `.github/workflows/master.yml`
+  (database job), `mlflow/environment_variables.py:1074`,
+  `mlflow/tracking/_tracking_service/utils.py:252`.

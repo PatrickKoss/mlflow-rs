@@ -1,0 +1,23 @@
+{
+  "name": "my-model",
+  "version": "3",
+  "creation_timestamp": 1700000000000,
+  "last_updated_timestamp": 1700000009000,
+  "user_id": "bob",
+  "current_stage": "Production",
+  "description": "v3",
+  "source": "models:/my-model/2",
+  "run_id": "run-abc-123",
+  "status": "READY",
+  "tags": [
+    {
+      "key": "quality",
+      "value": "high"
+    }
+  ],
+  "aliases": [
+    "champion",
+    "prod"
+  ],
+  "model_id": "m-1"
+}

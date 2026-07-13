@@ -1,0 +1,7 @@
+{
+  "body": "{\"error_code\": \"PERMISSION_DENIED\", \"message\": \"Permission denied\", \"sqlstate\": \"KAM00\", \"error_class\": \"PERMISSION_DENIED\"}",
+  "content_type": "application/json",
+  "headers": {},
+  "name": "permission_denied_mlflow_exception",
+  "status": 403
+}

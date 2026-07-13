@@ -1,0 +1,91 @@
+//! The tracking [`TrackingStore`]: experiments, runs, params, tags, and
+//! metrics operations (plan T2.4 + T2.5), mirroring
+//! `mlflow/store/tracking/sqlalchemy_store.py` semantics exactly.
+//!
+//! ## Workspace scoping (CRITICAL, plan §3.17)
+//!
+//! Every method takes an explicit `workspace: &str`. In single-tenant mode the
+//! caller passes `"default"`; when workspaces are enabled the value comes from
+//! the `X-MLFLOW-WORKSPACE` request header. Scoping is anchored on the
+//! `experiments.workspace` column (mirrors `WorkspaceAwareSqlAlchemyStore`):
+//!
+//! * experiment queries filter `experiments.workspace = ?` directly;
+//! * run / param / tag / metric queries reach a run only if its experiment is in
+//!   the workspace (a semi-join `runs.experiment_id IN (SELECT experiment_id
+//!   FROM experiments WHERE workspace = ?)`), exactly like the Python mixin's
+//!   `_get_query(SqlRun)` join.
+//!
+//! This means a run lookup in the wrong workspace yields the same
+//! `RESOURCE_DOES_NOT_EXIST` "Run with id=... not found" as a genuinely missing
+//! run — matching `WorkspaceAwareSqlAlchemyStore._validate_run_accessible`.
+//!
+//! ## Entity model
+//!
+//! The store returns lightweight owned entities defined in [`entities`] rather
+//! than the proto types — the HTTP layer (Phase 3) maps them to protos. This
+//! keeps the store crate free of a proto dependency and mirrors MLflow's own
+//! `Experiment` / `Run` / `Metric` entities.
+
+mod datasets;
+mod dbutil;
+mod entities;
+mod experiments;
+mod metrics;
+mod metrics_bulk;
+mod names;
+mod names_data;
+mod params_tags;
+mod runs;
+mod uri_util;
+mod validation;
+
+pub use datasets::{DatasetInputSpec, MAX_DATASET_SUMMARIES_RESULTS};
+pub use entities::{
+    Dataset, DatasetInput, DatasetSummary, Experiment, ExperimentTag, InputTag, LifecycleStage,
+    LoggedModelInput, LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo,
+    RunInputs, RunOutputs, RunStatus, RunTag,
+};
+pub use experiments::ViewType;
+pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
+pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
+
+use crate::db::Db;
+
+/// The reserved tag key that mirrors a run's name (`mlflow.runName`).
+pub(crate) const MLFLOW_RUN_NAME: &str = "mlflow.runName";
+
+/// Subdirectory appended to a run's artifact URI (`ARTIFACTS_FOLDER_NAME`).
+pub(crate) const ARTIFACTS_FOLDER_NAME: &str = "artifacts";
+
+/// The tracking store: experiments, runs, params, tags, and metrics.
+///
+/// Holds a [`Db`] pool and the resolved artifact-root URI (the server's
+/// `--default-artifact-root`, already run through `resolve_uri_if_local` by the
+/// caller — the store treats it as an opaque, already-resolved URI, exactly as
+/// `SqlAlchemyStore.artifact_root_uri` is).
+#[derive(Debug, Clone)]
+pub struct TrackingStore {
+    db: Db,
+    artifact_root_uri: String,
+}
+
+impl TrackingStore {
+    /// Create a store over an already-connected/verified [`Db`] and a resolved
+    /// artifact-root URI.
+    pub fn new(db: Db, artifact_root_uri: impl Into<String>) -> Self {
+        Self {
+            db,
+            artifact_root_uri: artifact_root_uri.into(),
+        }
+    }
+
+    /// The underlying database pool.
+    pub fn db(&self) -> &Db {
+        &self.db
+    }
+
+    /// The default artifact root URI.
+    pub fn artifact_root_uri(&self) -> &str {
+        &self.artifact_root_uri
+    }
+}

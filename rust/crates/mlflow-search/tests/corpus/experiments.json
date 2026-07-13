@@ -1,0 +1,2652 @@
+{
+  "filter": [
+    {
+      "input": "",
+      "result": {
+        "ok": true,
+        "value": []
+      }
+    },
+    {
+      "input": "metric.acc >= 0.94",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.acc>=100",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.acc >= 0.94",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.m != 'tf'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.m!='tf'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.\"m\" != \"tf\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.\"legit name\" >= 0.243",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.XYZ = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.\"cat dog\" = \"pets\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.\"X-Y-Z\" = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.\"X//Y#$$@&Z\" = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.model = 'LinearRegression'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.rmse < 1 and params.model_class = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "`metric`.a >= 0.1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type '`metric`'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "`params`.model >= 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type '`params`'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.version = 'commit-hash'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "version",
+            "type": "tag",
+            "value": "commit-hash"
+          }
+        ]
+      }
+    },
+    {
+      "input": "`tags`.source_name = 'a notebook'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type '`tags`'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.\"accuracy.2.0\" > 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.`spacey name` > 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.\"p.a.r.a.m\" != \"a\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.\"t.a.g\" = \"a\"",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "t.a.g",
+            "type": "tag",
+            "value": "a"
+          }
+        ]
+      }
+    },
+    {
+      "input": "attribute.artifact_uri = '1/23/4'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'artifact_uri' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start_time >= 1234",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start_time' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run.status = 'RUNNING'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'run'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.name = 'my_dataset'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.digest = 'abc123'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.context = 'train'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.version IS NULL",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "IS NULL",
+            "key": "version",
+            "type": "tag",
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "tags.version IS NOT NULL",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "IS NOT NULL",
+            "key": "version",
+            "type": "tag",
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "params.lr IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.lr IS NOT NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.a IS NULL AND params.b = 'val'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.m = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.m = \"LR\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.m = \"L'Hosp\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "name = 'foo'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "name",
+            "type": "attribute",
+            "value": "foo"
+          }
+        ]
+      }
+    },
+    {
+      "input": "name != 'foo'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "!=",
+            "key": "name",
+            "type": "attribute",
+            "value": "foo"
+          }
+        ]
+      }
+    },
+    {
+      "input": "name LIKE '%foo%'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "LIKE",
+            "key": "name",
+            "type": "attribute",
+            "value": "%foo%"
+          }
+        ]
+      }
+    },
+    {
+      "input": "name ILIKE '%foo%'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "ILIKE",
+            "key": "name",
+            "type": "attribute",
+            "value": "%foo%"
+          }
+        ]
+      }
+    },
+    {
+      "input": "version_number > 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id = 'abc123'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ('abc123', 'def456')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id NOT IN ('abc123')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id IN ('abc123def456abc123def456abc1234f', 'bcd')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id IN ('ABCUPPER', 'lower123')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "source_path = '/tmp/x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'source_path' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "status = 'READY'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "creation_timestamp > 100",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'creation_timestamp' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "last_updated_timestamp < 999",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'last_updated_timestamp' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "creation_time > 100",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": ">",
+            "key": "creation_time",
+            "type": "attribute",
+            "value": "100"
+          }
+        ]
+      }
+    },
+    {
+      "input": "last_update_time < 999",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "<",
+            "key": "last_update_time",
+            "type": "attribute",
+            "value": "999"
+          }
+        ]
+      }
+    },
+    {
+      "input": "model_id = 'm-123'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'model_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "model_type = 'agent'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'model_type' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "source_run_id = 'r-1'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'source_run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp > 1000",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: timestamp, >, 1000",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp_ms >= 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'timestamp_ms' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "execution_time < 500",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'execution_time' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "end_time = 123",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'end_time' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attributes.status = 'OK'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'attributes'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "trace.status = 'OK'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'trace'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metadata.mlflow.sourceRun = 'r1'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metadata'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.quality > 0.8",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.correctness = 'yes'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "expectation.expected = 'foo'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'expectation'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.name = 'llm'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.type = 'LLM'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.content LIKE '%hello%'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.attributes.model = 'gpt'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "issue.id = 'i-1'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'issue'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.acc >= 0.94; metrics.rmse < 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Search filter contained multiple expression 'metric.acc >= 0.94; metrics.rmse < 1'. Provide AND-ed expression list.",
+        "ok": false
+      }
+    },
+    {
+      "input": "m.acc >= 0.94",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'm'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "acc >= 0.94",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'acc' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "p.model >= 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'p'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attri.x != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'attri'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "a.x != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'a'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "model >= 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'model' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.A > 0.1 OR params.B = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: OR",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.A > 0.1 NAND params.B = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metrics.A > 0.1 NAND",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.A > 0.1 AND (params.B = 'LR')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: (params.B = 'LR')",
+        "ok": false
+      }
+    },
+    {
+      "input": "`metrics.A > 0.1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: `",
+        "ok": false
+      }
+    },
+    {
+      "input": "param`.A > 0.1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: param, `, .",
+        "ok": false
+      }
+    },
+    {
+      "input": "`dummy.A > 0.1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: `",
+        "ok": false
+      }
+    },
+    {
+      "input": "dummy`.A > 0.1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: dummy, `, .",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.experiment_id != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'experiment_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.lifecycle_stage = 'ACTIVE'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'lifecycle_stage' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.name != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Expected a quoted string value for attributes. Got value 1",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.time != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'time' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute._status != 'RUNNING'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key '_status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status = true",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: attribute.status, =, true",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.status = 'true'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.profile = 'num_rows: 10'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.acc IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.model = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.model = '5'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.acc = 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Expected a quoted string value for tag (e.g. 'my-value'). Got value 5",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.acc != metrics.acc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "1.0 > metrics.acc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid comparison clause. Expected 'Identifier' found '1.0'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status = 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = LR",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.acc = LR",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Parameter value is either not quoted or unidentified quote types used for string value LR. Use either single or double quotes.",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = `LR`",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.'acc = LR",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: params., '",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = 'LR",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: params.acc, =, ', LR",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: '",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc = \"LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: params.acc, =, \", LR, '",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.acc = \"LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: tags.acc, =, \", LR, '",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.acc = = 'LR'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: tags.acc, =, =, 'LR'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status IS 'RUNNING'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: attribute.status, IS, 'RUNNING'",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc LR !=",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: params.acc LR, !=",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.acc LR",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: params.acc LR",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.acc !=",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metric.acc, !=",
+        "ok": false
+      }
+    },
+    {
+      "input": "acc != 1.0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'acc' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "foo is null",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'foo' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "1=1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid comparison clause. Expected 'Identifier' found '1'",
+        "ok": false
+      }
+    },
+    {
+      "input": "1==2",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid comparison clause. Expected 'Identifier' found '1'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo > 1 extra",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metrics.foo > 1 extra",
+        "ok": false
+      }
+    },
+    {
+      "input": "foo bar",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: foo bar",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo >",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metrics.foo, >",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id IN ()",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id IN ('a', 5)",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.日本 = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.日本 = 'ok'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "日本",
+            "type": "tag",
+            "value": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "input": "params.`a b` = 'v'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo = 1e10",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo = -5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo = .5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo = 0.0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m <= 1.5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo LIKE '%x%'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo IN ('a')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.p RLIKE 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.t RLIKE 'x'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "RLIKE",
+            "key": "t",
+            "type": "tag",
+            "value": "x"
+          }
+        ]
+      }
+    },
+    {
+      "input": "attribute.status RLIKE 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.`key with spaces` = 'v'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.\"double.quoted.key\" = 'v'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.`mlflow.prompt.is_prompt` = 'true'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "mlflow.prompt.is_prompt",
+            "type": "tag",
+            "value": "true"
+          }
+        ]
+      }
+    },
+    {
+      "input": "tags.`mlflow.prompt.is_prompt` != 'true'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "!=",
+            "key": "mlflow.prompt.is_prompt",
+            "type": "tag",
+            "value": "true"
+          }
+        ]
+      }
+    },
+    {
+      "input": "tags.`mlflow.prompt.is_prompt` = 'false'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "mlflow.prompt.is_prompt",
+            "type": "tag",
+            "value": "false"
+          }
+        ]
+      }
+    },
+    {
+      "input": "params.k = 'a\\'b'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = \"a\\\"b\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = ''",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = \"\"",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = 'with, comma'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = 'trailing space '",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.café = 'value'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.emoji = '🚀'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "emoji",
+            "type": "tag",
+            "value": "🚀"
+          }
+        ]
+      }
+    },
+    {
+      "input": "params.Ω = 'ω'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.\"日本 語\" = 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.k = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = -0.0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 123456789012345",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 3.14159265358979",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 1E10",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = -1.5e-3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 0x1F",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metrics.m, =, 0x1F",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = .0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m = 100.",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number = 0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number = -1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number = 1.5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp = 0",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: timestamp, =, 0",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp_ms = -999",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'timestamp_ms' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ('a')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ('a', 'b', 'c', 'd', 'e')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id NOT IN ('a', 'b')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id IN ('MixedCase', 'lower')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id NOT IN ('UPPER')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ()",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ('a' 'b')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN (1, 2)",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id IN ('a',)",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "status IN ('READY', 'FAILED')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "name IN ('a', 'b')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Only the 'run_id' attribute supports comparison with a list of quoted string values.",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.name IN ('x', 'y')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.digest IN ('d1')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.context IN ('train')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.a = 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a = 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "parameter.a = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'parameter'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "param.a = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'param'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "parameters.a = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'parameters'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tag.a = 'x'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "=",
+            "key": "a",
+            "type": "tag",
+            "value": "x"
+          }
+        ]
+      }
+    },
+    {
+      "input": "attr.a = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'attr'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attributes.status = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'attributes'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "run.status = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'run'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "dataset.name = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'dataset'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "datasets.name = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'datasets'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "trace.status = 'OK'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'trace'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metadata.foo = 'bar'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metadata'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.p > 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.p < 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.p >= 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.t > 'x'",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": ">",
+            "key": "t",
+            "type": "tag",
+            "value": "x"
+          }
+        ]
+      }
+    },
+    {
+      "input": "metrics.m LIKE 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.m ILIKE 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status > 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start_time LIKE '5'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start_time' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number LIKE '5'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q = 'yes'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q != 'no'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q > 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q > 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q < 0.5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "expectation.e = 'foo'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'expectation'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "expectation.e >= 3",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'expectation'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.name != 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.type IN ('LLM', 'CHAIN')",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.status = 'OK'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.content ILIKE '%err%'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.content = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.badattr = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "span.attributes. = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'span'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "issue.id = 'i1'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'issue'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "issue.id != 'i1'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'issue'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "issue.badattr = 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'issue'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.t IS NULL",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "IS NULL",
+            "key": "t",
+            "type": "tag",
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "tags.t IS NOT NULL",
+      "result": {
+        "ok": true,
+        "value": [
+          {
+            "comparator": "IS NOT NULL",
+            "key": "t",
+            "type": "tag",
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "input": "params.p IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.status IS NOT NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metadata.foo IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metadata'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "feedback.q IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'feedback'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp IS NULL",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: timestamp, IS, NULL",
+        "ok": false
+      }
+    },
+    {
+      "input": "  metrics.a  >  1  ",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a>1 AND params.b='x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a > 1 and params.b = 'x' and tags.c = 'y'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a > 1  AND  metrics.b < 2",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "AND metrics.a > 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a > 1 AND",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.a = = 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: metrics.a, =, =, 1",
+        "ok": false
+      }
+    },
+    {
+      "input": "= 'x'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid clause(s) in filter string: =, 'x'",
+        "ok": false
+      }
+    },
+    {
+      "input": "'x' = 'y'",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid comparison clause. Expected 'Identifier' found ''x''",
+        "ok": false
+      }
+    },
+    {
+      "input": "5 = 5",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid comparison clause. Expected 'Identifier' found '5'",
+        "ok": false
+      }
+    }
+  ],
+  "order_by": [
+    {
+      "input": "",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause ''. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo asc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo desc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.`Mean Square Error`",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.`Mean Square Error` ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.`Mean Square Error` DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start_time",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start_time' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start_time DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start_time' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.p",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'params'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.t",
+      "result": {
+        "ok": true,
+        "value": [
+          "tag",
+          "t",
+          true
+        ]
+      }
+    },
+    {
+      "input": "name",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "name",
+          true
+        ]
+      }
+    },
+    {
+      "input": "name ASC",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "name",
+          true
+        ]
+      }
+    },
+    {
+      "input": "name DESC",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "name",
+          false
+        ]
+      }
+    },
+    {
+      "input": "name aCs",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid ordering key in order_by clause 'name aCs'.",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "creation_timestamp",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'creation_timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "creation_timestamp DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'creation_timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "last_updated_timestamp DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'last_updated_timestamp' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "last_update_time",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "last_update_time",
+          true
+        ]
+      }
+    },
+    {
+      "input": "version_number",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "version_number DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "run_id",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "status",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'status' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "experiment_id",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "experiment_id",
+          true
+        ]
+      }
+    },
+    {
+      "input": "execution_time",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'execution_time' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "end_time",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'end_time' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "m.acc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'm'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "acc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'acc' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attri.x",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'attri'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "`metrics.A",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause '`metrics.A'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "`metrics.A`",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type '`metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.start",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'start' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.experiment_id",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "experiment_id",
+          true
+        ]
+      }
+    },
+    {
+      "input": "metrics.A != 1",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'metrics.A != 1'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.my_param ",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'params.my_param '. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id ACS",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid ordering key in order_by clause 'attribute.run_id ACS'.",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id decs",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid ordering key in order_by clause 'attribute.run_id decs'.",
+        "ok": false
+      }
+    },
+    {
+      "input": "last_updated_timestamp DESC blah",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'last_updated_timestamp DESC blah'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp somerandomstuff ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'timestamp somerandomstuff ASC'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp somerandomstuff",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'timestamp somerandomstuff'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp decs",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'timestamp decs'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "timestamp ACS",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'timestamp ACS'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "foo",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'foo' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "foo DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'foo' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.foo ASC DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause 'metrics.foo ASC DESC'. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.`a b c`",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "metrics.\"quoted key\" DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metrics'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_id ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "attribute.run_name DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'run_name' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "artifact_uri",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'artifact_uri' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "user_id ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'user_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "creation_time",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "creation_time",
+          true
+        ]
+      }
+    },
+    {
+      "input": "creation_time DESC",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "creation_time",
+          false
+        ]
+      }
+    },
+    {
+      "input": "last_update_time ASC",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "last_update_time",
+          true
+        ]
+      }
+    },
+    {
+      "input": "version_number ASC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'version_number' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "model_id",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'model_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "source_run_id",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'source_run_id' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "model_type DESC",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key 'model_type' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    },
+    {
+      "input": "  name  ",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause '  name  '. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "  name  DESC  ",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid order_by clause '  name  DESC  '. Could not be parsed.",
+        "ok": false
+      }
+    },
+    {
+      "input": "metric.acc",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid entity type 'metric'. Valid entity types are ('attribute', 'tag', 'tags')",
+        "ok": false
+      }
+    },
+    {
+      "input": "params.foo bar",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid ordering key in order_by clause 'params.foo bar'.",
+        "ok": false
+      }
+    },
+    {
+      "input": "tags.`x`",
+      "result": {
+        "ok": true,
+        "value": [
+          "tag",
+          "x",
+          true
+        ]
+      }
+    },
+    {
+      "input": "`name`",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "name",
+          true
+        ]
+      }
+    },
+    {
+      "input": "`name` DESC",
+      "result": {
+        "ok": true,
+        "value": [
+          "attribute",
+          "name",
+          false
+        ]
+      }
+    },
+    {
+      "input": "日本",
+      "result": {
+        "error_code": "INVALID_PARAMETER_VALUE",
+        "message": "Invalid attribute key '日本' specified. Valid keys are '{'creation_time', 'experiment_id', 'last_update_time', 'name'}'",
+        "ok": false
+      }
+    }
+  ]
+}

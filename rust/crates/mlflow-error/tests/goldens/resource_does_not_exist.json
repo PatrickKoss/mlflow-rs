@@ -1,0 +1,7 @@
+{
+  "body": "{\"error_code\": \"RESOURCE_DOES_NOT_EXIST\", \"message\": \"Run 'nonexistent-run-id' not found\", \"sqlstate\": \"KAM00\", \"error_class\": \"RESOURCE_NOT_FOUND\"}",
+  "content_type": "application/json",
+  "headers": {},
+  "name": "resource_does_not_exist",
+  "status": 404
+}
