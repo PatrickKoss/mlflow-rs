@@ -674,7 +674,13 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       quoting, placeholders, capability flags), SQLAlchemy pool env-var mapping,
       SQLAlchemy-URI parser incl. +driver suffixes, SQLite PRAGMAs via after_connect.
       Live pg/mysql tests gated behind MLFLOW_RUST_TEST_{PG,MYSQL}_URI — box stays
-      unticked until the T2.4+ suite runs on the full dialect matrix in CI.)*
+      unticked until the T2.4+ suite runs on the full dialect matrix in CI.
+      2026-07-14: all env-gated tests + both trace-write stress tests (1000
+      iters) green on live dockerized Postgres 16 + MySQL 8; 4 dialect bugs
+      found+fixed (commit 9f5e9f70d), incl. session-level ANSI_QUOTES on MySQL
+      so hand-written SQL can use standard `"quoted"` identifiers on all
+      dialects. Remaining for the tick: run the FULL sqlite-based store suites
+      (not just the gated smokes) against pg/mysql in CI.)*
 - [x] **T2.3 Search DSL parser** (`mlflow-search`): runs, experiments, logged models,
       traces grammars from `mlflow/utils/search_utils.py` incl. aliases, quoting,
       comparator validation, order_by.
@@ -710,7 +716,8 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       lexicographic (step,timestamp,value) tie-break on sanitized values. 200-writer
       stress PASSED on real Postgres 16 (migrated container); mysql variant written,
       env-gated (MLFLOW_RUST_TEST_MYSQL_URI), pending CI. Found+fixed pg INT4 widening
-      gotcha via RowLike::get_int.)*
+      gotcha via RowLike::get_int. 2026-07-14: mysql variant executed green on live
+      MySQL 8 after the ANSI_QUOTES/`"key"` dialect fixes (commit 9f5e9f70d).)*
 - [x] **T2.6 Store: search_runs**: EXISTS semi-joins (Q2/Q3), keyset pagination behind
       opaque tokens (Q1), NULLS LAST emulation parity, inline
       params/metrics/tags/inputs/outputs per page.
@@ -797,9 +804,12 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       reads; `content=""` skipped); `duration_ns` read-only generated column.
       10 sqlite tests. OTLP→row translation deferred to the HTTP layer
       (Phase 3); token-usage/cost/session/resource-tag aggregation Phase 3/12.
-      PG concurrency stress test written (`stress_trace_writes.rs`, env-gated
-      on `MLFLOW_RUST_TEST_PG_URI`) but not yet executed — no live Postgres in
-      the build env. OTLP→traces/get differential deferred to Phase 4/12.)*
+      PG concurrency stress test executed 2026-07-14 on live Postgres 16 AND
+      MySQL 8 at 1000 iterations: zero deadlock failures (T2.10 AC met). The
+      run caught 4 dialect bugs, all fixed in commit 9f5e9f70d (MySQL `key`
+      reserved word → ANSI_QUOTES + `"key"` sweep; pg ON CONFLICT ambiguous
+      preview merge; pg json cast for `spans.dimension_attributes`).
+      OTLP→traces/get differential deferred to Phase 4/12.)*
 - [x] **T2.12 Store: assessments** (FieldMask update, overrides/valid,
       feedback/expectation/issue JSON encoding).
       **AC/VER:** parity with `test_sqlalchemy_store_assessments.py` via Phase 12.
