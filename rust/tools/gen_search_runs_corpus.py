@@ -147,7 +147,9 @@ def build_corpus(out_dir: Path) -> int:
         ("view_deleted_only", exp_all, "", [], "DELETED_ONLY", 5),
         ("view_all_order_start", exp_all, "", ["attribute.start_time DESC"], "ALL", 4),
         ("single_exp_a", [exp_a], "", ["metrics.acc ASC"], "ACTIVE_ONLY", 3),
-        ("filter_metric_and_order_tie", exp_all, "metrics.loss IS NOT NULL", ["metrics.acc DESC"], "ACTIVE_ONLY", 3),
+        # IS NOT NULL is tags/params-only in Python; a wide comparison keeps the
+        # intent (only runs that HAVE a loss metric) via the filter's semi-join.
+        ("filter_metric_and_order_tie", exp_all, "metrics.loss < 999999", ["metrics.acc DESC"], "ACTIVE_ONLY", 3),
         ("empty_result", exp_all, "metrics.acc > 100", [], "ACTIVE_ONLY", 5),
         ("order_end_time_desc", exp_all, "", ["attribute.end_time DESC"], "ALL", 4),
     ]

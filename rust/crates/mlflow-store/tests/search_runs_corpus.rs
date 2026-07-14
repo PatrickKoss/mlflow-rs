@@ -88,20 +88,12 @@ impl Drop for TempDb {
     }
 }
 
-// NOTE: `#[ignore]` because the committed corpus fixture
-// (`tests/corpus/search_runs/{search.db,cases.json}`) could not be generated in
-// the authoring environment — its PyPI mirror was too slow/unreliable to `uv
-// sync` the full MLflow test env needed by the generator. The generator
-// (`rust/tools/gen_search_runs_corpus.py`) and this replay are complete and were
-// validated by construction against the Python spec. To enable:
+// The committed corpus fixture (`tests/corpus/search_runs/{search.db,cases.json}`)
+// is produced by `rust/tools/gen_search_runs_corpus.py` from the genuine Python
+// `SqlAlchemyStore`. Regenerate with:
 //
 //   uv run --frozen python rust/tools/gen_search_runs_corpus.py
-//   cargo test -p mlflow-store --test search_runs_corpus -- --ignored
-//
-// Once the fixture is committed (CI, where PyPI is reachable), drop `#[ignore]`
-// so it runs by default. See RUST_TRACKING_SERVER_PLAN.md T2.6 (Phase 12).
 #[tokio::test]
-#[ignore = "needs the Python-generated corpus fixture; see module note / gen_search_runs_corpus.py"]
 async fn search_runs_matches_python() {
     let corpus: Corpus = serde_json::from_slice(
         &std::fs::read(corpus_dir().join("cases.json")).expect("read cases.json"),

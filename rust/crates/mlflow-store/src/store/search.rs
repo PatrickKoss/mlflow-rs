@@ -905,14 +905,17 @@ fn build_dataset_predicate(
     binds: &mut Vec<Val>,
 ) -> Result<String, MlflowError> {
     if key == "context" {
+        // Bind order must match placeholder order in the SQL text (positional
+        // `?` on sqlite/mysql): the tag-name placeholder appears before the
+        // value predicate's, so push it first.
+        let name_ph = push_text(ph, binds, MLFLOW_DATASET_CONTEXT);
         let pred = value_predicate(dialect, "it.value", comparator, value, ph, binds)?;
         Ok(format!(
             "EXISTS (SELECT 1 FROM inputs i \
              JOIN datasets d ON i.source_id = d.dataset_uuid \
              JOIN input_tags it ON it.input_uuid = i.input_uuid \
              WHERE i.destination_id = r.run_uuid AND i.destination_type = 'RUN' \
-             AND it.name = {} AND {pred})",
-            push_text(ph, binds, MLFLOW_DATASET_CONTEXT),
+             AND it.name = {name_ph} AND {pred})",
         ))
     } else {
         let col = match key {
@@ -1298,11 +1301,15 @@ fn read_cell(r: &dyn RowLike, col: &str, kind: ColKind) -> Result<Cell, sqlx::Er
     Ok(match kind {
         // Rank columns are the CASE output: always a non-null small integer.
         ColKind::Rank => Cell::Int(r.get_i64(col)?),
+        // NULL must be detected via the Option decoders: sqlite's plain `get_f64`
+        // decodes SQL NULL as 0.0, which would poison the keyset cursor (a NULL
+        // order key encoded as 0.0 re-admits the boundary row on the next page).
         ColKind::Num => match r.get_opt_i64(col) {
             Ok(Some(i)) => Cell::Num(i as f64),
-            _ => match r.get_f64(col) {
-                Ok(f) => Cell::Num(f),
-                Err(_) => Cell::Null,
+            Ok(None) => Cell::Null,
+            Err(_) => match r.get_opt_f64(col) {
+                Ok(Some(f)) => Cell::Num(f),
+                _ => Cell::Null,
             },
         },
         ColKind::Text => match r.get_opt_string(col)? {
