@@ -486,43 +486,6 @@ impl TrackingStore {
 
     // ---- internal helpers ----
 
-    /// `_validate_trace_accessible`: workspace-scoped trace existence check.
-    /// See the module doc for why this is a private, module-local helper
-    /// rather than shared with the (in-progress) traces store.
-    async fn validate_trace_accessible(
-        &self,
-        workspace: &str,
-        trace_id: &str,
-    ) -> Result<(), MlflowError> {
-        let dialect = self.db().dialect();
-        let sql = format!(
-            "SELECT t.request_id FROM {TRACE_INFO} t \
-             WHERE t.request_id = {} AND t.experiment_id IN \
-             (SELECT experiment_id FROM experiments WHERE workspace = {})",
-            dialect.placeholder(1),
-            dialect.placeholder(2),
-        );
-        let found = self
-            .db()
-            .fetch_optional(
-                &sql,
-                &[
-                    Val::Text(trace_id.to_string()),
-                    Val::Text(workspace.to_string()),
-                ],
-                |r| r.get_string("request_id"),
-            )
-            .await
-            .map_err(internal)?;
-        if found.is_some() {
-            Ok(())
-        } else {
-            Err(MlflowError::resource_does_not_exist(format!(
-                "Trace with ID '{trace_id}' not found."
-            )))
-        }
-    }
-
     /// `_get_sql_assessment`: fetch one assessment row, scoped to the
     /// workspace via the trace it belongs to. Distinguishes "trace not found"
     /// from "assessment not found for [an accessible] trace", matching

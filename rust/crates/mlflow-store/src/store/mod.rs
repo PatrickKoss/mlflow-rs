@@ -37,6 +37,9 @@ mod names;
 mod names_data;
 mod params_tags;
 mod runs;
+mod spans;
+mod traces;
+mod traces_search;
 mod uri_util;
 mod validation;
 
@@ -46,11 +49,15 @@ pub use entities::{
     Assessment, AssessmentError, AssessmentSource, AssessmentValue, Dataset, DatasetInput,
     DatasetSummary, Experiment, ExperimentTag, InputTag, LifecycleStage, LoggedModelInput,
     LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo, RunInputs,
-    RunOutputs, RunStatus, RunTag,
+    RunOutputs, RunStatus, RunTag, StoredSpan, TraceAssessment, TraceInfo, TraceState,
+    TraceWithSpans,
 };
 pub use experiments::ViewType;
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
+pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};
+pub use traces::{StartTraceInput, MAX_TRACE_LINKS_PER_REQUEST};
+pub use traces_search::{TracesPage, SEARCH_TRACES_DEFAULT_MAX_RESULTS};
 
 use crate::db::Db;
 
