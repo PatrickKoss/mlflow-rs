@@ -1,6 +1,6 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 0/1)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-13
+Status: **in progress (Phase 2 store layer complete except T2.2 dialect-matrix CI)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-14
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
