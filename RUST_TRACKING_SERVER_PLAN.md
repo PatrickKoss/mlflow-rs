@@ -746,9 +746,15 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       span_metrics, lazy content reads, `content=""` = cleared payload).
       **AC:** OTLP payload → both servers → identical `traces/get` output.
       **VER:** differential test.
-- [ ] **T2.12 Store: assessments** (FieldMask update, overrides/valid,
+- [x] **T2.12 Store: assessments** (FieldMask update, overrides/valid,
       feedback/expectation/issue JSON encoding).
       **AC/VER:** parity with `test_sqlalchemy_store_assessments.py` via Phase 12.
+      *(Store layer done 2026-07-14: create/get/update/delete_assessment with
+      `a-<uuid4>` id gen, override/supersede (valid flip + un-invalidation on
+      delete), feedback/expectation/issue JSON encoding matching `json.dumps`
+      semantics, workspace-scoped trace joins. mlflow-store at 112 tests. HTTP
+      FieldMask translation deferred to Phase 3/12 (`valid` has no store-layer
+      setter).)*
 
 ### Phase 3 — Tracking HTTP API
 
