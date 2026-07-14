@@ -40,7 +40,8 @@ pub use error::{ErrorCode, Result, SearchError};
 pub use page_token::parse_start_offset_from_page_token;
 
 pub use domains::logged_models::{
-    AscendingValue, LoggedModelOrderBy, OrderByInput as LoggedModelOrderByInput,
+    AscendingValue, LoggedModelOrderBy, OrderByInput as LoggedModelOrderByInput, SqlaComparison,
+    SqlaEntityType, SqlaValue,
 };
 
 /// Filter/order-by parsers, one module per search domain. Each mirrors the
@@ -50,6 +51,7 @@ pub mod parse {
         parse_order_by as experiments_order_by, parse_search_filter as experiments_filter,
     };
     pub use crate::domains::logged_models::{
+        parse_filter_string_sqlalchemy as logged_models_filter_sqlalchemy,
         parse_order_by as logged_models_order_by, parse_search_filter as logged_models_filter,
     };
     pub use crate::domains::model_versions::{

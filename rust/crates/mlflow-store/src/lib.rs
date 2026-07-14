@@ -38,13 +38,14 @@ pub use dialect::{Dialect, UpsertSpec};
 pub use pool::PoolConfig;
 pub use store::{
     Assessment, AssessmentError, AssessmentSource, AssessmentUpdate, AssessmentValue, Dataset,
-    DatasetInput, DatasetInputSpec, DatasetSummary, Experiment, ExperimentTag, FeedbackUpdate,
-    InputTag, LoggedModelInput, LoggedModelOutput, Metric, MetricInput, MetricWithRunId,
-    NewAssessment, Param, Run, RunData, RunInfo, RunInputs, RunOutputs, RunStatus, RunTag,
-    SpanInput, SpanMetricInput, StartTraceInput, StoredSpan, TraceAssessment, TraceInfo,
-    TraceState, TraceTimeRange, TraceWithSpans, TracesPage, TrackingStore, ViewType,
-    GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS, MAX_RESULTS_PER_RUN,
-    MAX_RUNS_GET_METRIC_HISTORY_BULK, MAX_TRACE_LINKS_PER_REQUEST,
-    SEARCH_TRACES_DEFAULT_MAX_RESULTS,
+    DatasetFilter, DatasetInput, DatasetInputSpec, DatasetSummary, Experiment, ExperimentTag,
+    FeedbackUpdate, InputTag, LoggedModel, LoggedModelInput, LoggedModelKv, LoggedModelMetric,
+    LoggedModelMetricInput, LoggedModelOrderByInput, LoggedModelOutput, LoggedModelStatus,
+    LoggedModelsPage, Metric, MetricInput, MetricWithRunId, NewAssessment, Param, Run, RunData,
+    RunInfo, RunInputs, RunOutputs, RunStatus, RunTag, SpanInput, SpanMetricInput, StartTraceInput,
+    StoredSpan, TraceAssessment, TraceInfo, TraceState, TraceTimeRange, TraceWithSpans, TracesPage,
+    TrackingStore, ViewType, GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS,
+    MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK, MAX_TRACE_LINKS_PER_REQUEST,
+    SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT, SEARCH_TRACES_DEFAULT_MAX_RESULTS,
 };
 pub use uri::{ParsedUri, UriError};

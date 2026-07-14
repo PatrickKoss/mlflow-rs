@@ -31,6 +31,7 @@ mod datasets;
 mod dbutil;
 mod entities;
 mod experiments;
+mod logged_models;
 mod metrics;
 mod metrics_bulk;
 mod names;
@@ -53,6 +54,11 @@ pub use entities::{
     TraceWithSpans,
 };
 pub use experiments::ViewType;
+pub use logged_models::{
+    DatasetFilter, LoggedModel, LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput,
+    LoggedModelOrderByInput, LoggedModelStatus, LoggedModelsPage,
+    SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT,
+};
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};
