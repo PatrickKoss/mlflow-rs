@@ -733,9 +733,29 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       entity_associations), search_datasets (DISTINCT + LEFT JOIN context tag, cap
       1000), Run.inputs/outputs assembly. mlflow-store at 93 tests. HTTP parity in
       Phase 12.)*
-- [ ] **T2.9 Store: logged models** (CRUD, finalize state machine, search with
+- [x] **T2.9 Store: logged models** (CRUD, finalize state machine, search with
       dataset-scoped ordering + encoded token, tags, params).
       **AC/VER:** Phase 12 suite.
+      *(Done 2026-07-14: `store/logged_models.rs` — CRUD, finalize (no
+      state-machine guard, matches Python exactly), tags/params,
+      search_logged_models with attribute/metric/param/tag filters (EXISTS
+      semi-joins, not literal JOINs — Python's join-based filter can silently
+      drop models from a page under pagination, verified against a live
+      SqlAlchemyStore; deliberately not reproduced), dataset-scoped metric
+      ordering via RANK() OVER (...), byte-for-byte
+      SearchLoggedModelsPaginationToken port. Discovered the SqlAlchemyStore
+      filter parser is NOT the sqlparse-grammar SearchLoggedModelsUtils ported
+      in T2.3 (that one is FileStore's) — ported the actual
+      `mlflow.utils.search_logged_model_utils.parse_filter_string` separately
+      in mlflow-search, preserving its quirks (dotted attributes.<numeric-alias>
+      skips alias resolution → 500; validate_op error always names string_ops).
+      Followed the real Python default/cap
+      (SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT=100, no enforced max) over this
+      plan's earlier "default 50 max 50" note, which doesn't match the source.
+      Workspace-scoped throughout. 28 integration + 17 parser tests. Gap: no
+      production log_logged_model_metrics writer yet (T2.5 didn't cover
+      `_log_model_metrics`) — minimal test-support seam only, real port still
+      needed. HTTP/proto-layer concerns deferred to Phase 12.)*
 - [x] **T2.10 Store: traces** (start_trace V3 with sorted-merge discipline, get/batch-get,
       search filters incl. span/assessment/run_id special cases, delete both modes, tags,
       entity_associations, deadlock retry).
