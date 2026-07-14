@@ -1,6 +1,6 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 store layer complete except T2.2 dialect-matrix CI)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-14
+Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 started — T3.1/T3.5 done, HTTP foundation landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-14
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -826,9 +826,23 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 3 — Tracking HTTP API
 
-- [ ] **T3.1 Experiments endpoints** (§3.1) incl. POST+GET search.
+- [x] **T3.1 Experiments endpoints** (§3.1) incl. POST+GET search.
       **AC:** experiment sections of `test_rest_tracking.py` pass against Rust.
       **VER:** Phase 12 runner `-k experiment`.
+      *(Done 2026-07-14: 9 experiment endpoints wired on both `/api/2.0` +
+      `/ajax-api/2.0` from the mlflow-proto route table. Shared HTTP foundation
+      landed: `AppState`+`TrackingStore`, `proto_http` adapter (JSON/GET →
+      proto → codec → response), `Workspace` extractor (`X-MLFLOW-WORKSPACE`,
+      fallback `default`); to add an endpoint: implement the handler + one arm
+      in `handler_for`. `search_experiments` was missing from the T2.4 store —
+      added in `mlflow-store/src/store/search_experiments.rs` (EXISTS tag
+      semi-joins, offset page tokens, [1,50000] max_results,
+      unspecified-view_type→empty parity). Error-body parity for
+      missing-param / RESOURCE_DOES_NOT_EXIST / RESOURCE_ALREADY_EXISTS /
+      bad-max_results. 15 HTTP + 7 store tests. Gaps: handler-level
+      type-coercion error messages and `_validate_storage_location_uri`
+      deferred to a shared validation layer; cross-dialect + Python
+      differential deferred to Phase 12.)*
 - [ ] **T3.2 Runs endpoints** (§3.2) incl. limits, param-length errors, view-type,
       deprecated `user_id`.
       **AC:** run sections pass; limit-violation error payloads byte-match.
@@ -839,9 +853,17 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       **VER:** Phase 12 runner `-k metric` + UI smoke (T11.6).
 - [ ] **T3.4 Logged models + search-datasets endpoints** (§3.4, §3.5).
       **AC/VER:** Phase 12 runner `-k "logged_model or dataset"`.
-- [ ] **T3.5 GET-request proto parsing** (repeated params, nested fields).
+- [x] **T3.5 GET-request proto parsing** (repeated params, nested fields).
       **AC:** V2 trace search via GET and experiments/get round-trip correctly.
       **VER:** unit tests + suite.
+      *(Done 2026-07-14: GET query→proto in `mlflow-proto::from_query_pairs` /
+      `dynamic_from_query_pairs`, descriptor-driven — repeated fields via
+      repeated query params (single occurrence still a list), bool true/false
+      coercion with Python's verbatim error, scalars coerced by the codec
+      deserializer (int64/enum-by-name). Wired through
+      `proto_http::parse_request`. Unit tests + experiments/search GET with
+      repeated order_by + experiments/get GET round-trips in the HTTP suite.
+      V2 trace search GET re-check when T4.2 lands.)*
 
 ### Phase 4 — Tracing HTTP API
 
