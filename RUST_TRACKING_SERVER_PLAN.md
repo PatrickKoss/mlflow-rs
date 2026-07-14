@@ -736,16 +736,34 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 - [ ] **T2.9 Store: logged models** (CRUD, finalize state machine, search with
       dataset-scoped ordering + encoded token, tags, params).
       **AC/VER:** Phase 12 suite.
-- [ ] **T2.10 Store: traces** (start_trace V3 with sorted-merge discipline, get/batch-get,
+- [x] **T2.10 Store: traces** (start_trace V3 with sorted-merge discipline, get/batch-get,
       search filters incl. span/assessment/run_id special cases, delete both modes, tags,
       entity_associations, deadlock retry).
       **AC:** parity with `test_sqlalchemy_store_traces.py` over HTTP; 1000-iteration
       parallel start_trace+log_spans on postgres with zero deadlock failures.
       **VER:** Phase 12 suite + `rust/tests/stress_trace_writes.rs`.
-- [ ] **T2.11 Store: spans** (`log_spans` bulk upsert, trace time-range update,
+      *(Store layer done 2026-07-14: start_trace V3 (sorted-merge + 2x deadlock
+      retry per commit 4c5548c39), get/batch-get, search_traces
+      (span/assessment/run_id/tag/metadata filters via EXISTS semi-joins,
+      order-by + `(timestamp_ms DESC, request_id ASC)` tiebreak, offset
+      pagination = Python page contents), delete_traces (both modes +
+      HasField Some(0)-vs-None), tag CRUD, link_traces_to_run (≤100,
+      entity_associations; delete leaves associations orphaned — matches
+      Python). 23 sqlite tests. Gaps: archive-backed delete (Phase 4),
+      session-scoped assessments + LINKED_PROMPTS/issue filters (Phase 12).)*
+- [x] **T2.11 Store: spans** (`log_spans` bulk upsert, trace time-range update,
       span_metrics, lazy content reads, `content=""` = cleared payload).
       **AC:** OTLP payload → both servers → identical `traces/get` output.
       **VER:** differential test.
+      *(Store layer done 2026-07-14: log_spans bulk dialect upsert + atomic
+      trace time-range update (skipped when finalized) + span_metrics +
+      SPANS_LOCATION tag; lazy content reads (no `spans.content` on TraceInfo
+      reads; `content=""` skipped); `duration_ns` read-only generated column.
+      10 sqlite tests. OTLP→row translation deferred to the HTTP layer
+      (Phase 3); token-usage/cost/session/resource-tag aggregation Phase 3/12.
+      PG concurrency stress test written (`stress_trace_writes.rs`, env-gated
+      on `MLFLOW_RUST_TEST_PG_URI`) but not yet executed — no live Postgres in
+      the build env. OTLP→traces/get differential deferred to Phase 4/12.)*
 - [x] **T2.12 Store: assessments** (FieldMask update, overrides/valid,
       feedback/expectation/issue JSON encoding).
       **AC/VER:** parity with `test_sqlalchemy_store_assessments.py` via Phase 12.
