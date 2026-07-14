@@ -190,3 +190,127 @@ pub struct MetricWithRunId {
     pub run_id: String,
     pub metric: Metric,
 }
+
+// ===========================================================================
+// Tracing V3 entities (plan §3.6, T2.10/T2.11)
+// ===========================================================================
+
+/// The reserved trace-tag key that stores a trace's artifact location
+/// (`MLFLOW_ARTIFACT_LOCATION`, `mlflow/utils/mlflow_tags.py`).
+pub const MLFLOW_ARTIFACT_LOCATION: &str = "mlflow.artifactLocation";
+
+/// Trace-metadata key that records the source run (`TraceMetadataKey.SOURCE_RUN`).
+pub const TRACE_METADATA_SOURCE_RUN: &str = "mlflow.sourceRun";
+
+/// Trace-metadata key set by `start_trace` to signal that authoritative
+/// trace-level values were written (`TraceMetadataKey.TRACE_INFO_FINALIZED`).
+pub const TRACE_METADATA_INFO_FINALIZED: &str = "mlflow.trace.infoFinalized";
+
+/// Trace-tag key that records where span payloads live
+/// (`TraceTagKey.SPANS_LOCATION`).
+pub const TRACE_TAG_SPANS_LOCATION: &str = "mlflow.trace.spansLocation";
+
+/// The `SpansLocation.TRACKING_STORE` value written by `log_spans`.
+pub const SPANS_LOCATION_TRACKING_STORE: &str = "TRACKING_STORE";
+
+/// `TraceState` string values (persisted verbatim in `trace_info.status`).
+pub struct TraceState;
+
+impl TraceState {
+    pub const STATE_UNSPECIFIED: &'static str = "STATE_UNSPECIFIED";
+    pub const IN_PROGRESS: &'static str = "IN_PROGRESS";
+    pub const OK: &'static str = "OK";
+    pub const ERROR: &'static str = "ERROR";
+}
+
+/// A trace assessment (`mlflow.entities.Assessment`), carried on a
+/// [`TraceInfo`]. Fields mirror `SqlAssessments.to_mlflow_entity`; JSON-typed
+/// payloads (`value`, `error`, `rationale`, `metadata`) stay as raw strings so
+/// the store crate need not depend on the assessment proto (Phase T2.12 owns
+/// full assessment semantics).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraceAssessment {
+    pub assessment_id: String,
+    pub trace_id: String,
+    pub name: String,
+    pub assessment_type: String,
+    pub value: String,
+    pub error: Option<String>,
+    pub created_timestamp: i64,
+    pub last_updated_timestamp: i64,
+    pub source_type: String,
+    pub source_id: Option<String>,
+    pub run_id: Option<String>,
+    pub span_id: Option<String>,
+    pub rationale: Option<String>,
+    pub overrides: Option<String>,
+    pub valid: bool,
+    pub metadata: Option<String>,
+}
+
+/// Trace info (`mlflow.entities.TraceInfo`, V3), as returned by the store.
+///
+/// `experiment_id` is the stringified experiment id (matching
+/// `TraceLocation.from_experiment_id`). `tags` and `trace_metadata` are ordered
+/// by key (Python builds them from ORM relationships; we sort for determinism).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraceInfo {
+    pub trace_id: String,
+    pub experiment_id: String,
+    pub request_time: i64,
+    pub execution_duration: Option<i64>,
+    pub state: String,
+    pub client_request_id: Option<String>,
+    pub request_preview: Option<String>,
+    pub response_preview: Option<String>,
+    pub tags: Vec<(String, Option<String>)>,
+    pub trace_metadata: Vec<(String, Option<String>)>,
+    pub assessments: Vec<TraceAssessment>,
+}
+
+impl TraceInfo {
+    /// Look up a tag value by key.
+    pub fn tag(&self, key: &str) -> Option<&str> {
+        self.tags
+            .iter()
+            .find(|(k, _)| k == key)
+            .and_then(|(_, v)| v.as_deref())
+    }
+
+    /// Look up a metadata value by key.
+    pub fn metadata(&self, key: &str) -> Option<&str> {
+        self.trace_metadata
+            .iter()
+            .find(|(k, _)| k == key)
+            .and_then(|(_, v)| v.as_deref())
+    }
+}
+
+/// A stored span (`mlflow.entities` span row → `SqlSpan`).
+///
+/// `duration_ns` is the read-only generated column (NULL for in-progress
+/// spans). `content` is the JSON payload; an empty string means the payload was
+/// cleared (archival), which reads treat as "no span" (plan T2.11).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredSpan {
+    pub trace_id: String,
+    pub experiment_id: i64,
+    pub span_id: String,
+    pub parent_span_id: Option<String>,
+    pub name: Option<String>,
+    pub span_type: Option<String>,
+    pub status: String,
+    pub start_time_unix_nano: i64,
+    pub end_time_unix_nano: Option<i64>,
+    pub duration_ns: Option<i64>,
+    pub content: String,
+    pub dimension_attributes: Option<String>,
+}
+
+/// A full trace: its [`TraceInfo`] plus the DB-backed spans (payloads only, no
+/// OTel reconstruction — that is a serialization concern for the HTTP layer).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraceWithSpans {
+    pub info: TraceInfo,
+    pub spans: Vec<StoredSpan>,
+}

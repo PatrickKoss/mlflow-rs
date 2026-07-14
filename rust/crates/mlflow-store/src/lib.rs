@@ -39,8 +39,10 @@ pub use pool::PoolConfig;
 pub use store::{
     Dataset, DatasetInput, DatasetInputSpec, DatasetSummary, Experiment, ExperimentTag, InputTag,
     LoggedModelInput, LoggedModelOutput, Metric, MetricInput, MetricWithRunId, Param, Run, RunData,
-    RunInfo, RunInputs, RunOutputs, RunStatus, RunTag, TrackingStore, ViewType,
-    GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS, MAX_RESULTS_PER_RUN,
-    MAX_RUNS_GET_METRIC_HISTORY_BULK,
+    RunInfo, RunInputs, RunOutputs, RunStatus, RunTag, SpanInput, SpanMetricInput, StartTraceInput,
+    StoredSpan, TraceAssessment, TraceInfo, TraceState, TraceTimeRange, TraceWithSpans, TracesPage,
+    TrackingStore, ViewType, GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS,
+    MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK, MAX_TRACE_LINKS_PER_REQUEST,
+    SEARCH_TRACES_DEFAULT_MAX_RESULTS,
 };
 pub use uri::{ParsedUri, UriError};
