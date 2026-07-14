@@ -775,10 +775,14 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       Followed the real Python default/cap
       (SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT=100, no enforced max) over this
       plan's earlier "default 50 max 50" note, which doesn't match the source.
-      Workspace-scoped throughout. 28 integration + 17 parser tests. Gap: no
-      production log_logged_model_metrics writer yet (T2.5 didn't cover
-      `_log_model_metrics`) — minimal test-support seam only, real port still
-      needed. HTTP/proto-layer concerns deferred to Phase 12.)*
+      Workspace-scoped throughout. 28 integration + 17 parser tests.
+      HTTP/proto-layer concerns deferred to Phase 12. Gap CLOSED 2026-07-14:
+      `_log_model_metrics` fully ported (`log_model_metrics_tx`, wired into
+      log_batch/log_metric) — per-call dedup on the full Metric tuple incl.
+      model_id (one call can span multiple models), shared `_validate_metric`,
+      NaN→0.0 (no is_nan column). Deviations: explicit workspace-scoped
+      model-existence check replaces Python's untested FK-violation error
+      path; write joins log_batch's single transaction per Q6. +11 tests.)*
 - [x] **T2.10 Store: traces** (start_trace V3 with sorted-merge discipline, get/batch-get,
       search filters incl. span/assessment/run_id special cases, delete both modes, tags,
       entity_associations, deadlock retry).
