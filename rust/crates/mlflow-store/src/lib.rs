@@ -37,10 +37,12 @@ pub use db::{Db, SchemaError, StoreError, EXPECTED_ALEMBIC_HEAD};
 pub use dialect::{Dialect, UpsertSpec};
 pub use pool::PoolConfig;
 pub use store::{
-    Dataset, DatasetInput, DatasetInputSpec, DatasetSummary, Experiment, ExperimentTag, InputTag,
-    LoggedModelInput, LoggedModelOutput, Metric, MetricInput, MetricWithRunId, Param, Run, RunData,
-    RunInfo, RunInputs, RunOutputs, RunStatus, RunTag, TrackingStore, ViewType,
+    Dataset, DatasetFilter, DatasetInput, DatasetInputSpec, DatasetSummary, Experiment,
+    ExperimentTag, InputTag, LoggedModel, LoggedModelInput, LoggedModelKv, LoggedModelMetric,
+    LoggedModelMetricInput, LoggedModelOrderByInput, LoggedModelOutput, LoggedModelStatus,
+    LoggedModelsPage, Metric, MetricInput, MetricWithRunId, Param, Run, RunData, RunInfo,
+    RunInputs, RunOutputs, RunStatus, RunTag, TrackingStore, ViewType,
     GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS, MAX_RESULTS_PER_RUN,
-    MAX_RUNS_GET_METRIC_HISTORY_BULK,
+    MAX_RUNS_GET_METRIC_HISTORY_BULK, SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT,
 };
 pub use uri::{ParsedUri, UriError};

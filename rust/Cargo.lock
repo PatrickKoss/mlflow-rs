@@ -1694,6 +1694,7 @@ dependencies = [
 name = "mlflow-store"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "log",
  "mlflow-error",

@@ -225,6 +225,7 @@ pub(crate) trait RowLike {
     fn get_string(&self, col: &str) -> Result<String, sqlx::Error>;
     fn get_opt_string(&self, col: &str) -> Result<Option<String>, sqlx::Error>;
     fn get_f64(&self, col: &str) -> Result<f64, sqlx::Error>;
+    fn get_opt_f64(&self, col: &str) -> Result<Option<f64>, sqlx::Error>;
     fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error>;
 
     /// Read an SQLAlchemy `Integer` column (e.g. `experiment_id`), widening to
@@ -253,6 +254,9 @@ macro_rules! impl_rowlike_i64_int {
                 self.try_get(col)
             }
             fn get_f64(&self, col: &str) -> Result<f64, sqlx::Error> {
+                self.try_get(col)
+            }
+            fn get_opt_f64(&self, col: &str) -> Result<Option<f64>, sqlx::Error> {
                 self.try_get(col)
             }
             fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error> {
@@ -284,6 +288,9 @@ impl RowLike for sqlx::postgres::PgRow {
         self.try_get(col)
     }
     fn get_f64(&self, col: &str) -> Result<f64, sqlx::Error> {
+        self.try_get(col)
+    }
+    fn get_opt_f64(&self, col: &str) -> Result<Option<f64>, sqlx::Error> {
         self.try_get(col)
     }
     fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error> {

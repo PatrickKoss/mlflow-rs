@@ -30,6 +30,11 @@ uuid = { workspace = true }
 # `log` provides the `LevelFilter` accepted by `ConnectOptions::log_statements`
 # (sqlx logs SQL through the `log` facade).
 log = "0.4"
+# `SearchLoggedModelsPaginationToken` (T2.9) is a base64(JSON) blob, byte-for-byte
+# matching `mlflow.utils.search_utils.SearchLoggedModelsPaginationToken`.
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
