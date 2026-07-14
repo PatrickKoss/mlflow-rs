@@ -30,10 +30,15 @@ uuid = { workspace = true }
 # `log` provides the `LevelFilter` accepted by `ConnectOptions::log_statements`
 # (sqlx logs SQL through the `log` facade).
 log = "0.4"
+# JSON encoding for assessment `value`/`error`/`assessment_metadata` payloads
+# (plan T2.12) — mirrors Python's `json.dumps`/`json.loads` round-trips.
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
+mlflow-error = { workspace = true }
 # Used by tests/sampling_corpus.rs to read the Python-generated differential
 # corpus (query cases + expected sampled outputs).
 serde = { workspace = true }

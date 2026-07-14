@@ -26,6 +26,7 @@
 //! keeps the store crate free of a proto dependency and mirrors MLflow's own
 //! `Experiment` / `Run` / `Metric` entities.
 
+mod assessments;
 mod datasets;
 mod dbutil;
 mod entities;
@@ -39,11 +40,13 @@ mod runs;
 mod uri_util;
 mod validation;
 
+pub use assessments::{AssessmentUpdate, FeedbackUpdate, NewAssessment};
 pub use datasets::{DatasetInputSpec, MAX_DATASET_SUMMARIES_RESULTS};
 pub use entities::{
-    Dataset, DatasetInput, DatasetSummary, Experiment, ExperimentTag, InputTag, LifecycleStage,
-    LoggedModelInput, LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo,
-    RunInputs, RunOutputs, RunStatus, RunTag,
+    Assessment, AssessmentError, AssessmentSource, AssessmentValue, Dataset, DatasetInput,
+    DatasetSummary, Experiment, ExperimentTag, InputTag, LifecycleStage, LoggedModelInput,
+    LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo, RunInputs,
+    RunOutputs, RunStatus, RunTag,
 };
 pub use experiments::ViewType;
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
