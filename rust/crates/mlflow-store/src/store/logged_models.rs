@@ -341,18 +341,10 @@ impl TrackingStore {
         tx.commit().await.map_err(internal)
     }
 
-    /// `_log_model_metrics`: append logged-model metric rows.
-    ///
-    /// This is a **minimal seam**, not a full T2.5-style port: it captures the
-    /// two behaviors `search_logged_models`'s tests need (NaN/Inf
-    /// sanitization matching [`LoggedModelMetric::value`]'s doc — the "was
-    /// NaN" bit is discarded, not restored on read; PK-conflict rows are
-    /// silently dropped, matching the dedup-on-retry outcome of Python's
-    /// `IntegrityError` recovery loop) without reproducing the full
-    /// batch-retry error-recovery machinery. `log_batch`'s model-metrics path
-    /// (`_log_model_metrics`, called from `log_batch` for the T2.5 metrics
-    /// work) is the right owner for the complete port; this exists so T2.9's
-    /// own store-level tests can exercise search/order-by against real data.
+    /// `_log_model_metrics` (sqlalchemy_store.py:1288), standalone entry point:
+    /// opens its own transaction and delegates to
+    /// [`TrackingStore::log_model_metrics_tx`]. Used directly by tests that
+    /// don't go through `log_batch`/`log_metric`.
     pub async fn log_logged_model_metrics(
         &self,
         model_id: &str,
@@ -361,26 +353,145 @@ impl TrackingStore {
         dataset_uuid: Option<&str>,
         metrics: &[LoggedModelMetricInput],
     ) -> Result<(), MlflowError> {
-        let dialect = self.db().dialect();
-        for m in metrics {
+        if metrics.is_empty() {
+            return Ok(());
+        }
+        let workspace = self.workspace_of_experiment(experiment_id).await?;
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        let owned: Vec<super::metrics::MetricInput> = metrics
+            .iter()
+            .map(|m| super::metrics::MetricInput {
+                key: m.key.clone(),
+                value: m.value,
+                timestamp: m.timestamp,
+                step: m.step,
+                model_id: Some(model_id.to_string()),
+                dataset_name: m.dataset_name.clone(),
+                dataset_digest: m.dataset_digest.clone(),
+            })
+            .collect();
+        self.log_model_metrics_tx(
+            &mut tx,
+            &workspace,
+            experiment_id,
+            run_id,
+            dataset_uuid,
+            &owned,
+        )
+        .await?;
+        tx.commit().await.map_err(internal)
+    }
+
+    /// `_log_model_metrics` (sqlalchemy_store.py:1288): the production writer,
+    /// callable from within an already-open transaction so `log_batch`/
+    /// `log_metric` (`metrics.rs`) can fold it into their single transaction
+    /// (Q6 spirit — see `metrics.rs`'s `log_batch` doc comment for why this
+    /// deviates from Python's separate-session behavior here).
+    ///
+    /// `metrics` is the **whole** metrics list handed to the caller (not
+    /// pre-filtered to one model_id) — exactly Python's shape: `Metric`
+    /// carries its own `model_id` per element (`SqlLoggedModelMetric(
+    /// model_id=metric.model_id, ...)`), so one call can legitimately write
+    /// rows for several different models at once (e.g. a `log_batch` request
+    /// mixing metrics for model A and model B). Preserving this shape (rather
+    /// than pre-grouping by model_id before calling in) matters for two
+    /// subtle bits of parity: `is_single_metric = len(metrics) == 1` is
+    /// computed over the *whole* list Python was handed (true even if only
+    /// one of several metrics carries a model_id), and the `metrics[idx]`
+    /// validation-error path index is the position in that *original* list,
+    /// not in a per-model subset.
+    ///
+    /// Steps, mirroring Python exactly except where noted:
+    /// 1. Skip elements with no `model_id` (Python's `if metric.model_id is
+    ///    None: continue`).
+    /// 2. Dedup by full `(key, value, timestamp, step, model_id, dataset_name,
+    ///    dataset_digest)` tuple, keeping the first occurrence — mirrors
+    ///    Python's `Metric.__eq__`/`__hash__`, which include every field.
+    /// 3. `_validate_metric` per element (same validator run metrics use).
+    /// 4. `sanitize_metric_value` (NaN → 0.0, the "was NaN" bit is discarded —
+    ///    `logged_model_metrics` has no `is_nan` column, see
+    ///    [`LoggedModelMetric::value`]'s doc).
+    /// 5. Insert with **conflict-target = the table's 5-column PK**
+    ///    `(model_id, metric_name, metric_timestamp_ms, metric_step, run_id)`,
+    ///    `DO NOTHING` on conflict. This is a deliberate simplification of
+    ///    Python's IntegrityError-catch-and-retry loop: Python attempts one
+    ///    `add_all` + `commit` for the whole batch, and on a PK violation
+    ///    rolls back, re-queries existing rows for the run, and re-inserts
+    ///    only the rows that are not already present — the net *observable*
+    ///    effect is "a row whose PK already exists is silently kept as-is;
+    ///    every other row is inserted", which is exactly what
+    ///    `ON CONFLICT ... DO NOTHING` gives us in one statement, without
+    ///    reproducing the retry machinery.
+    ///
+    /// ## Deviation: model_id existence
+    ///
+    /// Python has **no explicit check** that `model_id` refers to an existing
+    /// `LoggedModel` before this insert — it relies entirely on the `logged_model_metrics.model_id`
+    /// foreign key to `logged_models.model_id` (`ondelete=CASCADE`) raising at
+    /// commit time. On SQLite (`PRAGMA foreign_keys = ON`, `mlflow/store/db/utils.py:155`)
+    /// that FK violation is an `IntegrityError`, which Python's `except
+    /// sqlalchemy.exc.IntegrityError` handler here (written only for the
+    /// PK-duplicate case) misclassifies as "duplicate metrics to filter out",
+    /// retries the insert, and the retry raises the *same* `IntegrityError`
+    /// again — this time uncaught by this method, propagating up through
+    /// `ManagedSessionMaker`'s generic `except sqlalchemy.exc.SQLAlchemyError`
+    /// handler as `MlflowException(error_code=BAD_REQUEST)` wrapping a raw
+    /// "FOREIGN KEY constraint failed" message. That's an accident of
+    /// unrelated exception-handling code, not a designed error contract (no
+    /// test in the Python suite exercises this path, and the exact wording is
+    /// DB-driver-specific). We instead validate explicitly, workspace-scoped,
+    /// and raise the same clean `RESOURCE_DOES_NOT_EXIST` "Logged model with
+    /// ID '...' not found." used everywhere else in this module — matching
+    /// Python's *intent* (invalid model_id must fail) with a real error
+    /// message instead of Python's incidental one. We check every distinct
+    /// model_id referenced by the sanitized batch (still one query per
+    /// distinct id, but at most as many as distinct models in the request).
+    pub(crate) async fn log_model_metrics_tx(
+        &self,
+        tx: &mut super::dbutil::Tx<'_>,
+        workspace: &str,
+        experiment_id: i64,
+        run_id: &str,
+        dataset_uuid: Option<&str>,
+        metrics: &[super::metrics::MetricInput],
+    ) -> Result<(), MlflowError> {
+        let is_single_metric = metrics.len() == 1;
+        let mut seen: Vec<&super::metrics::MetricInput> = Vec::new();
+        let mut sanitized: Vec<(&super::metrics::MetricInput, f64)> = Vec::new();
+        for (idx, m) in metrics.iter().enumerate() {
+            if m.model_id.is_none() {
+                continue;
+            }
+            if seen.iter().any(|s| model_metric_eq(s, m)) {
+                continue;
+            }
+            seen.push(m);
+
+            let path = (!is_single_metric).then(|| format!("metrics[{idx}]"));
+            validation::validate_metric(&m.key, m.value, m.timestamp, m.step, path.as_deref())?;
             let (_, value) = super::metrics::sanitize_metric_value(m.value);
-            let ph = |i| dialect.placeholder(i);
-            let sql = format!(
-                "INSERT INTO {LOGGED_MODEL_METRICS} \
-                 (model_id, metric_name, metric_timestamp_ms, metric_step, metric_value, \
-                  experiment_id, run_id, dataset_uuid, dataset_name, dataset_digest) \
-                 VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
-                ph(1),
-                ph(2),
-                ph(3),
-                ph(4),
-                ph(5),
-                ph(6),
-                ph(7),
-                ph(8),
-                ph(9),
-                ph(10),
-            );
+            sanitized.push((m, value));
+        }
+        if sanitized.is_empty() {
+            return Ok(());
+        }
+
+        // Every distinct model_id referenced must exist (workspace-scoped) —
+        // see the deviation note above for why this is an explicit check
+        // rather than a Python-style FK-violation fallthrough.
+        let mut checked: Vec<&str> = Vec::new();
+        for (m, _) in &sanitized {
+            let model_id = m.model_id.as_deref().expect("filtered above");
+            if !checked.contains(&model_id) {
+                self.check_model_exists_tx(tx, workspace, model_id).await?;
+                checked.push(model_id);
+            }
+        }
+
+        let dialect = self.db().dialect();
+        let sql = model_metric_insert_sql(dialect);
+        for (m, value) in sanitized {
+            let model_id = m.model_id.as_deref().expect("filtered above");
             let binds = [
                 Val::Text(model_id.to_string()),
                 Val::Text(m.key.clone()),
@@ -393,15 +504,65 @@ impl TrackingStore {
                 Val::OptText(m.dataset_name.clone()),
                 Val::OptText(m.dataset_digest.clone()),
             ];
-            // PK conflict (same model/key/timestamp/step/run) is a silent
-            // no-op, matching Python's IntegrityError-rollback-and-drop path.
-            if let Err(e) = self.db().exec(&sql, &binds).await {
-                if !super::experiments::is_unique_violation(&e) {
-                    return Err(internal(e));
-                }
-            }
+            tx.exec(&sql, &binds).await.map_err(internal)?;
         }
         Ok(())
+    }
+
+    /// Existence check for `model_id`, workspace-scoped, inside `tx` (no
+    /// `Tx::fetch_optional` exists — an empty `fetch_all` is equivalent).
+    async fn check_model_exists_tx(
+        &self,
+        tx: &mut super::dbutil::Tx<'_>,
+        workspace: &str,
+        model_id: &str,
+    ) -> Result<(), MlflowError> {
+        let dialect = self.db().dialect();
+        let sql = format!(
+            "SELECT 1 AS one FROM {LOGGED_MODELS} m \
+             WHERE m.model_id = {} AND m.experiment_id IN \
+             (SELECT experiment_id FROM experiments WHERE workspace = {})",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+        );
+        let rows = tx
+            .fetch_all(
+                &sql,
+                &[
+                    Val::Text(model_id.to_string()),
+                    Val::Text(workspace.to_string()),
+                ],
+                |r| r.get_i64("one"),
+            )
+            .await
+            .map_err(internal)?;
+        if rows.is_empty() {
+            return Err(not_found(model_id));
+        }
+        Ok(())
+    }
+
+    /// The workspace owning `experiment_id` — used by
+    /// [`TrackingStore::log_logged_model_metrics`], whose signature (matching
+    /// its existing test-facing shape) takes an `experiment_id` rather than a
+    /// `workspace`, unlike every other store method.
+    async fn workspace_of_experiment(&self, experiment_id: i64) -> Result<String, MlflowError> {
+        let dialect = self.db().dialect();
+        let sql = format!(
+            "SELECT workspace FROM experiments WHERE experiment_id = {}",
+            dialect.placeholder(1)
+        );
+        self.db()
+            .fetch_optional(&sql, &[Val::Int(experiment_id)], |r| {
+                r.get_string("workspace")
+            })
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| {
+                MlflowError::resource_does_not_exist(format!(
+                    "No Experiment with id={experiment_id} exists"
+                ))
+            })
     }
 
     /// `get_logged_model`. `allow_deleted` mirrors the Python flag: when
@@ -1012,6 +1173,59 @@ async fn upsert_tag_tx(
     .await
     .map_err(internal)?;
     Ok(())
+}
+
+/// `Metric.__eq__` restricted to the fields that vary across elements of one
+/// `log_model_metrics_tx` call (`key`, `value`, `timestamp`, `step`,
+/// `model_id`, `dataset_name`, `dataset_digest`) — `run_id` is constant for
+/// the whole call (it's a `log_model_metrics_tx` parameter, not a per-metric
+/// field here), matching Python's per-call dedup `seen` set. `model_id` is
+/// included because one call can carry metrics for several distinct models
+/// (see the `log_model_metrics_tx` doc comment), so two metrics with the same
+/// key/value/timestamp/step/dataset but different `model_id` are NOT
+/// duplicates of each other. Plain `==` on `value` (not `to_bits()`) matches
+/// Python's dict/tuple equality: `NaN != NaN`, so two NaN metrics are never
+/// deduped as "the same" here either, exactly like Python's `set`-based dedup.
+fn model_metric_eq(a: &super::metrics::MetricInput, b: &super::metrics::MetricInput) -> bool {
+    a.key == b.key
+        && a.value == b.value
+        && a.timestamp == b.timestamp
+        && a.step == b.step
+        && a.model_id == b.model_id
+        && a.dataset_name == b.dataset_name
+        && a.dataset_digest == b.dataset_digest
+}
+
+/// `INSERT INTO logged_model_metrics (...) VALUES (...) ON CONFLICT/DUPLICATE
+/// DO NOTHING`, conflict target = the table's 5-column PK `(model_id,
+/// metric_name, metric_timestamp_ms, metric_step, run_id)`. Bind order: model_id,
+/// metric_name, metric_timestamp_ms, metric_step, metric_value, experiment_id,
+/// run_id, dataset_uuid, dataset_name, dataset_digest.
+fn model_metric_insert_sql(dialect: Dialect) -> String {
+    let spec = crate::dialect::UpsertSpec {
+        table: LOGGED_MODEL_METRICS,
+        columns: &[
+            "model_id",
+            "metric_name",
+            "metric_timestamp_ms",
+            "metric_step",
+            "metric_value",
+            "experiment_id",
+            "run_id",
+            "dataset_uuid",
+            "dataset_name",
+            "dataset_digest",
+        ],
+        pk_columns: &[
+            "model_id",
+            "metric_name",
+            "metric_timestamp_ms",
+            "metric_step",
+            "run_id",
+        ],
+        update_columns: &[],
+    };
+    dialect.upsert(&spec)
 }
 
 // ============================================================================

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use mlflow_store::{
     DatasetFilter, Db, LoggedModelKv, LoggedModelMetricInput, LoggedModelOrderByInput,
-    LoggedModelStatus, PoolConfig, TrackingStore,
+    LoggedModelStatus, MetricInput, PoolConfig, TrackingStore,
 };
 
 const WS: &str = "default";
@@ -1052,4 +1052,460 @@ async fn search_logged_models_no_leakage_across_workspaces() {
         .unwrap();
     assert_eq!(page.models.len(), 1);
     assert_eq!(page.models[0].model_id, model_b.model_id);
+}
+
+// ---------------------------------------------------------------------------
+// log_logged_model_metrics / `_log_model_metrics` production port
+// ---------------------------------------------------------------------------
+
+fn run_metric(key: &str, value: f64, ts: i64, step: i64, model_id: &str) -> MetricInput {
+    MetricInput {
+        key: key.to_string(),
+        value,
+        timestamp: ts,
+        step,
+        model_id: Some(model_id.to_string()),
+        dataset_name: None,
+        dataset_digest: None,
+    }
+}
+
+fn model_metrics_of<'a>(
+    model: &'a mlflow_store::LoggedModel,
+    key: &str,
+) -> Vec<&'a mlflow_store::LoggedModelMetric> {
+    model.metrics.iter().filter(|m| m.key == key).collect()
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_single_and_batch() {
+    let tmp = TempDb::new("model_metrics_single_batch");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let exp_num: i64 = exp.parse().unwrap();
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    // Single write via the standalone entry point.
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[metric("acc", 0.5, 100, 0)],
+    )
+    .await
+    .unwrap();
+
+    // Batch write of several distinct points.
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[
+            metric("acc", 0.6, 200, 1),
+            metric("loss", 0.1, 100, 0),
+            metric("loss", 0.05, 200, 1),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let got = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    assert_eq!(model_metrics_of(&got, "acc").len(), 2);
+    assert_eq!(model_metrics_of(&got, "loss").len(), 2);
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_duplicates_within_batch_are_deduped() {
+    let tmp = TempDb::new("model_metrics_batch_dedup");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let exp_num: i64 = exp.parse().unwrap();
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    // The exact same (key, value, timestamp, step, dataset) point three times
+    // in one call: Python's per-call `seen` set (keyed on the full `Metric`
+    // tuple) collapses these to one write before ever touching the DB.
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[
+            metric("acc", 0.5, 100, 0),
+            metric("acc", 0.5, 100, 0),
+            metric("acc", 0.5, 100, 0),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let got = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    assert_eq!(model_metrics_of(&got, "acc").len(), 1);
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_conflict_with_existing_row_is_idempotent() {
+    let tmp = TempDb::new("model_metrics_conflict_existing");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let exp_num: i64 = exp.parse().unwrap();
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[metric("acc", 0.5, 100, 0)],
+    )
+    .await
+    .unwrap();
+
+    // Re-logging the identical PK (model_id, key, timestamp, step, run_id) in
+    // a second, separate call is a silent no-op — matches Python's
+    // IntegrityError-rollback-and-filter-existing outcome.
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[metric("acc", 0.5, 100, 0)],
+    )
+    .await
+    .unwrap();
+
+    let got = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    assert_eq!(model_metrics_of(&got, "acc").len(), 1);
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_nan_and_inf_are_sanitized() {
+    let tmp = TempDb::new("model_metrics_nan_inf");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let exp_num: i64 = exp.parse().unwrap();
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    s.log_logged_model_metrics(
+        &model.model_id,
+        exp_num,
+        &run_id,
+        None,
+        &[
+            metric("nan_metric", f64::NAN, 0, 0),
+            metric("posinf_metric", f64::INFINITY, 0, 0),
+            metric("neginf_metric", f64::NEG_INFINITY, 0, 0),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let got = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    // NaN is permanently lost to 0.0 (no is_nan column on this table).
+    assert_eq!(model_metrics_of(&got, "nan_metric")[0].value, Some(0.0));
+    assert_eq!(
+        model_metrics_of(&got, "posinf_metric")[0].value,
+        Some(f64::MAX)
+    );
+    assert_eq!(
+        model_metrics_of(&got, "neginf_metric")[0].value,
+        Some(-f64::MAX)
+    );
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_missing_model_errors() {
+    let tmp = TempDb::new("model_metrics_missing_model");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let exp_num: i64 = exp.parse().unwrap();
+
+    let err = s
+        .log_logged_model_metrics(
+            "m-doesnotexist",
+            exp_num,
+            &run_id,
+            None,
+            &[metric("acc", 0.5, 100, 0)],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.message,
+        "Logged model with ID 'm-doesnotexist' not found."
+    );
+}
+
+#[tokio::test]
+async fn log_logged_model_metrics_workspace_scoped_model_lookup() {
+    let tmp = TempDb::new("model_metrics_workspace");
+    let s = store(&tmp).await;
+    let exp_a = new_experiment_ws(&s, WS).await;
+    let run_a = new_run_in_ws(&s, WS, &exp_a).await;
+    let exp_num: i64 = exp_a.parse().unwrap();
+    let model_a = s
+        .create_logged_model(WS, &exp_a, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    // A model created in WS must not be reachable from WS2's viewpoint, even
+    // when the caller supplies the correct model_id/experiment_id/run_id.
+    let err = s
+        .log_logged_model_metrics(
+            &model_a.model_id,
+            exp_num,
+            &run_a,
+            None,
+            &[metric("acc", 0.5, 100, 0)],
+        )
+        .await;
+    // Same workspace: succeeds.
+    assert!(err.is_ok());
+
+    // Different run in a different workspace referencing model_a's id: since
+    // `log_logged_model_metrics`'s workspace is derived from `experiment_id`
+    // (the model's own experiment), simulate the cross-workspace case via
+    // `log_batch`, which takes an explicit `workspace` argument independent of
+    // the metric's model_id.
+    let exp_b = new_experiment_ws(&s, WS2).await;
+    let run_b = new_run_in_ws(&s, WS2, &exp_b).await;
+    let err = s
+        .log_batch(
+            WS2,
+            &run_b,
+            &[run_metric("acc", 0.5, 100, 0, &model_a.model_id)],
+            &[],
+            &[],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.message,
+        format!("Logged model with ID '{}' not found.", model_a.model_id)
+    );
+}
+
+#[tokio::test]
+async fn log_batch_with_mixed_run_and_model_metrics() {
+    let tmp = TempDb::new("log_batch_mixed");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    // A run-only metric (no model_id) and a model-carrying metric in the same
+    // log_batch call. Python routes ALL metrics through `_log_metrics` (run
+    // tables) and additionally routes the model_id subset through
+    // `_log_model_metrics` — a model metric lands in BOTH places, not one or
+    // the other.
+    s.log_batch(
+        WS,
+        &run_id,
+        &[
+            MetricInput {
+                key: "run_only".to_string(),
+                value: 1.0,
+                timestamp: 10,
+                step: 0,
+                model_id: None,
+                dataset_name: None,
+                dataset_digest: None,
+            },
+            run_metric("model_metric", 2.0, 10, 0, &model.model_id),
+        ],
+        &[],
+        &[],
+    )
+    .await
+    .unwrap();
+
+    let run = s.get_run(WS, &run_id).await.unwrap();
+    let run_metrics: Vec<&str> = run.data.metrics.iter().map(|m| m.key.as_str()).collect();
+    assert!(run_metrics.contains(&"run_only"));
+    // The model metric is ALSO present in the run's latest_metrics.
+    assert!(run_metrics.contains(&"model_metric"));
+
+    let got_model = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    assert_eq!(model_metrics_of(&got_model, "model_metric").len(), 1);
+    // The run-only metric never reaches logged_model_metrics.
+    assert!(model_metrics_of(&got_model, "run_only").is_empty());
+}
+
+#[tokio::test]
+async fn log_batch_with_metrics_for_two_different_models_in_one_call() {
+    // Two metrics with the SAME key/value/timestamp/step but different
+    // model_id must both be written — model_id is part of the dedup identity
+    // (mirrors Python's `Metric.__eq__`, which includes model_id), so this
+    // must not collapse to a single row.
+    let tmp = TempDb::new("log_batch_two_models_same_point");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let m1 = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+    let m2 = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    s.log_batch(
+        WS,
+        &run_id,
+        &[
+            run_metric("acc", 0.9, 100, 0, &m1.model_id),
+            run_metric("acc", 0.9, 100, 0, &m2.model_id),
+        ],
+        &[],
+        &[],
+    )
+    .await
+    .unwrap();
+
+    let got_m1 = s.get_logged_model(WS, &m1.model_id, false).await.unwrap();
+    let got_m2 = s.get_logged_model(WS, &m2.model_id, false).await.unwrap();
+    assert_eq!(model_metrics_of(&got_m1, "acc").len(), 1);
+    assert_eq!(model_metrics_of(&got_m2, "acc").len(), 1);
+}
+
+#[tokio::test]
+async fn log_batch_model_metrics_dataset_scoped_visible_in_search_ordering() {
+    let tmp = TempDb::new("log_batch_model_metrics_search");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let m1 = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+    let m2 = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    s.log_batch(
+        WS,
+        &run_id,
+        &[run_metric("accuracy", 0.9, 100, 1, &m1.model_id)],
+        &[],
+        &[],
+    )
+    .await
+    .unwrap();
+    s.log_batch(
+        WS,
+        &run_id,
+        &[run_metric("accuracy", 0.5, 100, 1, &m2.model_id)],
+        &[],
+        &[],
+    )
+    .await
+    .unwrap();
+
+    let ids = search_ids(
+        &s,
+        WS,
+        std::slice::from_ref(&exp),
+        Some("metrics.accuracy > 0.8"),
+    )
+    .await;
+    assert_eq!(ids, vec![m1.model_id]);
+}
+
+#[tokio::test]
+async fn log_metric_single_with_model_id_writes_both_tables() {
+    let tmp = TempDb::new("log_metric_model_id");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+    let model = s
+        .create_logged_model(WS, &exp, None, None, &[], &[], None)
+        .await
+        .unwrap();
+
+    s.log_metric(
+        WS,
+        &run_id,
+        &run_metric("acc", 0.75, 1000, 0, &model.model_id),
+    )
+    .await
+    .unwrap();
+
+    let run = s.get_run(WS, &run_id).await.unwrap();
+    assert!(run
+        .data
+        .metrics
+        .iter()
+        .any(|m| m.key == "acc" && m.value == 0.75));
+
+    let got_model = s
+        .get_logged_model(WS, &model.model_id, false)
+        .await
+        .unwrap();
+    assert_eq!(model_metrics_of(&got_model, "acc").len(), 1);
+    assert_eq!(model_metrics_of(&got_model, "acc")[0].value, Some(0.75));
+}
+
+#[tokio::test]
+async fn log_metric_missing_model_id_errors_and_writes_nothing() {
+    let tmp = TempDb::new("log_metric_missing_model");
+    let s = store(&tmp).await;
+    let exp = new_experiment(&s).await;
+    let run_id = new_run_in(&s, &exp).await;
+
+    let err = s
+        .log_metric(
+            WS,
+            &run_id,
+            &run_metric("acc", 0.75, 1000, 0, "m-doesnotexist"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.message,
+        "Logged model with ID 'm-doesnotexist' not found."
+    );
+
+    // The whole call is one transaction: the run metric must not have been
+    // written either, since the model-metrics leg failed first.
+    let run = s.get_run(WS, &run_id).await.unwrap();
+    assert!(!run.data.metrics.iter().any(|m| m.key == "acc"));
 }
