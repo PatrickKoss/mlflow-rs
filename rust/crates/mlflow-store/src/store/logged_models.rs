@@ -1225,6 +1225,7 @@ fn model_metric_insert_sql(dialect: Dialect) -> String {
             "run_id",
         ],
         update_columns: &[],
+        ..Default::default()
     };
     dialect.upsert(&spec)
 }
