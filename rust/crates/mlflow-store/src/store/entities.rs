@@ -190,3 +190,65 @@ pub struct MetricWithRunId {
     pub run_id: String,
     pub metric: Metric,
 }
+
+/// The source of an assessment (`mlflow.entities.AssessmentSource`).
+/// `source_id` defaults to `"default"` at the entity layer in Python; the
+/// store treats it as an already-resolved, optional string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssessmentSource {
+    pub source_type: String,
+    pub source_id: Option<String>,
+}
+
+/// `mlflow.entities.AssessmentError` (feedback-only). Stored as JSON in the
+/// `assessments.error` column (`AssessmentError.to_dictionary`); field order
+/// here matches Python's dict for readability, though JSON object key order
+/// is not semantically significant.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AssessmentError {
+    pub error_code: String,
+    pub error_message: Option<String>,
+    pub stack_trace: Option<String>,
+}
+
+/// The discriminated payload of an assessment: exactly one of expectation,
+/// feedback, or issue (mirrors `Assessment.__post_init__`'s "exactly one of"
+/// invariant and `SqlAssessments.assessment_type`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssessmentValue {
+    /// `mlflow.entities.ExpectationValue`. `value` is the raw JSON
+    /// representation of `ExpectationValue.value` (`json.dumps(value)` in
+    /// `SqlAssessments.from_mlflow_entity`).
+    Expectation { value_json: String },
+    /// `mlflow.entities.FeedbackValue`. `value_json` is
+    /// `json.dumps(FeedbackValue.value)`; `error` is the optional
+    /// `AssessmentError`.
+    Feedback {
+        value_json: String,
+        error: Option<AssessmentError>,
+    },
+    /// `mlflow.entities.IssueReferenceValue`. Stored as
+    /// `json.dumps({"issue_name": ...})`.
+    Issue { issue_name: String },
+}
+
+/// An assessment (`mlflow.entities.Assessment`/`Feedback`/`Expectation`),
+/// mirroring `SqlAssessments.to_mlflow_entity`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Assessment {
+    pub assessment_id: String,
+    pub trace_id: String,
+    pub name: String,
+    pub value: AssessmentValue,
+    pub source: AssessmentSource,
+    pub run_id: Option<String>,
+    pub span_id: Option<String>,
+    pub rationale: Option<String>,
+    pub metadata: Option<std::collections::BTreeMap<String, String>>,
+    pub create_time_ms: i64,
+    pub last_update_time_ms: i64,
+    /// The assessment_id this one overrides/supersedes, if any.
+    pub overrides: Option<String>,
+    /// Whether the assessment is still in effect (false once overridden).
+    pub valid: bool,
+}
