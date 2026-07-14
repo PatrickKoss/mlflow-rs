@@ -767,6 +767,7 @@ async fn upsert_input(
             "destination_id",
         ],
         update_columns: &["input_uuid", "step"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

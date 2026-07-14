@@ -837,7 +837,11 @@ async fn upsert_trace_info(
                 .collect();
             for c in ["request_preview", "response_preview"] {
                 let q = dialect.quote_ident(c);
-                sets.push(format!("{q} = COALESCE(excluded.{q}, {q})"));
+                // Postgres requires qualifying the existing-row reference in
+                // DO UPDATE SET (bare `{q}` is ambiguous vs `excluded.{q}`);
+                // sqlite accepts the qualified form too.
+                let t = dialect.quote_ident(TRACE_INFO);
+                sets.push(format!("{q} = COALESCE(excluded.{q}, {t}.{q})"));
             }
             format!(
                 "{insert} ON CONFLICT ({}) DO UPDATE SET {}",
@@ -892,6 +896,7 @@ async fn upsert_trace_child(
         columns: &["request_id", "key", "value"],
         pk_columns: &["request_id", "key"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(
@@ -920,6 +925,7 @@ async fn upsert_trace_metric(
         columns: &["request_id", "key", "value"],
         pk_columns: &["request_id", "key"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

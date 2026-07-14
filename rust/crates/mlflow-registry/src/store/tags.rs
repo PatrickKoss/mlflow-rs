@@ -56,11 +56,14 @@ impl RegistryStore {
         validation::validate_tag_key(key)?;
         self.require_registered_model(workspace, name).await?;
         let dialect = self.db().dialect();
+        // `key` is a reserved word in MySQL — always quote it.
         let sql = format!(
-            "DELETE FROM {REGISTERED_MODEL_TAGS} WHERE workspace = {} AND name = {} AND key = {}",
+            "DELETE FROM {REGISTERED_MODEL_TAGS} \
+             WHERE workspace = {} AND name = {} AND {keycol} = {}",
             dialect.placeholder(1),
             dialect.placeholder(2),
-            dialect.placeholder(3)
+            dialect.placeholder(3),
+            keycol = dialect.quote_ident("key"),
         );
         self.db()
             .exec(
@@ -95,6 +98,7 @@ impl RegistryStore {
             columns: &["workspace", "name", "version", "key", "value"],
             pk_columns: &["workspace", "key", "name", "version"],
             update_columns: &["value"],
+            ..Default::default()
         };
         let sql = dialect.upsert(&spec);
         self.db()
@@ -126,13 +130,15 @@ impl RegistryStore {
         validation::validate_tag_key(key)?;
         let mv = self.require_model_version(workspace, name, version).await?;
         let dialect = self.db().dialect();
+        // `key` is a reserved word in MySQL — always quote it.
         let sql = format!(
             "DELETE FROM {MODEL_VERSION_TAGS} \
-             WHERE workspace = {} AND name = {} AND version = {} AND key = {}",
+             WHERE workspace = {} AND name = {} AND version = {} AND {keycol} = {}",
             dialect.placeholder(1),
             dialect.placeholder(2),
             dialect.placeholder(3),
-            dialect.placeholder(4)
+            dialect.placeholder(4),
+            keycol = dialect.quote_ident("key"),
         );
         self.db()
             .exec(

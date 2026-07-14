@@ -998,6 +998,7 @@ async fn upsert_tag_tx(
         columns: &["model_id", "experiment_id", "tag_key", "tag_value"],
         pk_columns: &["model_id", "tag_key"],
         update_columns: &["tag_value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

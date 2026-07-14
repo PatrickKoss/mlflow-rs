@@ -46,6 +46,7 @@ impl RegistryStore {
             columns: &["workspace", "name", "alias", "version"],
             pk_columns: &["workspace", "name", "alias"],
             update_columns: &["version"],
+            ..Default::default()
         };
         let sql = dialect.upsert(&spec);
         self.db()

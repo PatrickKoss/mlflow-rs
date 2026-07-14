@@ -40,7 +40,7 @@ impl TrackingStore {
 
         let dialect = self.db().dialect();
         let sql = format!(
-            "INSERT INTO params (key, value, run_uuid) VALUES ({}, {}, {})",
+            "INSERT INTO params (\"key\", value, run_uuid) VALUES ({}, {}, {})",
             dialect.placeholder(1),
             dialect.placeholder(2),
             dialect.placeholder(3)
@@ -123,7 +123,7 @@ impl TrackingStore {
         check_run_active(&row)?;
         let dialect = self.db().dialect();
         let sql = format!(
-            "DELETE FROM tags WHERE run_uuid = {} AND key = {}",
+            "DELETE FROM tags WHERE run_uuid = {} AND \"key\" = {}",
             dialect.placeholder(1),
             dialect.placeholder(2)
         );
@@ -150,7 +150,7 @@ impl TrackingStore {
     ) -> Result<Option<String>, MlflowError> {
         let dialect = self.db().dialect();
         let sql = format!(
-            "SELECT value FROM params WHERE run_uuid = {} AND key = {}",
+            "SELECT value FROM params WHERE run_uuid = {} AND \"key\" = {}",
             dialect.placeholder(1),
             dialect.placeholder(2)
         );
@@ -178,6 +178,7 @@ pub(crate) async fn upsert_tag(
         columns: &["key", "value", "run_uuid"],
         pk_columns: &["key", "run_uuid"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

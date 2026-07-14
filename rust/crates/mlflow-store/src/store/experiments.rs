@@ -98,7 +98,7 @@ impl TrackingStore {
 
         for (k, v) in tags {
             let sql = format!(
-                "INSERT INTO {EXPERIMENT_TAGS} (key, value, experiment_id) VALUES ({}, {}, {})",
+                "INSERT INTO {EXPERIMENT_TAGS} (\"key\", value, experiment_id) VALUES ({}, {}, {})",
                 ph(1),
                 ph(2),
                 ph(3)
@@ -297,6 +297,7 @@ impl TrackingStore {
             columns: &["key", "value", "experiment_id"],
             pk_columns: &["key", "experiment_id"],
             update_columns: &["value"],
+            ..Default::default()
         };
         let sql = dialect.upsert(&spec);
         self.db()
@@ -328,7 +329,7 @@ impl TrackingStore {
         require_active_experiment(&exp)?;
         let dialect = self.db().dialect();
         let sql = format!(
-            "DELETE FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} AND key = {}",
+            "DELETE FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} AND \"key\" = {}",
             dialect.placeholder(1),
             dialect.placeholder(2)
         );
@@ -400,7 +401,7 @@ impl TrackingStore {
     ) -> Result<Vec<ExperimentTag>, MlflowError> {
         let dialect = self.db().dialect();
         let sql = format!(
-            "SELECT key, value FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} ORDER BY key",
+            "SELECT \"key\", value FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} ORDER BY \"key\"",
             dialect.placeholder(1)
         );
         self.db()

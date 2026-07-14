@@ -63,13 +63,15 @@ impl RegistryStore {
                 continue;
             }
             seen.push(k);
+            // `key` is a reserved word in MySQL — always quote it.
             let sql = format!(
-                "INSERT INTO {REGISTERED_MODEL_TAGS} (workspace, name, key, value) \
+                "INSERT INTO {REGISTERED_MODEL_TAGS} (workspace, name, {keycol}, value) \
                  VALUES ({}, {}, {}, {})",
                 ph(1),
                 ph(2),
                 ph(3),
-                ph(4)
+                ph(4),
+                keycol = dialect.quote_ident("key"),
             );
             tx.exec(
                 &sql,
@@ -365,11 +367,13 @@ impl RegistryStore {
         name: &str,
     ) -> Result<Vec<RegisteredModelTag>, MlflowError> {
         let dialect = self.db().dialect();
+        // `key` is a reserved word in MySQL — always quote it.
         let sql = format!(
-            "SELECT key, value FROM {REGISTERED_MODEL_TAGS} \
-             WHERE workspace = {} AND name = {} ORDER BY key",
+            "SELECT {keycol}, value FROM {REGISTERED_MODEL_TAGS} \
+             WHERE workspace = {} AND name = {} ORDER BY {keycol}",
             dialect.placeholder(1),
-            dialect.placeholder(2)
+            dialect.placeholder(2),
+            keycol = dialect.quote_ident("key"),
         );
         self.db()
             .fetch_all(
@@ -524,5 +528,6 @@ pub(crate) fn registered_model_tag_upsert() -> UpsertSpec<'static> {
         columns: &["workspace", "name", "key", "value"],
         pk_columns: &["workspace", "key", "name"],
         update_columns: &["value"],
+        ..Default::default()
     }
 }

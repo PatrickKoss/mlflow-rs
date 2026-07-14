@@ -615,7 +615,7 @@ fn build_search_sql(
             "run_uuid, value"
         };
         sql.push_str(&format!(
-            " LEFT JOIN (SELECT {cols} FROM {tbl} WHERE key = {key_ph}) {alias} \
+            " LEFT JOIN (SELECT {cols} FROM {tbl} WHERE \"key\" = {key_ph}) {alias} \
              ON {alias}.run_uuid = r.run_uuid",
             tbl = j.table,
             alias = j.alias,
@@ -1330,8 +1330,8 @@ impl TrackingStore {
     ) -> Result<HashMap<String, Vec<Param>>, MlflowError> {
         let (sql, binds) = in_query(
             self.db().dialect(),
-            "SELECT run_uuid, key, value FROM params WHERE run_uuid IN",
-            " ORDER BY run_uuid, key",
+            "SELECT run_uuid, \"key\", value FROM params WHERE run_uuid IN",
+            " ORDER BY run_uuid, \"key\"",
             run_ids,
         );
         let rows = self
@@ -1356,8 +1356,8 @@ impl TrackingStore {
     ) -> Result<HashMap<String, Vec<RunTag>>, MlflowError> {
         let (sql, binds) = in_query(
             self.db().dialect(),
-            "SELECT run_uuid, key, value FROM tags WHERE run_uuid IN",
-            " ORDER BY run_uuid, key",
+            "SELECT run_uuid, \"key\", value FROM tags WHERE run_uuid IN",
+            " ORDER BY run_uuid, \"key\"",
             run_ids,
         );
         let rows = self
@@ -1382,9 +1382,9 @@ impl TrackingStore {
     ) -> Result<HashMap<String, Vec<Metric>>, MlflowError> {
         let (sql, binds) = in_query(
             self.db().dialect(),
-            "SELECT run_uuid, key, value, timestamp, step, is_nan FROM latest_metrics \
+            "SELECT run_uuid, \"key\", value, timestamp, step, is_nan FROM latest_metrics \
              WHERE run_uuid IN",
-            " ORDER BY run_uuid, key",
+            " ORDER BY run_uuid, \"key\"",
             run_ids,
         );
         let rows = self

@@ -335,7 +335,9 @@ impl TrackingStore {
         let params = self
             .db()
             .fetch_all(
-                &format!("SELECT key, value FROM params WHERE run_uuid = {ph1} ORDER BY key"),
+                &format!(
+                    "SELECT \"key\", value FROM params WHERE run_uuid = {ph1} ORDER BY \"key\""
+                ),
                 &[Val::Text(run_id.to_string())],
                 |r| {
                     Ok(Param {
@@ -350,7 +352,7 @@ impl TrackingStore {
         let tags = self
             .db()
             .fetch_all(
-                &format!("SELECT key, value FROM tags WHERE run_uuid = {ph1} ORDER BY key"),
+                &format!("SELECT \"key\", value FROM tags WHERE run_uuid = {ph1} ORDER BY \"key\""),
                 &[Val::Text(run_id.to_string())],
                 |r| {
                     Ok(RunTag {
@@ -392,7 +394,7 @@ async fn insert_tag_tx(
     value: &str,
 ) -> Result<(), MlflowError> {
     let sql = format!(
-        "INSERT INTO tags (key, value, run_uuid) VALUES ({}, {}, {})",
+        "INSERT INTO tags (\"key\", value, run_uuid) VALUES ({}, {}, {})",
         dialect.placeholder(1),
         dialect.placeholder(2),
         dialect.placeholder(3)
@@ -423,6 +425,7 @@ pub(crate) async fn sync_run_name_tag(
         columns: &["key", "value", "run_uuid"],
         pk_columns: &["key", "run_uuid"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

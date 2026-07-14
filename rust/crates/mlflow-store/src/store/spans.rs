@@ -262,6 +262,7 @@ async fn create_trace_info_from_spans(
         ],
         pk_columns: &["request_id"],
         update_columns: &[],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(
@@ -315,6 +316,9 @@ async fn upsert_span(
             "content",
             "dimension_attributes",
         ],
+        // `dimension_attributes` is a `json`-typed column (models.py:2027);
+        // Postgres refuses a bare text bind for it.
+        json_columns: &["dimension_attributes"],
     };
     let sql = dialect.upsert(&spec);
     tx.exec(
@@ -349,6 +353,7 @@ async fn upsert_span_metric(
         columns: &["trace_id", "span_id", "key", "value"],
         pk_columns: &["trace_id", "span_id", "key"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(
@@ -454,6 +459,7 @@ async fn upsert_spans_location_tag(
         columns: &["request_id", "key", "value"],
         pk_columns: &["request_id", "key"],
         update_columns: &["value"],
+        ..Default::default()
     };
     let sql = dialect.upsert(&spec);
     tx.exec(

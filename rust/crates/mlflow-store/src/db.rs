@@ -165,6 +165,19 @@ impl Db {
                     .map_err(StoreError::Connect)?;
                 let opts = maybe_disable_statement_logging(opts, cfg.echo);
                 let pool = mysql_pool_options(&cfg)
+                    .after_connect(|conn, _meta| {
+                        Box::pin(async move {
+                            // ANSI_QUOTES lets hand-written SQL use standard
+                            // double-quoted identifiers (`"key"` — a MySQL
+                            // reserved word) uniformly across all dialects.
+                            // Backtick quoting (quote_ident) stays valid too.
+                            conn.execute(
+                                "SET SESSION sql_mode = CONCAT(@@sql_mode, ',ANSI_QUOTES');",
+                            )
+                            .await?;
+                            Ok(())
+                        })
+                    })
                     .connect_with(opts)
                     .await
                     .map_err(StoreError::Connect)?;

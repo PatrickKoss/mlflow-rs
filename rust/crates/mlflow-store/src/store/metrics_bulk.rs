@@ -86,8 +86,8 @@ impl TrackingStore {
             .collect();
 
         let sql = format!(
-            "SELECT run_uuid, key, value, timestamp, step, is_nan FROM metrics \
-             WHERE key = {} AND run_uuid IN ({}) \
+            "SELECT run_uuid, \"key\", value, timestamp, step, is_nan FROM metrics \
+             WHERE \"key\" = {} AND run_uuid IN ({}) \
              ORDER BY run_uuid, timestamp, step, value \
              LIMIT {}",
             ph(1),
@@ -207,8 +207,8 @@ impl TrackingStore {
             })
             .collect();
         let sql = format!(
-            "SELECT run_uuid, key, value, timestamp, step, is_nan FROM metrics \
-             WHERE key = {} AND run_uuid = {} AND step IN ({}) \
+            "SELECT run_uuid, \"key\", value, timestamp, step, is_nan FROM metrics \
+             WHERE \"key\" = {} AND run_uuid = {} AND step IN ({}) \
              ORDER BY run_uuid, step, timestamp, value \
              LIMIT {}",
             ph(1),
@@ -244,7 +244,7 @@ impl TrackingStore {
             .collect();
         let sql = format!(
             "SELECT DISTINCT step FROM metrics \
-             WHERE key = {} AND run_uuid IN ({}) ORDER BY step",
+             WHERE \"key\" = {} AND run_uuid IN ({}) ORDER BY step",
             ph(1),
             placeholders.join(", "),
         );
@@ -276,7 +276,7 @@ impl TrackingStore {
             .collect();
         let sql = format!(
             "SELECT MIN(step) AS min_step, MAX(step) AS max_step FROM metrics \
-             WHERE key = {} AND run_uuid IN ({}) GROUP BY run_uuid",
+             WHERE \"key\" = {} AND run_uuid IN ({}) GROUP BY run_uuid",
             ph(1),
             placeholders.join(", "),
         );

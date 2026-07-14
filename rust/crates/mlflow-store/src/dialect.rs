@@ -110,9 +110,14 @@ impl Dialect {
         let values: Vec<String> = spec
             .columns
             .iter()
-            .map(|_| {
+            .map(|c| {
                 ph += 1;
-                self.placeholder(ph)
+                let p = self.placeholder(ph);
+                if matches!(self, Dialect::Postgres) && spec.json_columns.contains(c) {
+                    format!("CAST({p} AS json)")
+                } else {
+                    p
+                }
             })
             .collect();
         let insert = format!(
@@ -211,7 +216,7 @@ impl Dialect {
 }
 
 /// Inputs to [`Dialect::upsert`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UpsertSpec<'a> {
     /// Target table name (unquoted).
     pub table: &'a str,
@@ -221,6 +226,9 @@ pub struct UpsertSpec<'a> {
     pub pk_columns: &'a [&'a str],
     /// Non-PK columns to overwrite on conflict (unquoted). Empty => do-nothing.
     pub update_columns: &'a [&'a str],
+    /// Columns with a `json` SQL type whose text bind must be cast on
+    /// Postgres (`CAST($n AS json)`); sqlite/mysql accept plain text binds.
+    pub json_columns: &'a [&'a str],
 }
 
 #[cfg(test)]
@@ -238,6 +246,7 @@ mod tests {
             columns,
             pk_columns: pk,
             update_columns: update,
+            ..Default::default()
         }
     }
 

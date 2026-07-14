@@ -119,8 +119,8 @@ impl TrackingStore {
         let ph = |i| dialect.placeholder(i);
 
         let mut sql = format!(
-            "SELECT key, value, timestamp, step, is_nan FROM metrics \
-             WHERE run_uuid = {} AND key = {} \
+            "SELECT \"key\", value, timestamp, step, is_nan FROM metrics \
+             WHERE run_uuid = {} AND \"key\" = {} \
              ORDER BY timestamp, step, value",
             ph(1),
             ph(2)
@@ -214,8 +214,8 @@ impl TrackingStore {
     ) -> Result<Vec<Metric>, MlflowError> {
         let dialect = self.db().dialect();
         let sql = format!(
-            "SELECT key, value, timestamp, step, is_nan FROM latest_metrics \
-             WHERE run_uuid = {} ORDER BY key",
+            "SELECT \"key\", value, timestamp, step, is_nan FROM latest_metrics \
+             WHERE run_uuid = {} ORDER BY \"key\"",
             dialect.placeholder(1)
         );
         self.db()
@@ -239,7 +239,7 @@ impl TrackingStore {
         let existing = tx
             .fetch_all(
                 &format!(
-                    "SELECT key, value FROM params WHERE run_uuid = {}",
+                    "SELECT \"key\", value FROM params WHERE run_uuid = {}",
                     dialect.placeholder(1)
                 ),
                 &[Val::Text(run_id.to_string())],
@@ -277,7 +277,7 @@ impl TrackingStore {
 
         for (k, v) in to_insert {
             let sql = format!(
-                "INSERT INTO params (key, value, run_uuid) VALUES ({}, {}, {})",
+                "INSERT INTO params (\"key\", value, run_uuid) VALUES ({}, {}, {})",
                 dialect.placeholder(1),
                 dialect.placeholder(2),
                 dialect.placeholder(3)
@@ -380,7 +380,7 @@ async fn insert_metrics(
 
 /// `INSERT INTO metrics ... ON CONFLICT/DUPLICATE DO NOTHING` (6-col PK dedup).
 fn metrics_insert_sql(dialect: Dialect) -> String {
-    let cols = "(key, value, timestamp, step, is_nan, run_uuid)";
+    let cols = "(\"key\", value, timestamp, step, is_nan, run_uuid)";
     let values = match dialect {
         Dialect::Postgres => "($1, $2, $3, $4, $5, $6)",
         Dialect::Sqlite | Dialect::MySql => "(?, ?, ?, ?, ?, ?)",
@@ -414,7 +414,7 @@ fn latest_metric_upsert_sql(dialect: Dialect) -> String {
                 "(?, ?, ?, ?, ?, ?)"
             };
             format!(
-                "INSERT INTO latest_metrics (key, value, timestamp, step, is_nan, run_uuid) \
+                "INSERT INTO latest_metrics (\"key\", value, timestamp, step, is_nan, run_uuid) \
                  VALUES {values} \
                  ON CONFLICT (key, run_uuid) DO UPDATE SET \
                  value = excluded.value, timestamp = excluded.timestamp, \
@@ -432,7 +432,7 @@ fn latest_metric_upsert_sql(dialect: Dialect) -> String {
                   (VALUES(timestamp) > timestamp OR \
                    (VALUES(timestamp) = timestamp AND VALUES(value) > value))))";
             format!(
-                "INSERT INTO latest_metrics (key, value, timestamp, step, is_nan, run_uuid) \
+                "INSERT INTO latest_metrics (\"key\", value, timestamp, step, is_nan, run_uuid) \
                  VALUES (?, ?, ?, ?, ?, ?) \
                  ON DUPLICATE KEY UPDATE \
                  value = IF({greater}, VALUES(value), value), \

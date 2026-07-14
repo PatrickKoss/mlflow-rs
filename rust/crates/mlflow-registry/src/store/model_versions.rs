@@ -145,14 +145,16 @@ impl RegistryStore {
                     continue;
                 }
                 seen.push(k);
+                // `key` is a reserved word in MySQL — always quote it.
                 let tag_sql = format!(
-                    "INSERT INTO {MODEL_VERSION_TAGS} (workspace, name, version, key, value) \
+                    "INSERT INTO {MODEL_VERSION_TAGS} (workspace, name, version, {keycol}, value) \
                      VALUES ({}, {}, {}, {}, {})",
                     ph(1),
                     ph(2),
                     ph(3),
                     ph(4),
-                    ph(5)
+                    ph(5),
+                    keycol = dialect.quote_ident("key"),
                 );
                 tx.exec(
                     &tag_sql,
@@ -349,12 +351,14 @@ pub(crate) async fn fetch_model_version_tags(
     version: i64,
 ) -> Result<Vec<ModelVersionTag>, MlflowError> {
     let dialect = db.dialect();
+    // `key` is a reserved word in MySQL — always quote it.
     let sql = format!(
-        "SELECT key, value FROM {MODEL_VERSION_TAGS} \
-         WHERE workspace = {} AND name = {} AND version = {} ORDER BY key",
+        "SELECT {keycol}, value FROM {MODEL_VERSION_TAGS} \
+         WHERE workspace = {} AND name = {} AND version = {} ORDER BY {keycol}",
         dialect.placeholder(1),
         dialect.placeholder(2),
-        dialect.placeholder(3)
+        dialect.placeholder(3),
+        keycol = dialect.quote_ident("key"),
     );
     db.fetch_all(
         &sql,
