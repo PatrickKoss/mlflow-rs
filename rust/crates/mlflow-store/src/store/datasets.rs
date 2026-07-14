@@ -309,6 +309,150 @@ impl TrackingStore {
         Ok(RunOutputs { model_outputs })
     }
 
+    /// Bulk `_get_run_inputs` for `search_runs` (Q8): dataset inputs for every
+    /// run in one query, grouped per run. Mirrors Python's `_get_run_inputs`
+    /// exactly — **dataset inputs only** (model inputs are intentionally absent,
+    /// because `_search_runs` builds `RunInputs(dataset_inputs=...)` and leaves
+    /// `model_inputs` empty, unlike `get_run`). Within a run, datasets keep
+    /// first-seen order; runs with no dataset inputs map to an empty vector.
+    pub(crate) async fn load_run_inputs_bulk(
+        &self,
+        run_ids: &[String],
+    ) -> Result<HashMap<String, RunInputs>, MlflowError> {
+        let mut out: HashMap<String, RunInputs> = HashMap::new();
+        if run_ids.is_empty() {
+            return Ok(out);
+        }
+        let dialect = self.db().dialect();
+        let mut binds: Vec<Val> = Vec::with_capacity(run_ids.len());
+        let phs: Vec<String> = run_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                binds.push(Val::Text(id.clone()));
+                dialect.placeholder(i + 1)
+            })
+            .collect();
+        // Mirror Python's `.order_by("run_uuid")`; the trailing input_uuid keeps
+        // per-run dataset first-seen order stable across backends.
+        let sql = format!(
+            "SELECT i.destination_id AS run_uuid, i.input_uuid AS input_uuid, \
+             d.dataset_uuid AS dataset_uuid, d.name AS name, d.digest AS digest, \
+             d.dataset_source_type AS dataset_source_type, d.dataset_source AS dataset_source, \
+             d.dataset_schema AS dataset_schema, d.dataset_profile AS dataset_profile, \
+             it.name AS tag_name, it.value AS tag_value \
+             FROM inputs i \
+             JOIN datasets d ON i.source_id = d.dataset_uuid \
+             LEFT JOIN input_tags it ON it.input_uuid = i.input_uuid \
+             WHERE i.destination_type = 'RUN' AND i.destination_id IN ({}) \
+             ORDER BY i.destination_id, i.input_uuid",
+            phs.join(", ")
+        );
+        let rows = self
+            .db()
+            .fetch_all(&sql, &binds, |r| {
+                Ok((r.get_string("run_uuid")?, DatasetInputRow::from_row(r)?))
+            })
+            .await
+            .map_err(internal)?;
+
+        // Per run, group by dataset_uuid preserving first-seen order.
+        let mut order: HashMap<String, Vec<String>> = HashMap::new();
+        let mut by_run: HashMap<String, HashMap<String, DatasetInput>> = HashMap::new();
+        for (run_uuid, row) in rows {
+            let run_order = order.entry(run_uuid.clone()).or_default();
+            let run_map = by_run.entry(run_uuid).or_default();
+            let di = run_map.entry(row.dataset_uuid.clone()).or_insert_with(|| {
+                run_order.push(row.dataset_uuid.clone());
+                DatasetInput {
+                    dataset: Dataset {
+                        name: row.name.clone(),
+                        digest: row.digest.clone(),
+                        source_type: row.dataset_source_type.clone(),
+                        source: row.dataset_source.clone(),
+                        schema: row.dataset_schema.clone(),
+                        profile: row.dataset_profile.clone(),
+                    },
+                    tags: Vec::new(),
+                }
+            });
+            if let (Some(k), Some(v)) = (row.tag_name, row.tag_value) {
+                di.tags.push(InputTag { key: k, value: v });
+            }
+        }
+        for id in run_ids {
+            let dataset_inputs = match (order.remove(id), by_run.remove(id)) {
+                (Some(ord), Some(mut map)) => {
+                    ord.into_iter().map(|u| map.remove(&u).unwrap()).collect()
+                }
+                _ => Vec::new(),
+            };
+            out.insert(
+                id.clone(),
+                RunInputs {
+                    dataset_inputs,
+                    model_inputs: Vec::new(),
+                },
+            );
+        }
+        Ok(out)
+    }
+
+    /// Bulk `_get_model_outputs_bulk` for `search_runs` (Q8): model outputs for
+    /// every run in one query, grouped per run in row order.
+    pub(crate) async fn load_run_outputs_bulk(
+        &self,
+        run_ids: &[String],
+    ) -> Result<HashMap<String, RunOutputs>, MlflowError> {
+        let mut out: HashMap<String, RunOutputs> = HashMap::new();
+        if run_ids.is_empty() {
+            return Ok(out);
+        }
+        let dialect = self.db().dialect();
+        let mut binds: Vec<Val> = Vec::with_capacity(run_ids.len());
+        let phs: Vec<String> = run_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                binds.push(Val::Text(id.clone()));
+                dialect.placeholder(i + 1)
+            })
+            .collect();
+        let sql = format!(
+            "SELECT source_id, destination_id, step FROM inputs \
+             WHERE source_type = 'RUN_OUTPUT' AND destination_type = 'MODEL_OUTPUT' \
+             AND source_id IN ({})",
+            phs.join(", ")
+        );
+        let rows = self
+            .db()
+            .fetch_all(&sql, &binds, |r| {
+                Ok((
+                    r.get_string("source_id")?,
+                    LoggedModelOutput {
+                        model_id: r.get_string("destination_id")?,
+                        step: r.get_i64("step")?,
+                    },
+                ))
+            })
+            .await
+            .map_err(internal)?;
+        for id in run_ids {
+            out.entry(id.clone()).or_insert_with(|| RunOutputs {
+                model_outputs: Vec::new(),
+            });
+        }
+        for (run_uuid, output) in rows {
+            out.entry(run_uuid)
+                .or_insert_with(|| RunOutputs {
+                    model_outputs: Vec::new(),
+                })
+                .model_outputs
+                .push(output);
+        }
+        Ok(out)
+    }
+
     /// `_get_run_inputs` for a single run: dataset inputs grouped by dataset,
     /// each with its input tags. Order mirrors Python's first-seen grouping.
     async fn load_dataset_inputs(&self, run_id: &str) -> Result<Vec<DatasetInput>, MlflowError> {

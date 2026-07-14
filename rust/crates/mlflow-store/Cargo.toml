@@ -30,6 +30,9 @@ uuid = { workspace = true }
 # `log` provides the `LevelFilter` accepted by `ConnectOptions::log_statements`
 # (sqlx logs SQL through the `log` facade).
 log = "0.4"
+# `search_runs` keyset page tokens are opaque base64(JSON); serde_json builds and
+# parses the token payload (§4 item 7 / D3 — keyset tokens replace offset tokens).
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
