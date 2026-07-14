@@ -21,6 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 mlflow-proto = { workspace = true }
+mlflow-error = { workspace = true }
 mlflow-store = { workspace = true }
 mlflow-registry = { workspace = true }
 mlflow-auth = { workspace = true }
@@ -38,6 +39,9 @@ hyper = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 clap = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Metrics: `metrics` facade + Prometheus exporter, not in [workspace.dependencies]
 # yet (declared here directly per task instructions to avoid a concurrent-edit
@@ -49,3 +53,7 @@ metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 tokio = { workspace = true, features = ["full", "test-util"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
 http-body-util = "0.1"
+mlflow-store = { workspace = true }
+mlflow-error = { workspace = true }
+serde_json = { workspace = true }
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }

@@ -29,6 +29,17 @@ pub struct Cli {
     /// `MLFLOW_STATIC_PREFIX` env var when not passed on the CLI.
     #[arg(long)]
     pub static_prefix: Option<String>,
+
+    /// The SQLAlchemy-style backend store URI (`mlflow server
+    /// --backend-store-uri`), e.g. `sqlite:///mlflow.db`,
+    /// `postgresql://...`. Required to serve the tracking API.
+    #[arg(long)]
+    pub backend_store_uri: Option<String>,
+
+    /// The default artifact root URI (`mlflow server --default-artifact-root`).
+    /// Used as the parent of per-experiment default artifact locations.
+    #[arg(long)]
+    pub default_artifact_root: Option<String>,
 }
 
 /// Error returned when `--static-prefix` (or `MLFLOW_STATIC_PREFIX`) fails
@@ -48,6 +59,8 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub static_prefix: Option<String>,
+    pub backend_store_uri: Option<String>,
+    pub default_artifact_root: Option<String>,
 }
 
 impl fmt::Display for ServerConfig {
@@ -71,6 +84,8 @@ impl ServerConfig {
             host: cli.host,
             port: cli.port,
             static_prefix,
+            backend_store_uri: cli.backend_store_uri,
+            default_artifact_root: cli.default_artifact_root,
         })
     }
 }
@@ -153,6 +168,8 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 5000,
             static_prefix: Some("/cli-prefix".to_string()),
+            backend_store_uri: None,
+            default_artifact_root: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/cli-prefix"));
@@ -171,6 +188,8 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 5000,
             static_prefix: None,
+            backend_store_uri: None,
+            default_artifact_root: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/env-prefix"));
@@ -189,6 +208,8 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 5000,
             static_prefix: None,
+            backend_store_uri: None,
+            default_artifact_root: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix, None);

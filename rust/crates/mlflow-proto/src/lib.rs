@@ -88,7 +88,10 @@ pub mod scalapb {
 }
 
 mod json;
-pub use json::{dynamic_from_mlflow_json, from_mlflow_json, to_mlflow_json, JsonCodecError};
+pub use json::{
+    dynamic_from_mlflow_json, dynamic_from_query_pairs, from_mlflow_json, from_query_pairs,
+    to_mlflow_json, JsonCodecError,
+};
 
 mod routes;
 pub use routes::{ExpandedRoute, RouteSpec, ROUTE_TABLE};
