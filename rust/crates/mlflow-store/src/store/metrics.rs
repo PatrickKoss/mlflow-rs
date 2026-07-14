@@ -54,12 +54,22 @@ use crate::dialect::Dialect;
 pub const GET_METRIC_HISTORY_MAX_RESULTS: usize = 25_000;
 
 /// A metric to be logged.
+///
+/// `model_id`/`dataset_name`/`dataset_digest` carry a metric into
+/// `logged_model_metrics` in addition to the run's `metrics`/`latest_metrics`
+/// tables — see [`TrackingStore::log_model_metrics_tx`] and the `log_batch`/
+/// `log_metric` doc comments below for how Python routes these (`model_id`
+/// metrics are written to BOTH the run metric tables and
+/// `logged_model_metrics`; they are not mutually exclusive).
 #[derive(Debug, Clone)]
 pub struct MetricInput {
     pub key: String,
     pub value: f64,
     pub timestamp: i64,
     pub step: i64,
+    pub model_id: Option<String>,
+    pub dataset_name: Option<String>,
+    pub dataset_digest: Option<String>,
 }
 
 /// `sanitize_metric_value`: returns `(is_nan, stored_value)`.
@@ -75,6 +85,15 @@ pub(crate) fn sanitize_metric_value(value: f64) -> (bool, f64) {
 
 impl TrackingStore {
     /// `log_metric` (single). Validates, then logs via the batch path.
+    ///
+    /// Python's `log_metric` (sqlalchemy_store.py:1183) does two independent
+    /// things when `metric.model_id` is set: it logs the model metric via
+    /// `_log_model_metrics` (its own session) AND unconditionally still logs
+    /// the same metric into `metrics`/`latest_metrics` via `_log_metrics` — a
+    /// `model_id` metric is not routed *instead of* the run metric tables, it
+    /// is routed *in addition to* them. We do both in one transaction (Q6
+    /// spirit: collapse Python's redundant separate sessions), rather than
+    /// Python's two-or-three separate commits.
     pub async fn log_metric(
         &self,
         workspace: &str,
@@ -91,6 +110,17 @@ impl TrackingStore {
         let row = self.resolve_run_row(workspace, run_id).await?;
         check_run_active(&row)?;
         let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        if metric.model_id.is_some() {
+            self.log_model_metrics_tx(
+                &mut tx,
+                workspace,
+                row.experiment_id,
+                run_id,
+                None,
+                std::slice::from_ref(metric),
+            )
+            .await?;
+        }
         insert_metrics(
             &mut tx,
             self.db().dialect(),
@@ -159,6 +189,18 @@ impl TrackingStore {
     /// in **one transaction** (plan Q6). Any failure rolls the whole batch back,
     /// so param immutability inside the batch aborts everything (matching the
     /// no-partial-data test).
+    ///
+    /// Python's `log_batch` (sqlalchemy_store.py:2098) calls, in order,
+    /// `_log_params`, `_log_metrics` (ALL metrics, including any carrying a
+    /// `model_id` — they still land in `metrics`/`latest_metrics`), then
+    /// `_log_model_metrics(run_id, metrics, experiment_id=run.experiment_id)`
+    /// (only the subset with `model_id is not None`, written again into
+    /// `logged_model_metrics`), then `_set_tags`. Each of those Python calls
+    /// opens its own session, so `log_batch` is *not* atomic across them
+    /// there (plan Q6 calls this out as an intentional gap); we fold all four
+    /// steps into the one transaction already used here for params/metrics/tags,
+    /// consistent with Q6's "one transaction per log-batch" wire-invisible
+    /// improvement.
     pub async fn log_batch(
         &self,
         workspace: &str,
@@ -197,10 +239,17 @@ impl TrackingStore {
         // Params first (matches Python: immutability check aborts before
         // metrics/tags are logged).
         self.log_params_tx(&mut tx, run_id, params).await?;
-        // Metrics.
+        // Metrics: run-scoped metrics/latest_metrics for every metric...
         if !metrics.is_empty() {
             insert_metrics(&mut tx, dialect, run_id, metrics).await?;
         }
+        // ...and, for the subset carrying a model_id, also logged_model_metrics.
+        // `metrics` is passed through unfiltered/ungrouped — `log_model_metrics_tx`
+        // does its own `model_id is not None` filtering over the *whole* list,
+        // exactly like Python's `_log_model_metrics(run_id, metrics, ...)` (see
+        // its doc comment for why preserving the original list/indices matters).
+        self.log_model_metrics_tx(&mut tx, workspace, row.experiment_id, run_id, None, metrics)
+            .await?;
         // Tags.
         self.set_tags_tx(&mut tx, dialect, run_id, tags).await?;
 

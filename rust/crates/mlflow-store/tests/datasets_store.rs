@@ -354,6 +354,9 @@ fn m(key: &str, value: f64, timestamp: i64, step: i64) -> MetricInput {
         value,
         timestamp,
         step,
+        model_id: None,
+        dataset_name: None,
+        dataset_digest: None,
     }
 }
 
