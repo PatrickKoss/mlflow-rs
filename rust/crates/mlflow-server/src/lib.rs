@@ -13,41 +13,72 @@
 //! `Router` without booting a real listener.
 
 pub mod config;
+pub mod experiments;
 pub mod metrics;
+pub mod proto_http;
 pub mod routes;
+pub mod state;
+pub mod workspace;
 
 use axum::extract::MatchedPath;
 use axum::http::Request;
 use axum::middleware;
-use axum::routing::get;
+use axum::routing::{get, MethodRouter};
 use axum::Router;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::trace::TraceLayer;
 use tracing::info_span;
 
 pub use config::{Cli, ServerConfig, StaticPrefixError};
+pub use state::AppState;
 
-/// Builds the full application `Router`, including request logging and
-/// metrics middleware, nested under `config.static_prefix` when set
-/// (mirroring `_add_static_prefix`, `mlflow/server/handlers.py:6731-6734`,
-/// which prepends the prefix to every registered route).
+/// Builds the full application `Router` (ops endpoints only — no store).
+/// Retained for the ops/skeleton tests that don't need a backend store.
+///
+/// Request logging and metrics middleware are applied, and everything is nested
+/// under `config.static_prefix` when set (mirroring `_add_static_prefix`,
+/// `mlflow/server/handlers.py:6731-6734`, which prepends the prefix to every
+/// registered route).
 pub fn build_app(config: &ServerConfig) -> Router {
     let metrics_handle = metrics::install_recorder();
-    build_app_with_recorder(config, metrics_handle)
+    build_app_with_recorder(config, metrics_handle, None)
 }
 
-/// Same as [`build_app`], but takes an already-installed
+/// Builds the full application `Router` with a backend store, registering every
+/// proto-backed endpoint implemented so far (Phase 3: experiments) in addition
+/// to the ops endpoints. `main` uses this; tests inject a store over a temp DB.
+pub fn build_app_with_state(config: &ServerConfig, state: AppState) -> Router {
+    let metrics_handle = metrics::install_recorder();
+    build_app_with_recorder(config, metrics_handle, Some(state))
+}
+
+/// Same as the builders above, but takes an already-installed
 /// [`PrometheusHandle`] instead of installing the global recorder. Exists so
 /// tests can build multiple `Router`s in the same process without hitting
 /// "recorder already installed" panics from `metrics-exporter-prometheus`.
-pub fn build_app_with_recorder(config: &ServerConfig, metrics_handle: PrometheusHandle) -> Router {
-    let api = Router::new()
+///
+/// When `state` is `Some`, the proto-backed endpoints (experiments) are
+/// registered on both `/api/2.0/...` and `/ajax-api/2.0/...` (driven by the
+/// `mlflow-proto` route table) honoring the static prefix. When `None`, only
+/// the ops endpoints are served.
+pub fn build_app_with_recorder(
+    config: &ServerConfig,
+    metrics_handle: PrometheusHandle,
+    state: Option<AppState>,
+) -> Router {
+    let mut api = Router::new()
         .route("/health", get(routes::health))
         .route("/version", get(routes::version))
         .route(
             "/metrics",
             get(move || routes::metrics(metrics_handle.clone())),
-        )
+        );
+
+    if let Some(state) = state {
+        api = api.merge(register_proto_routes(state));
+    }
+
+    let api = api
         .layer(middleware::from_fn(metrics::track_metrics))
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
@@ -70,6 +101,49 @@ pub fn build_app_with_recorder(config: &ServerConfig, metrics_handle: Prometheus
     }
 }
 
+/// Build a `Router` of the implemented proto-backed endpoints, registered on
+/// both URL prefixes, driving path/method from the `mlflow-proto` route table
+/// (not hand-written paths) so later endpoints slot in by extending
+/// [`handler_for`]. The static prefix is applied by the app-level `nest`, so we
+/// register the bare `/api/…` + `/ajax-api/…` paths here (passing an empty
+/// prefix to `expand`). `with_state` erases the state type so the result merges
+/// into the ops router.
+fn register_proto_routes(state: AppState) -> Router {
+    let mut router: Router<AppState> = Router::new();
+    for spec in mlflow_proto::ROUTE_TABLE {
+        let Some(handler) = handler_for(spec.service, spec.method, spec.http_method) else {
+            continue;
+        };
+        for route in spec.expand("") {
+            router = router.route(&route.path, handler.clone());
+        }
+    }
+    router.with_state(state)
+}
+
+/// Map a `(service, method, http_method)` route-table entry to its axum
+/// handler. Returns `None` for endpoints not yet implemented (they fall through
+/// to the 404 `_not_implemented` form). Extend this as later phases land.
+fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodRouter<AppState>> {
+    use axum::routing::{get, post};
+    if service != "MlflowService" {
+        return None;
+    }
+    Some(match (method, http_method) {
+        ("createExperiment", "POST") => post(experiments::create_experiment),
+        ("getExperiment", "GET") => get(experiments::get_experiment),
+        ("getExperimentByName", "GET") => get(experiments::get_experiment_by_name),
+        ("searchExperiments", "POST") => post(experiments::search_experiments),
+        ("searchExperiments", "GET") => get(experiments::search_experiments),
+        ("deleteExperiment", "POST") => post(experiments::delete_experiment),
+        ("restoreExperiment", "POST") => post(experiments::restore_experiment),
+        ("updateExperiment", "POST") => post(experiments::update_experiment),
+        ("setExperimentTag", "POST") => post(experiments::set_experiment_tag),
+        ("deleteExperimentTag", "POST") => post(experiments::delete_experiment_tag),
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,12 +157,14 @@ mod tests {
             host: "127.0.0.1".to_string(),
             port: 0,
             static_prefix: static_prefix.map(str::to_string),
+            backend_store_uri: None,
+            default_artifact_root: None,
         }
     }
 
     fn test_app(static_prefix: Option<&str>) -> Router {
         let handle = PrometheusBuilder::new().build_recorder().handle();
-        build_app_with_recorder(&test_config(static_prefix), handle)
+        build_app_with_recorder(&test_config(static_prefix), handle, None)
     }
 
     async fn body_string(response: axum::response::Response) -> String {

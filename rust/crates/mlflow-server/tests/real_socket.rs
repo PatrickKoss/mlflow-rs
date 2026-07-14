@@ -20,6 +20,8 @@ async fn serves_health_over_real_socket_and_shuts_down_gracefully() {
         host: "127.0.0.1".to_string(),
         port: 0,
         static_prefix: None,
+        backend_store_uri: None,
+        default_artifact_root: None,
     };
     let app = build_app(&config);
 

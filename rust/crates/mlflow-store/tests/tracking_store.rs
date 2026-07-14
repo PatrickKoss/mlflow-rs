@@ -1067,3 +1067,210 @@ async fn param_tag(s: &TrackingStore, rid: &str, key: &str) -> Option<String> {
         .find(|t| t.key == key)
         .map(|t| t.value.clone())
 }
+
+// ---------------------------------------------------------------------------
+// search_experiments (plan T3.1 store layer)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn search_experiments_active_and_all_view_types() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_views");
+    let s = store(&tmp).await;
+
+    let a = s.create_experiment(WS, "se_a", None, &[]).await.unwrap();
+    let _b = s.create_experiment(WS, "se_b", None, &[]).await.unwrap();
+    s.delete_experiment(WS, &a).await.unwrap();
+
+    // ACTIVE_ONLY excludes the deleted one.
+    let page = s
+        .search_experiments(WS, Some(ViewType::ActiveOnly), 100, None, &[], None)
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&"se_b"));
+    assert!(!names.contains(&"se_a"));
+
+    // DELETED_ONLY includes only the deleted one.
+    let page = s
+        .search_experiments(WS, Some(ViewType::DeletedOnly), 100, None, &[], None)
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&"se_a"));
+    assert!(!names.contains(&"se_b"));
+
+    // ALL includes both.
+    let page = s
+        .search_experiments(WS, Some(ViewType::All), 100, None, &[], None)
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&"se_a"));
+    assert!(names.contains(&"se_b"));
+}
+
+#[tokio::test]
+async fn search_experiments_unspecified_view_type_returns_empty() {
+    let tmp = TempDb::new("search_exp_unspecified");
+    let s = store(&tmp).await;
+    // None mirrors an unset proto ViewType (0) → empty stages → no rows.
+    let page = s
+        .search_experiments(WS, None, 100, None, &[], None)
+        .await
+        .unwrap();
+    assert!(page.experiments.is_empty());
+    assert!(page.next_page_token.is_none());
+}
+
+#[tokio::test]
+async fn search_experiments_filter_by_name_and_tag() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_filter");
+    let s = store(&tmp).await;
+    s.create_experiment(WS, "filter_a", None, &[("team", "rust")])
+        .await
+        .unwrap();
+    s.create_experiment(WS, "filter_b", None, &[])
+        .await
+        .unwrap();
+
+    let page = s
+        .search_experiments(
+            WS,
+            Some(ViewType::All),
+            100,
+            Some("name = 'filter_a'"),
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.experiments.len(), 1);
+    assert_eq!(page.experiments[0].name, "filter_a");
+
+    // tag filter (the fixture's `rust_store_fixture` also carries team=rust).
+    let page = s
+        .search_experiments(
+            WS,
+            Some(ViewType::All),
+            100,
+            Some("tags.team = 'rust'"),
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&"filter_a"));
+    assert!(!names.contains(&"filter_b"));
+}
+
+#[tokio::test]
+async fn search_experiments_order_by_name() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_order");
+    let s = store(&tmp).await;
+    s.create_experiment(WS, "zzz", None, &[]).await.unwrap();
+    s.create_experiment(WS, "aaa", None, &[]).await.unwrap();
+
+    let page = s
+        .search_experiments(
+            WS,
+            Some(ViewType::All),
+            100,
+            None,
+            &["name ASC".to_string()],
+            None,
+        )
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    let aaa = names.iter().position(|n| *n == "aaa").unwrap();
+    let zzz = names.iter().position(|n| *n == "zzz").unwrap();
+    assert!(aaa < zzz);
+}
+
+#[tokio::test]
+async fn search_experiments_pagination_token_walk() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_page");
+    let s = store(&tmp).await;
+    for i in 0..5 {
+        s.create_experiment(WS, &format!("page_{i}"), None, &[])
+            .await
+            .unwrap();
+    }
+
+    let mut seen = Vec::new();
+    let mut token: Option<String> = None;
+    loop {
+        let page = s
+            .search_experiments(WS, Some(ViewType::All), 2, None, &[], token.as_deref())
+            .await
+            .unwrap();
+        assert!(page.experiments.len() <= 2);
+        for e in &page.experiments {
+            seen.push(e.name.clone());
+        }
+        match page.next_page_token {
+            Some(t) => token = Some(t),
+            None => break,
+        }
+    }
+    // 2 fixture experiments + 5 created = 7 total, no duplicates.
+    let mut sorted = seen.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(sorted.len(), seen.len());
+    assert!(seen.len() >= 7);
+}
+
+#[tokio::test]
+async fn search_experiments_rejects_bad_max_results() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_maxres");
+    let s = store(&tmp).await;
+
+    let err = s
+        .search_experiments(WS, Some(ViewType::All), 0, None, &[], None)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.error_code,
+        mlflow_error::ErrorCode::InvalidParameterValue
+    );
+    assert!(err.message.contains("must be a positive integer"));
+
+    let err = s
+        .search_experiments(WS, Some(ViewType::All), 99999, None, &[], None)
+        .await
+        .unwrap_err();
+    assert!(err.message.contains("at most 50000"));
+}
+
+#[tokio::test]
+async fn search_experiments_is_workspace_scoped() {
+    use mlflow_store::ViewType;
+    let tmp = TempDb::new("search_exp_ws");
+    let s = store(&tmp).await;
+    // Create an experiment in a non-default workspace; the default-workspace
+    // search must not see it.
+    s.create_experiment("other_ws", "isolated", None, &[])
+        .await
+        .unwrap();
+
+    let page = s
+        .search_experiments(WS, Some(ViewType::All), 100, None, &[], None)
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(!names.contains(&"isolated"));
+
+    let page = s
+        .search_experiments("other_ws", Some(ViewType::All), 100, None, &[], None)
+        .await
+        .unwrap();
+    let names: Vec<&str> = page.experiments.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&"isolated"));
+}

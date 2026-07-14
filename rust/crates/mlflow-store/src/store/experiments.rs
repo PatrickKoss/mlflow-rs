@@ -25,7 +25,7 @@ pub enum ViewType {
 }
 
 impl ViewType {
-    fn stages(self) -> &'static [&'static str] {
+    pub(crate) fn stages(self) -> &'static [&'static str] {
         match self {
             ViewType::ActiveOnly => &[LifecycleStage::ACTIVE],
             ViewType::DeletedOnly => &[LifecycleStage::DELETED],

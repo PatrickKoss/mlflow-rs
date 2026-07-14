@@ -56,6 +56,12 @@ pub enum JsonCodecError {
     Decode(#[from] prost::DecodeError),
     #[error("failed to parse JSON: {0}")]
     ParseJson(#[from] serde_json::Error),
+    /// A GET query parameter for a `bool` proto field was not `true`/`false`.
+    /// Mirrors Python's `_get_request_message` boolean validation
+    /// (`mlflow/server/handlers.py:1031-1036`); the caller maps this to
+    /// `INVALID_PARAMETER_VALUE`.
+    #[error("Invalid boolean value: {0}, must be 'true' or 'false'.")]
+    InvalidBoolQueryValue(String),
 }
 
 /// The runtime descriptor pool, rebuilt from the extension-preserving
@@ -127,6 +133,88 @@ pub fn from_mlflow_json<M: prost::Message + Default>(
     type_name: &str,
 ) -> Result<M, JsonCodecError> {
     Ok(dynamic_from_mlflow_json(json, type_name)?.transcode_to::<M>()?)
+}
+
+/// Parse GET-request query parameters into a concrete prost message (T3.5),
+/// mirroring the GET branch of Python's `_get_request_message`
+/// (`mlflow/server/handlers.py:1008-1049`).
+///
+/// Only fields declared on the message are consulted (unknown query params are
+/// ignored, matching `ignore_unknown_fields=True`). Per Python:
+///
+/// * a **repeated** field collects *all* query values for its name into a JSON
+///   array — even a single occurrence becomes a one-element list, because the
+///   query parser has no type information and protobuf requires repeated fields
+///   to be lists;
+/// * a **bool** field is validated to be `true`/`false` (case-insensitively) and
+///   converted to a JSON boolean, else [`JsonCodecError::InvalidBoolQueryValue`];
+/// * every other scalar field takes the (last) query value as a JSON string —
+///   the codec's deserializer then coerces it (int64/enum/…), accepting both the
+///   numeric and, for enums, the name form.
+///
+/// `pairs` is the ordered list of `(name, value)` query parameters (repeated
+/// names appear multiple times), matching `werkzeug`'s `MultiDict` iteration.
+pub fn from_query_pairs<M: prost::Message + Default>(
+    pairs: &[(String, String)],
+    type_name: &str,
+) -> Result<M, JsonCodecError> {
+    Ok(dynamic_from_query_pairs(pairs, type_name)?.transcode_to::<M>()?)
+}
+
+/// Reflection-level form of [`from_query_pairs`], yielding a `DynamicMessage`.
+pub fn dynamic_from_query_pairs(
+    pairs: &[(String, String)],
+    type_name: &str,
+) -> Result<DynamicMessage, JsonCodecError> {
+    use prost_reflect::Kind;
+
+    let desc = descriptor_pool()
+        .get_message_by_name(type_name)
+        .ok_or_else(|| JsonCodecError::UnknownMessageType(type_name.to_string()))?;
+
+    let mut obj = serde_json::Map::new();
+    for field in desc.fields() {
+        let name = field.name();
+        // `getlist(name)` — every value for this query key, in order.
+        let values: Vec<&str> = pairs
+            .iter()
+            .filter(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+            .collect();
+        if values.is_empty() {
+            continue;
+        }
+
+        if field.is_list() {
+            obj.insert(
+                name.to_string(),
+                serde_json::Value::Array(
+                    values
+                        .iter()
+                        .map(|v| serde_json::Value::String((*v).to_string()))
+                        .collect(),
+                ),
+            );
+        } else {
+            // Scalar: Python's `flask_request.args.get(name)` returns the FIRST
+            // value for a repeated key.
+            let value = values[0];
+            let json_value = if matches!(field.kind(), Kind::Bool) {
+                let lowered = value.to_ascii_lowercase();
+                match lowered.as_str() {
+                    "true" => serde_json::Value::Bool(true),
+                    "false" => serde_json::Value::Bool(false),
+                    _ => return Err(JsonCodecError::InvalidBoolQueryValue(value.to_string())),
+                }
+            } else {
+                serde_json::Value::String(value.to_string())
+            };
+            obj.insert(name.to_string(), json_value);
+        }
+    }
+
+    let json = serde_json::Value::Object(obj).to_string();
+    dynamic_from_mlflow_json(&json, type_name)
 }
 
 // ---------------------------------------------------------------------------

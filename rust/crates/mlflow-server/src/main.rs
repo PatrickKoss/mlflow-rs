@@ -6,9 +6,13 @@
 //! can be exercised directly in tests.
 
 use clap::Parser;
-use mlflow_server::{build_app, Cli, ServerConfig};
+use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
+use mlflow_store::{Db, PoolConfig, TrackingStore};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
+
+/// `DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH` (`mlflow/store/tracking/__init__.py:12`).
+const DEFAULT_ARTIFACT_ROOT: &str = "./mlruns";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -19,7 +23,21 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let config = ServerConfig::from_cli(cli)?;
 
-    let app = build_app(&config);
+    // Serve the tracking API when a backend store is configured; otherwise run
+    // the ops-only app (health/version/metrics). The store is verified against
+    // the expected Alembic head at connect time.
+    let app = match &config.backend_store_uri {
+        Some(uri) => {
+            let db = Db::connect_and_verify_with(uri, PoolConfig::from_env()).await?;
+            let artifact_root = config
+                .default_artifact_root
+                .clone()
+                .unwrap_or_else(|| DEFAULT_ARTIFACT_ROOT.to_string());
+            let store = TrackingStore::new(db, artifact_root);
+            build_app_with_state(&config, AppState::new(store))
+        }
+        None => build_app(&config),
+    };
 
     let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
     let local_addr = listener.local_addr()?;
