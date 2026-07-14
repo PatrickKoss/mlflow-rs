@@ -711,12 +711,28 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       stress PASSED on real Postgres 16 (migrated container); mysql variant written,
       env-gated (MLFLOW_RUST_TEST_MYSQL_URI), pending CI. Found+fixed pg INT4 widening
       gotcha via RowLike::get_int.)*
-- [ ] **T2.6 Store: search_runs**: EXISTS semi-joins (Q2/Q3), keyset pagination behind
+- [x] **T2.6 Store: search_runs**: EXISTS semi-joins (Q2/Q3), keyset pagination behind
       opaque tokens (Q1), NULLS LAST emulation parity, inline
       params/metrics/tags/inputs/outputs per page.
       **AC:** ordering + page boundaries identical to Python across dialects; postgres
       EXPLAIN shows index usage once Q4 indexes exist.
       **VER:** differential harness (T12.4) on seeded DB; EXPLAIN artifacts in PR.
+      *(Done 2026-07-14: wired the pre-existing but never-compiled `search.rs`
+      into the store; EXISTS semi-joins (Q2/Q3), keyset pagination behind
+      opaque tokens (Q1/D3), batched inputs/outputs/params/metrics/tags eager
+      loading (Q8), dataset-inputs-only in search results matching
+      `RunInputs(dataset_inputs=...)`. Parity fixes: per-entity comparator
+      validation (Python validates at filter-apply time, not parse time),
+      SQLite `start_time DESC` NULLS placement (LAST, not FIRST), numeric
+      attributes bind numerically for Postgres. Differential corpus
+      (`rust/tools/gen_search_runs_corpus.py` → 31 cases, full pagination
+      walks against the genuine Python SqlAlchemyStore) generated + replay
+      test active; first runs caught two more real bugs, both fixed:
+      dataset.context positional-bind order (0 rows on sqlite/mysql) and NULL
+      numeric order keys decoded as 0.0 poisoning the keyset cursor
+      (boundary-row duplication). 14 unit + corpus replay tests.
+      Cross-dialect (pg/mysql) differential + EXPLAIN artifacts pending
+      Phase 12/13.)*
 - [x] **T2.7 Store: metric history** (get-history, bulk, bulk-interval sampling ported
       exactly from `handlers.py:2223`).
       **AC:** identical sampled point sets vs Python on dense histories.
