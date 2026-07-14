@@ -38,6 +38,7 @@ mod names;
 mod names_data;
 mod params_tags;
 mod runs;
+mod search;
 mod spans;
 mod traces;
 mod traces_search;
@@ -61,6 +62,7 @@ pub use logged_models::{
 };
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
+pub use search::{RunsPage, SEARCH_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_THRESHOLD};
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};
 pub use traces::{StartTraceInput, MAX_TRACE_LINKS_PER_REQUEST};
 pub use traces_search::{TracesPage, SEARCH_TRACES_DEFAULT_MAX_RESULTS};

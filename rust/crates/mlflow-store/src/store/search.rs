@@ -31,10 +31,12 @@
 //! Because the null-rank `CASE` precedes each value column, NaN/NULL rows always
 //! sort last regardless of ASC/DESC — this is dialect-independent (works on
 //! MySQL, which lacks `NULLS LAST`). The only DB-default-NULLS column is the raw
-//! `start_time DESC` tiebreak; on SQLite/Postgres `DESC` places NULLs first, and
-//! MySQL `DESC` places NULLs last. We emit that column raw (matching Python) and
-//! encode the dialect's null placement into the keyset comparison so page
-//! boundaries stay identical.
+//! `start_time DESC` tiebreak, which Python emits with no explicit `NULLS`
+//! clause: on SQLite/MySQL `DESC` places NULLs **last** (NULL ranks smallest),
+//! while Postgres `DESC` places NULLs **first** (NULL ranks largest). We encode
+//! that per-dialect placement into both the `ORDER BY` (explicit `NULLS
+//! FIRST/LAST` on SQLite/Postgres; bare on MySQL, whose default matches) and the
+//! keyset comparison, so page boundaries stay identical. See [`apply_dialect_nulls`].
 
 use std::collections::HashMap;
 
@@ -42,9 +44,7 @@ use mlflow_error::MlflowError;
 use mlflow_search::{Comparison, OrderBy, Value};
 
 use super::dbutil::{RowLike, Val};
-use super::entities::{
-    LifecycleStage, Metric, Param, Run, RunData, RunInfo, RunInputs, RunOutputs, RunTag,
-};
+use super::entities::{LifecycleStage, Metric, Param, Run, RunData, RunTag};
 use super::experiments::{internal, ViewType};
 use super::runs::RunRow;
 use super::{TrackingStore, MLFLOW_RUN_NAME};
@@ -53,8 +53,26 @@ use crate::dialect::Dialect;
 /// `SEARCH_MAX_RESULTS_THRESHOLD` (`mlflow/store/tracking/__init__.py:21`).
 pub const SEARCH_MAX_RESULTS_THRESHOLD: i64 = 50000;
 
+/// `SEARCH_MAX_RESULTS_DEFAULT` (`mlflow/store/tracking/__init__.py:20`). Applied
+/// by the *handler* layer (Phase 3), not the store — `_search_runs` itself
+/// treats `max_results = None` as "no limit".
+pub const SEARCH_MAX_RESULTS_DEFAULT: i64 = 1000;
+
 /// The `mlflow.datasets.context` input-tag name (`MLFLOW_DATASET_CONTEXT`).
 const MLFLOW_DATASET_CONTEXT: &str = "mlflow.data.context";
+
+// Per-entity valid comparator sets, mirroring `SearchUtils`
+// (`search_utils.py:178-183`). Python validates these at *filter-application*
+// time (`is_metric`/`is_param`/… inside `_get_sqlalchemy_filter_clauses`), NOT
+// at parse time — the `mlflow-search` parser accepts e.g. `params.p > 'x'`, so
+// the store must reject it here with the same message/code. The set order below
+// matches Python's `set` repr rendered by [`py_set`] (sorted), used to build the
+// verbatim error strings (including Python's occasional missing closing quote).
+const VALID_METRIC_COMPARATORS: &[&str] = &[">", ">=", "!=", "=", "<", "<="];
+const VALID_PARAM_COMPARATORS: &[&str] = &["!=", "=", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"];
+const VALID_TAG_COMPARATORS: &[&str] = &["!=", "=", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"];
+const VALID_STRING_ATTRIBUTE_COMPARATORS: &[&str] = &["!=", "=", "LIKE", "ILIKE", "IN", "NOT IN"];
+const VALID_DATASET_COMPARATORS: &[&str] = &["!=", "=", "LIKE", "ILIKE", "IN", "NOT IN"];
 
 /// A page of runs plus the optional next-page token.
 #[derive(Debug)]
@@ -198,7 +216,10 @@ impl TrackingStore {
             .map_err(internal)?;
 
         // Preserve requested order, keep only those present.
-        Ok(wanted.into_iter().filter(|id| present.contains(id)).collect())
+        Ok(wanted
+            .into_iter()
+            .filter(|id| present.contains(id))
+            .collect())
     }
 
     /// Assemble full [`Run`] entities for the page: batched eager loading (Q8)
@@ -568,8 +589,7 @@ fn build_search_sql(
     max_results: Option<i64>,
 ) -> Result<Query, MlflowError> {
     // Drain the joins collected by `build_order_cols` for this call.
-    let joins: Vec<JoinSpec> =
-        JOIN_REGISTRY.with(|reg| std::mem::take(&mut *reg.borrow_mut()));
+    let joins: Vec<JoinSpec> = JOIN_REGISTRY.with(|reg| std::mem::take(&mut *reg.borrow_mut()));
 
     // Fix up the raw start_time DESC NULLS placement per dialect.
     let order_cols = apply_dialect_nulls(dialect, order_cols);
@@ -632,7 +652,12 @@ fn build_search_sql(
 
     // Keyset predicate.
     if let Some(cur) = cursor {
-        wheres.push(build_keyset_predicate(&order_cols, cur, &mut ph, &mut binds));
+        wheres.push(build_keyset_predicate(
+            &order_cols,
+            cur,
+            &mut ph,
+            &mut binds,
+        ));
     }
 
     sql.push_str(" WHERE ");
@@ -656,16 +681,30 @@ fn build_search_sql(
 }
 
 /// Overwrite the raw `start_time DESC` tiebreak's NULLS placement to match the
-/// dialect's default (SQLite/Postgres DESC => NULLS FIRST; MySQL DESC =>
-/// NULLS LAST). Value/rank columns are untouched.
+/// dialect's *default* null ordering, since Python emits `SqlRun.start_time.desc()`
+/// with no explicit `NULLS` clause and relies on that default.
+///
+/// The three backends split on how they rank NULLs:
+///
+/// * **SQLite / MySQL** — NULL sorts as the *smallest* value, so `DESC` (largest
+///   first) places NULLs **LAST**. (Verified: `ORDER BY x DESC` yields
+///   `3,2,1,NULL` on SQLite; MySQL matches.)
+/// * **Postgres** — NULL sorts as the *largest* value, so `DESC` places NULLs
+///   **FIRST**.
+///
+/// The [`order_term`] renderer then emits an explicit `NULLS FIRST/LAST` on
+/// SQLite/Postgres (reproducing the default deterministically) and a bare `DESC`
+/// on MySQL (whose default already matches), and the keyset predicate reads the
+/// same `Nulls` flag — so ORDER BY and page boundaries never drift. Value/rank
+/// columns are untouched (rank cols separate NULLs before the value is compared).
 fn apply_dialect_nulls(dialect: Dialect, cols: &[SortCol]) -> Vec<SortCol> {
     cols.iter()
         .map(|c| {
             let mut c = c.clone();
             if c.expr == "r.start_time" && c.kind == ColKind::Num && c.dir == Dir::Desc {
                 c.nulls = match dialect {
-                    Dialect::Sqlite | Dialect::Postgres => Nulls::First,
-                    Dialect::MySql => Nulls::Last,
+                    Dialect::Sqlite | Dialect::MySql => Nulls::Last,
+                    Dialect::Postgres => Nulls::First,
                 };
             }
             c
@@ -691,8 +730,53 @@ fn order_term(dialect: Dialect, idx: usize, c: &SortCol) -> String {
     }
 }
 
+/// Render a Rust comparator set the way Python renders `str(set)` — a `{...}`
+/// blob — but with the elements **sorted**. Python's set-iteration order is
+/// hash-randomized per interpreter run, so its raw repr is non-deterministic;
+/// the corpus generator normalizes those blobs to sorted form (see
+/// `gen_search_corpus.py::_normalize`), and we match that here so error messages
+/// are reproducible and comparable. The message text otherwise reproduces
+/// Python's `_get_sqlalchemy_filter_clauses` validators verbatim — including
+/// Python's occasional missing closing quote (`is_metric`/`is_tag`/dataset/
+/// numeric-attribute).
+fn py_set_sorted(items: &[&str]) -> String {
+    let mut sorted: Vec<&str> = items.to_vec();
+    sorted.sort_unstable();
+    let inner: Vec<String> = sorted.iter().map(|s| format!("'{s}'")).collect();
+    format!("{{{}}}", inner.join(", "))
+}
+
+/// Validate a comparator against the entity's valid-comparator set, raising the
+/// same `INVALID_PARAMETER_VALUE` message Python's `is_metric`/`is_param`/
+/// `is_tag`/`is_string_attribute`/`is_numeric_attribute`/`is_dataset` raise.
+///
+/// Python validates these at filter-application time (not parse time), so the
+/// `mlflow-search` parser lets e.g. `params.p > 'x'` through and this is where
+/// it is rejected. `msg_set` is the set named in the message (numeric-attribute
+/// deliberately references the STRING set, mirroring the Python typo).
+fn validate_comparator(
+    comparator: &str,
+    valid: &[&str],
+    msg_set: &[&str],
+    trailing_quote: bool,
+) -> Result<(), MlflowError> {
+    if valid.contains(&comparator) {
+        return Ok(());
+    }
+    let close = if trailing_quote { "'" } else { "" };
+    Err(MlflowError::invalid_parameter_value(format!(
+        "Invalid comparator '{comparator}' not one of '{}{close}",
+        py_set_sorted(msg_set)
+    )))
+}
+
 /// Build one filter comparison as an SQL predicate (Q2/Q3: EXISTS semi-joins or
 /// direct attribute predicates), mirroring `_get_sqlalchemy_filter_clauses`.
+///
+/// Comparator validation ordering mirrors Python: the attribute branch is
+/// selected by `is_string_attribute`/`is_numeric_attribute` (which validate the
+/// STRING/NUMERIC comparator sets); the metric/param/tag/dataset branches by the
+/// matching `is_*` validators. Each validator raises before any SQL is emitted.
 fn build_filter_predicate(
     dialect: Dialect,
     f: &Comparison,
@@ -704,6 +788,25 @@ fn build_filter_predicate(
 
     match f.entity_type.as_str() {
         "attribute" => {
+            // `is_numeric_attribute` (start_time/end_time) validates the NUMERIC
+            // set; `is_string_attribute` validates the STRING set. Python's
+            // numeric-attribute message references the STRING set (a source typo)
+            // and omits the closing quote.
+            if is_numeric_attr(&key) {
+                validate_comparator(
+                    &comparator,
+                    VALID_METRIC_COMPARATORS,
+                    VALID_STRING_ATTRIBUTE_COMPARATORS,
+                    false,
+                )?;
+            } else {
+                validate_comparator(
+                    &comparator,
+                    VALID_STRING_ATTRIBUTE_COMPARATORS,
+                    VALID_STRING_ATTRIBUTE_COMPARATORS,
+                    true,
+                )?;
+            }
             if key == "run_name" {
                 // attributes.run_name -> tags.`mlflow.runName` EXISTS.
                 let mut inner = format!(
@@ -712,21 +815,46 @@ fn build_filter_predicate(
                 );
                 inner.push_str(" AND ");
                 inner.push_str(&value_predicate(
-                    dialect, "t.value", &comparator, &f.value, ph, binds,
+                    dialect,
+                    "t.value",
+                    &comparator,
+                    &f.value,
+                    ph,
+                    binds,
                 )?);
                 Ok(format!("EXISTS ({inner})"))
             } else {
                 let col = attr_column(&key)?;
                 let target = format!("r.{col}");
-                value_predicate(dialect, &target, &comparator, &f.value, ph, binds)
+                if is_numeric_attr(&key) {
+                    // Numeric attributes (start_time/end_time) bind numerically so
+                    // the comparison works across dialects (Postgres rejects a
+                    // text bind against a bigint column; SQLite/MySQL coerce). The
+                    // valid comparator set here is `=,!=,<,<=,>,>=` — no LIKE/IN —
+                    // so a scalar numeric predicate covers every case.
+                    let num = numeric_attr_value(&f.value)?;
+                    Ok(value_predicate_num(
+                        dialect,
+                        &target,
+                        &comparator,
+                        num,
+                        ph,
+                        binds,
+                    ))
+                } else {
+                    value_predicate(dialect, &target, &comparator, &f.value, ph, binds)
+                }
             }
         }
         "metric" | "parameter" | "tag" => {
-            let table = match f.entity_type.as_str() {
-                "metric" => "latest_metrics",
-                "parameter" => "params",
-                _ => "tags",
+            let (table, valid, trailing_quote): (&str, &[&str], bool) = match f.entity_type.as_str()
+            {
+                // Python's metric/tag messages omit the closing quote; param's keeps it.
+                "metric" => ("latest_metrics", VALID_METRIC_COMPARATORS, false),
+                "parameter" => ("params", VALID_PARAM_COMPARATORS, true),
+                _ => ("tags", VALID_TAG_COMPARATORS, false),
             };
+            validate_comparator(&comparator, valid, valid, trailing_quote)?;
             if comparator == "IS NULL" || comparator == "IS NOT NULL" {
                 let inner = format!(
                     "SELECT 1 FROM {table} e WHERE e.run_uuid = r.run_uuid AND e.key = {}",
@@ -751,7 +879,16 @@ fn build_filter_predicate(
                  AND e.key = {key_ph} AND {val_pred})"
             ))
         }
-        "dataset" => build_dataset_predicate(dialect, &key, &comparator, &f.value, ph, binds),
+        "dataset" => {
+            // Python's dataset message omits the closing quote.
+            validate_comparator(
+                &comparator,
+                VALID_DATASET_COMPARATORS,
+                VALID_DATASET_COMPARATORS,
+                false,
+            )?;
+            build_dataset_predicate(dialect, &key, &comparator, &f.value, ph, binds)
+        }
         other => Err(MlflowError::invalid_parameter_value(format!(
             "Invalid search expression type '{other}'"
         ))),
@@ -867,10 +1004,30 @@ fn value_predicate_num(
     format!("{column} {comparator} {p}")
 }
 
+/// Resolve a numeric-attribute filter value (`start_time`/`end_time`) to `f64`.
+/// The parser hands these to us as a `Value::Str` holding the raw numeric token
+/// (having already rejected non-numeric tokens), so a parse here is defensive.
+fn numeric_attr_value(value: &Value) -> Result<f64, MlflowError> {
+    match value {
+        Value::Str(s) => s.parse::<f64>().map_err(|_| {
+            MlflowError::invalid_parameter_value(format!(
+                "could not convert string to float: '{s}'"
+            ))
+        }),
+        Value::Int(i) => Ok(*i as f64),
+        Value::Float(f) => Ok(*f),
+        _ => Err(MlflowError::invalid_parameter_value(
+            "Expected a numeric value for a numeric attribute".to_string(),
+        )),
+    }
+}
+
 fn metric_filter_value(value: &Value) -> Result<f64, MlflowError> {
     match value {
         Value::Str(s) => s.parse::<f64>().map_err(|_| {
-            MlflowError::invalid_parameter_value(format!("could not convert string to float: '{s}'"))
+            MlflowError::invalid_parameter_value(format!(
+                "could not convert string to float: '{s}'"
+            ))
         }),
         Value::Int(i) => Ok(*i as f64),
         Value::Float(f) => Ok(*f),
@@ -1063,12 +1220,7 @@ fn eq_term(expr: &str, cell: &Cell, ph: &mut PlaceholderGen, binds: &mut Vec<Val
 }
 
 /// "Row strictly after cursor at this column", honoring direction + NULLS.
-fn after_term(
-    col: &SortCol,
-    cell: &Cell,
-    ph: &mut PlaceholderGen,
-    binds: &mut Vec<Val>,
-) -> String {
+fn after_term(col: &SortCol, cell: &Cell, ph: &mut PlaceholderGen, binds: &mut Vec<Val>) -> String {
     let expr = &col.expr;
     match col.nulls {
         Nulls::NonNull => {
@@ -1357,4 +1509,238 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
         out.extend_from_slice(&full[..bytes]);
     }
     Some(out)
+}
+
+// ===========================================================================
+// Unit tests (dialect-independent string/logic parity — no DB required).
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Drain the thread-local join registry so a prior test's leftover joins
+    /// never leak into the next `build_order_cols` call.
+    fn drain_joins() {
+        JOIN_REGISTRY.with(|r| r.borrow_mut().clear());
+    }
+
+    #[test]
+    fn max_results_validation_matches_python() {
+        assert!(validate_max_results(None).is_ok());
+        assert!(validate_max_results(Some(1)).is_ok());
+        assert!(validate_max_results(Some(SEARCH_MAX_RESULTS_THRESHOLD)).is_ok());
+        let e = validate_max_results(Some(0)).unwrap_err();
+        assert!(
+            e.message.contains("must be a positive integer"),
+            "{}",
+            e.message
+        );
+        let e = validate_max_results(Some(SEARCH_MAX_RESULTS_THRESHOLD + 1)).unwrap_err();
+        assert!(e.message.contains("at most 50000"), "{}", e.message);
+    }
+
+    #[test]
+    fn view_type_stages_map() {
+        assert_eq!(view_type_stages(ViewType::ActiveOnly), &["active"]);
+        assert_eq!(view_type_stages(ViewType::DeletedOnly), &["deleted"]);
+        assert_eq!(view_type_stages(ViewType::All), &["active", "deleted"]);
+    }
+
+    #[test]
+    fn default_order_appends_start_time_then_run_uuid() {
+        drain_joins();
+        let cols = build_order_cols(&[]).unwrap();
+        // Just the two tiebreaks: start_time DESC, run_uuid ASC.
+        assert_eq!(cols.len(), 2);
+        assert_eq!(cols[0].expr, "r.start_time");
+        assert_eq!(cols[0].dir, Dir::Desc);
+        assert_eq!(cols[1].expr, "r.run_uuid");
+        assert_eq!(cols[1].dir, Dir::Asc);
+        drain_joins();
+    }
+
+    #[test]
+    fn start_time_order_by_suppresses_extra_tiebreak() {
+        drain_joins();
+        let cols = build_order_cols(&["attribute.start_time ASC".to_string()]).unwrap();
+        // rank CASE + value + run_uuid  (no second start_time appended).
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[0].kind, ColKind::Rank);
+        assert_eq!(cols[1].expr, "r.start_time");
+        assert_eq!(cols[1].dir, Dir::Asc);
+        assert_eq!(cols[2].expr, "r.run_uuid");
+        drain_joins();
+    }
+
+    #[test]
+    fn metric_order_by_emits_three_way_rank() {
+        drain_joins();
+        let cols = build_order_cols(&["metrics.acc DESC".to_string()]).unwrap();
+        // rank CASE (is_nan=>1, null=>2) + value DESC + start_time DESC + run_uuid.
+        assert_eq!(cols.len(), 4);
+        assert_eq!(cols[0].kind, ColKind::Rank);
+        assert!(cols[0].expr.contains("is_nan = 1"));
+        assert!(cols[0].expr.contains("IS NULL THEN 2"));
+        assert_eq!(cols[1].kind, ColKind::Num);
+        assert_eq!(cols[1].dir, Dir::Desc);
+        // One order-by join was registered.
+        let n = JOIN_REGISTRY.with(|r| r.borrow().len());
+        assert_eq!(n, 1);
+        drain_joins();
+    }
+
+    #[test]
+    fn duplicate_order_by_fields_rejected() {
+        drain_joins();
+        let e = build_order_cols(&["metrics.acc".to_string(), "metrics.acc DESC".to_string()])
+            .unwrap_err();
+        assert!(e.message.contains("duplicate fields"), "{}", e.message);
+        drain_joins();
+    }
+
+    #[test]
+    fn order_by_created_alias_is_start_time() {
+        drain_joins();
+        // `created` translates to start_time, so the extra start_time tiebreak
+        // is suppressed (same key as the user clause).
+        let cols = build_order_cols(&["created ASC".to_string()]).unwrap();
+        assert_eq!(cols.len(), 3);
+        assert_eq!(cols[1].expr, "r.start_time");
+        drain_joins();
+    }
+
+    #[test]
+    fn dialect_null_placement_for_start_time_desc() {
+        let cols = vec![SortCol {
+            expr: "r.start_time".to_string(),
+            dir: Dir::Desc,
+            nulls: Nulls::First,
+            kind: ColKind::Num,
+        }];
+        // SQLite/MySQL DESC => NULLs last; Postgres DESC => NULLs first.
+        assert_eq!(
+            apply_dialect_nulls(Dialect::Sqlite, &cols)[0].nulls,
+            Nulls::Last
+        );
+        assert_eq!(
+            apply_dialect_nulls(Dialect::MySql, &cols)[0].nulls,
+            Nulls::Last
+        );
+        assert_eq!(
+            apply_dialect_nulls(Dialect::Postgres, &cols)[0].nulls,
+            Nulls::First
+        );
+    }
+
+    #[test]
+    fn order_term_rendering_per_dialect() {
+        let last = SortCol {
+            expr: "r.start_time".to_string(),
+            dir: Dir::Desc,
+            nulls: Nulls::Last,
+            kind: ColKind::Num,
+        };
+        assert_eq!(order_term(Dialect::Sqlite, 3, &last), "k3 DESC NULLS LAST");
+        assert_eq!(
+            order_term(Dialect::Postgres, 3, &last),
+            "k3 DESC NULLS LAST"
+        );
+        // MySQL has no NULLS syntax; its default already matches.
+        assert_eq!(order_term(Dialect::MySql, 3, &last), "k3 DESC");
+        let nonnull = SortCol {
+            expr: "r.run_uuid".to_string(),
+            dir: Dir::Asc,
+            nulls: Nulls::NonNull,
+            kind: ColKind::Text,
+        };
+        assert_eq!(order_term(Dialect::Postgres, 5, &nonnull), "k5 ASC");
+    }
+
+    #[test]
+    fn comparator_validation_messages() {
+        // param `>` is invalid (params only support =,!=,LIKE,ILIKE,IS [NOT] NULL).
+        let f = Comparison {
+            entity_type: "parameter".to_string(),
+            key: "p".to_string(),
+            comparator: ">".to_string(),
+            value: Value::Str("x".to_string()),
+        };
+        let mut ph = PlaceholderGen::new(Dialect::Sqlite);
+        let mut binds = Vec::new();
+        let e = build_filter_predicate(Dialect::Sqlite, &f, &mut ph, &mut binds).unwrap_err();
+        assert!(
+            e.message
+                .starts_with("Invalid comparator '>' not one of '{"),
+            "{}",
+            e.message
+        );
+        // param message keeps the closing quote.
+        assert!(e.message.ends_with("}'"), "{}", e.message);
+
+        // metric LIKE is invalid and the metric message OMITS the closing quote.
+        let f = Comparison {
+            entity_type: "metric".to_string(),
+            key: "m".to_string(),
+            comparator: "LIKE".to_string(),
+            value: Value::Str("1".to_string()),
+        };
+        let mut ph = PlaceholderGen::new(Dialect::Sqlite);
+        let mut binds = Vec::new();
+        let e = build_filter_predicate(Dialect::Sqlite, &f, &mut ph, &mut binds).unwrap_err();
+        assert!(
+            e.message.starts_with("Invalid comparator 'LIKE'"),
+            "{}",
+            e.message
+        );
+        assert!(e.message.ends_with('}'), "no trailing quote: {}", e.message);
+    }
+
+    #[test]
+    fn py_set_sorted_is_sorted() {
+        assert_eq!(py_set_sorted(&[">", "=", "<"]), "{'<', '=', '>'}");
+    }
+
+    #[test]
+    fn cursor_round_trip_all_cell_kinds() {
+        let keys = vec![
+            Cell::Int(2),
+            Cell::Num(0.94),
+            Cell::Text("run-abc".to_string()),
+            Cell::Null,
+            Cell::Num(f64::NAN),
+            Cell::Num(f64::INFINITY),
+            Cell::Num(f64::NEG_INFINITY),
+        ];
+        let token = Cursor::encode(&keys);
+        let decoded = Cursor::decode(&token, keys.len()).unwrap();
+        assert_eq!(decoded.cells.len(), keys.len());
+        assert_eq!(decoded.cells[0], Cell::Int(2));
+        assert_eq!(decoded.cells[1], Cell::Num(0.94));
+        assert_eq!(decoded.cells[2], Cell::Text("run-abc".to_string()));
+        assert_eq!(decoded.cells[3], Cell::Null);
+        match decoded.cells[4] {
+            Cell::Num(f) => assert!(f.is_nan()),
+            ref other => panic!("expected NaN, got {other:?}"),
+        }
+        assert_eq!(decoded.cells[5], Cell::Num(f64::INFINITY));
+        assert_eq!(decoded.cells[6], Cell::Num(f64::NEG_INFINITY));
+    }
+
+    #[test]
+    fn cursor_decode_rejects_wrong_length_and_garbage() {
+        let token = Cursor::encode(&[Cell::Int(1)]);
+        assert!(Cursor::decode(&token, 2).is_err());
+        assert!(Cursor::decode("!!!not-base64!!!", 1).is_err());
+        assert!(Cursor::decode("", 1).is_err());
+    }
+
+    #[test]
+    fn attr_column_mapping_matches_python() {
+        assert_eq!(attr_column("run_name").unwrap(), "name");
+        assert_eq!(attr_column("run_id").unwrap(), "run_uuid");
+        assert_eq!(attr_column("status").unwrap(), "status");
+        assert_eq!(attr_column("start_time").unwrap(), "start_time");
+        assert!(attr_column("experiment_id").is_err());
+    }
 }

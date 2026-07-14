@@ -31,7 +31,7 @@ pub(crate) struct RunRow {
 }
 
 impl RunRow {
-    fn from_row(r: &dyn RowLike) -> Result<Self, sqlx::Error> {
+    pub(crate) fn from_row(r: &dyn RowLike) -> Result<Self, sqlx::Error> {
         Ok(RunRow {
             run_uuid: r.get_string("run_uuid")?,
             name: r.get_opt_string("name")?,
@@ -307,7 +307,7 @@ impl TrackingStore {
             })
     }
 
-    fn run_info_from_row(&self, row: &RunRow) -> RunInfo {
+    pub(crate) fn run_info_from_row(&self, row: &RunRow) -> RunInfo {
         RunInfo {
             run_id: row.run_uuid.clone(),
             run_name: row.name.clone().unwrap_or_default(),
