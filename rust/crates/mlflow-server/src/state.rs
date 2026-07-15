@@ -12,13 +12,20 @@
 //! `_get_proxied_run_artifact_destination_path` /
 //! `_get_artifact_repo_mlflow_artifacts` seam.
 //!
-//! The state is cheap to clone (`TrackingStore` holds an `Arc`-backed pool,
-//! the proxy repo is an `Arc`), which is what axum's `State` extractor requires.
+//! T5.4 adds the [`mlflow_registry::RegistryStore`] handle so
+//! `/model-versions/get-artifact` can resolve `storage_location or source`
+//! (`_get_model_registry_store()`, `handlers.py:674`) alongside the same
+//! artifact-resolution seam.
+//!
+//! The state is cheap to clone (`TrackingStore`/`RegistryStore` hold
+//! `Arc`-backed pools, the proxy repo is an `Arc`), which is what axum's
+//! `State` extractor requires.
 
 use std::sync::Arc;
 
 use mlflow_artifacts::ArtifactRepo;
 use mlflow_error::MlflowError;
+use mlflow_registry::RegistryStore;
 use mlflow_store::TrackingStore;
 
 /// A resolved artifact repository plus the repo-relative path to operate on —
@@ -38,6 +45,12 @@ pub struct AppState {
 
 struct AppStateInner {
     tracking_store: TrackingStore,
+    /// The model-registry store, sharing the same backing `Db` pool as
+    /// `tracking_store` (both stores are thin query layers over the same
+    /// Alembic-migrated database). `None` in the ops-only / no-backend-store
+    /// configuration ([`AppState::new`]) used by tests that don't touch the
+    /// registry.
+    registry_store: Option<RegistryStore>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -51,10 +64,12 @@ struct AppStateInner {
 
 impl AppState {
     /// Build the state from an already-constructed [`TrackingStore`], with the
-    /// artifact proxy disabled and no destination. Tests that don't exercise
-    /// artifacts use this; `main`/`build_app` use [`AppState::with_artifacts`].
+    /// artifact proxy disabled, no destination, and no registry store. Tests
+    /// that don't exercise artifacts/the registry use this; `main`/`build_app`
+    /// use [`AppState::with_artifacts`] (+ [`AppState::with_registry`] for the
+    /// registry-store handle).
     pub fn new(tracking_store: TrackingStore) -> Self {
-        Self::build(tracking_store, false, None, None)
+        Self::build(tracking_store, None, false, None, None)
     }
 
     /// Build the state with the artifact proxy configuration. `serve_artifacts`
@@ -69,6 +84,26 @@ impl AppState {
     ) -> Self {
         Self::build(
             tracking_store,
+            None,
+            serve_artifacts,
+            proxied_artifacts_repo,
+            artifacts_destination,
+        )
+    }
+
+    /// Same as [`AppState::with_artifacts`], additionally wiring the
+    /// model-registry store (T5.4: `/model-versions/get-artifact` needs
+    /// `_get_model_registry_store()`).
+    pub fn with_registry(
+        tracking_store: TrackingStore,
+        registry_store: RegistryStore,
+        serve_artifacts: bool,
+        proxied_artifacts_repo: Option<Arc<dyn ArtifactRepo>>,
+        artifacts_destination: Option<String>,
+    ) -> Self {
+        Self::build(
+            tracking_store,
+            Some(registry_store),
             serve_artifacts,
             proxied_artifacts_repo,
             artifacts_destination,
@@ -77,6 +112,7 @@ impl AppState {
 
     fn build(
         tracking_store: TrackingStore,
+        registry_store: Option<RegistryStore>,
         serve_artifacts: bool,
         proxied_artifacts_repo: Option<Arc<dyn ArtifactRepo>>,
         artifacts_destination: Option<String>,
@@ -84,6 +120,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store,
+                registry_store,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
@@ -94,6 +131,21 @@ impl AppState {
     /// The tracking store (experiments, runs, metrics, traces, …).
     pub fn tracking_store(&self) -> &TrackingStore {
         &self.inner.tracking_store
+    }
+
+    /// The model-registry store (`_get_model_registry_store()`,
+    /// `handlers.py:674`). Errors `INTERNAL_ERROR` when this server instance
+    /// wasn't wired with a registry store (mirrors the shape of
+    /// [`AppState::proxied_artifacts_repo`]'s misconfiguration error — this
+    /// server has no dedicated `--registry-store-uri` flag yet, so it is
+    /// always available whenever a backend store is configured; the `None`
+    /// case only arises for ops-only [`AppState::new`] test builders).
+    pub fn registry_store(&self) -> Result<&RegistryStore, MlflowError> {
+        self.inner.registry_store.as_ref().ok_or_else(|| {
+            MlflowError::internal_error(
+                "The MLflow server is not configured with a model registry store.",
+            )
+        })
     }
 
     /// `_is_serving_proxied_artifacts()` — whether the `mlflow-artifacts` proxy
