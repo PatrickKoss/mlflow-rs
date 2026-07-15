@@ -17,6 +17,7 @@ pub mod experiments;
 pub mod metrics;
 pub mod proto_http;
 pub mod routes;
+pub mod runs;
 pub mod state;
 pub mod workspace;
 
@@ -45,8 +46,9 @@ pub fn build_app(config: &ServerConfig) -> Router {
 }
 
 /// Builds the full application `Router` with a backend store, registering every
-/// proto-backed endpoint implemented so far (Phase 3: experiments) in addition
-/// to the ops endpoints. `main` uses this; tests inject a store over a temp DB.
+/// proto-backed endpoint implemented so far (Phase 3: experiments + runs) in
+/// addition to the ops endpoints. `main` uses this; tests inject a store over a
+/// temp DB.
 pub fn build_app_with_state(config: &ServerConfig, state: AppState) -> Router {
     let metrics_handle = metrics::install_recorder();
     build_app_with_recorder(config, metrics_handle, Some(state))
@@ -57,7 +59,7 @@ pub fn build_app_with_state(config: &ServerConfig, state: AppState) -> Router {
 /// tests can build multiple `Router`s in the same process without hitting
 /// "recorder already installed" panics from `metrics-exporter-prometheus`.
 ///
-/// When `state` is `Some`, the proto-backed endpoints (experiments) are
+/// When `state` is `Some`, the proto-backed endpoints (experiments + runs) are
 /// registered on both `/api/2.0/...` and `/ajax-api/2.0/...` (driven by the
 /// `mlflow-proto` route table) honoring the static prefix. When `None`, only
 /// the ops endpoints are served.
@@ -140,6 +142,20 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("updateExperiment", "POST") => post(experiments::update_experiment),
         ("setExperimentTag", "POST") => post(experiments::set_experiment_tag),
         ("deleteExperimentTag", "POST") => post(experiments::delete_experiment_tag),
+        ("createRun", "POST") => post(runs::create_run),
+        ("updateRun", "POST") => post(runs::update_run),
+        ("deleteRun", "POST") => post(runs::delete_run),
+        ("restoreRun", "POST") => post(runs::restore_run),
+        ("getRun", "GET") => get(runs::get_run),
+        ("searchRuns", "POST") => post(runs::search_runs),
+        ("logMetric", "POST") => post(runs::log_metric),
+        ("logParam", "POST") => post(runs::log_param),
+        ("setTag", "POST") => post(runs::set_tag),
+        ("deleteTag", "POST") => post(runs::delete_tag),
+        ("logBatch", "POST") => post(runs::log_batch),
+        ("logModel", "POST") => post(runs::log_model),
+        ("logInputs", "POST") => post(runs::log_inputs),
+        ("logOutputs", "POST") => post(runs::log_outputs),
         _ => return None,
     })
 }
