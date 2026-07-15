@@ -1,6 +1,6 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 started — T3.1/T3.5 done, HTTP foundation landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-14
+Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 complete — tracking HTTP API T3.1–T3.5 landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -843,16 +843,60 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       type-coercion error messages and `_validate_storage_location_uri`
       deferred to a shared validation layer; cross-dialect + Python
       differential deferred to Phase 12.)*
-- [ ] **T3.2 Runs endpoints** (§3.2) incl. limits, param-length errors, view-type,
+- [x] **T3.2 Runs endpoints** (§3.2) incl. limits, param-length errors, view-type,
       deprecated `user_id`.
       **AC:** run sections pass; limit-violation error payloads byte-match.
       **VER:** Phase 12 runner `-k run` + golden diffs.
-- [ ] **T3.3 Metrics endpoints** (§3.3) incl. both ajax-only bulk routes with hand-rolled
+      *(Done 2026-07-15: all 14 endpoints in `mlflow-server/src/runs.rs`, wired
+      via `handler_for` on both prefixes. One new store method
+      (`record_logged_model` for legacy `runs/log-model`) — byte-parity
+      `mlflow.log-model.history` tag needed insertion-ordered,
+      json.dumps-compatible serialization (serde_json `preserve_order` enabled;
+      proto codec unaffected, verified by goldens). Parity subtleties: search
+      `max_results` handler check fires only when the field is present and
+      byte-matches Python's `invalid_value` AssertionError message (distinct
+      from the store threshold error); omitted `user_id`/`start_time` stored as
+      `""`/`0` per proto2 defaults; `run_id or run_uuid` fallback where the
+      proto has both; `RunInfo.to_proto` emit rules mirrored exactly.
+      `_validate_batch_log_api_req` found to be a dead no-op in Python (counts
+      parsed dict keys, not bytes — can never fire) and deliberately omitted
+      with a doc comment. 22 HTTP tests + 3 store tests. Deferred:
+      cross-dialect differential (Phase 12); `_disable_if_artifacts_only` mode
+      (T11.1).)*
+- [x] **T3.3 Metrics endpoints** (§3.3) incl. both ajax-only bulk routes with hand-rolled
       JSON shape.
       **AC:** UI charts render identically; metric suite sections pass.
       **VER:** Phase 12 runner `-k metric` + UI smoke (T11.6).
-- [ ] **T3.4 Logged models + search-datasets endpoints** (§3.4, §3.5).
+      *(Done 2026-07-15: `mlflow-server/src/metric_history.rs` — get-history +
+      get-history-bulk-interval via the route table; ajax-only get-history-bulk
+      hand-registered in `lib.rs` (not proto-backed). Hand-rolled JSON =
+      Flask-jsonify parity verified against a live Flask app: sorted keys,
+      compact separators, trailing newline, bare `NaN`/`Infinity` literals
+      (serde_json can't emit those — body built by hand reusing the codec's
+      exported `python_float_repr`/`quote_json_string`). Quirks reproduced:
+      non-integer `max_results` on get-history-bulk hits an uncaught Python
+      `ValueError` → generic HTML 500 (not JSON); bulk-interval int-coercion
+      failures match `_assert_intlike`'s double-space message via raw-query
+      pre-validation; get-history's `max_results` has NO validator in Python —
+      non-numeric values are silently dropped, reproduced by scrubbing the
+      field pre-parse. 25 HTTP tests. UI chart smoke deferred to T11.6.)*
+- [x] **T3.4 Logged models + search-datasets endpoints** (§3.4, §3.5).
       **AC/VER:** Phase 12 runner `-k "logged_model or dataset"`.
+      *(Done 2026-07-15: 8 logged-model endpoints
+      (create/get/finalize PATCH/delete/search/set-tags PATCH/delete-tag/
+      log-params) in `mlflow-server/src/logged_models.rs` + search-datasets in
+      `datasets.rs`, incl. the missing-leading-slash quirk path from the route
+      table AND the hand-registered correctly-slashed ajax route
+      (`mlflow/server/__init__.py:135`). New reusable path-param
+      infrastructure for later phases (traces/registry/webhooks):
+      `to_axum_path` converts Flask `<param>` → axum `{param}`, and
+      `proto_http::parse_request_with_path_params` overlays captured segments
+      onto the parsed proto before validation (path wins over body — a
+      documented, tested deviation from Flask's separate view args,
+      behaviorally identical for real clients). `SetLoggedModelTags.Response`'s
+      optional `model` field left unpopulated like Python. 20 HTTP tests.
+      Deferred to Phase 5 (T5.1/T5.3): `listLoggedModelArtifacts` + ajax-only
+      logged-model artifact file download (need the artifact-repo layer).)*
 - [x] **T3.5 GET-request proto parsing** (repeated params, nested fields).
       **AC:** V2 trace search via GET and experiments/get round-trip correctly.
       **VER:** unit tests + suite.
