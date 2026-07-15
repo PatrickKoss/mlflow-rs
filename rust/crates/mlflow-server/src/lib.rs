@@ -28,6 +28,7 @@ pub mod state;
 pub mod trace_artifact;
 pub mod traces;
 pub mod traces_v2;
+pub mod webhooks;
 pub mod workspace;
 
 use axum::extract::MatchedPath;
@@ -218,6 +219,23 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
             ("completeMultipartUpload", "POST") => post(artifacts::proxy_complete_multipart),
             ("abortMultipartUpload", "POST") => post(artifacts::proxy_abort_multipart),
             ("getPresignedDownloadUrl", "GET") => get(artifacts::proxy_presigned_download),
+            _ => return None,
+        });
+    }
+    // `WebhookService` (plan T8.2, §4.16) is a distinct proto service — its 6
+    // endpoints live under `/(api|ajax-api)/2.0/mlflow/webhooks[/{webhook_id}]`
+    // and route to the webhook CRUD + test handlers. The `{webhook_id}` segment
+    // becomes an axum path param via `to_axum_path`, overlaid onto the request
+    // proto by `parse_request_with_path_params` (same mechanism as
+    // logged-models).
+    if service == "WebhookService" {
+        return Some(match (method, http_method) {
+            ("createWebhook", "POST") => post(webhooks::create_webhook),
+            ("listWebhooks", "GET") => get(webhooks::list_webhooks),
+            ("getWebhook", "GET") => get(webhooks::get_webhook),
+            ("updateWebhook", "PATCH") => patch(webhooks::update_webhook),
+            ("deleteWebhook", "DELETE") => delete(webhooks::delete_webhook),
+            ("testWebhook", "POST") => post(webhooks::test_webhook),
             _ => return None,
         });
     }
