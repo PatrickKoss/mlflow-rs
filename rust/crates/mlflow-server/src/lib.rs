@@ -14,6 +14,7 @@
 
 pub mod config;
 pub mod experiments;
+pub mod metric_history;
 pub mod metrics;
 pub mod proto_http;
 pub mod routes;
@@ -108,7 +109,14 @@ pub fn build_app_with_recorder(
 /// register the bare `/api/…` + `/ajax-api/…` paths here (passing an empty
 /// prefix to `expand`). `with_state` erases the state type so the result merges
 /// into the ops router.
+///
+/// Also registers the ajax-only, non-proto-backed endpoints (currently just
+/// `get-history-bulk`, plan T3.3) by hand, alongside the route-table-driven
+/// ones — same pre-static-prefix router, so `_add_static_prefix` nesting
+/// still applies to them.
 fn register_proto_routes(state: AppState) -> Router {
+    use axum::routing::get;
+
     let mut router: Router<AppState> = Router::new();
     for spec in mlflow_proto::ROUTE_TABLE {
         let Some(handler) = handler_for(spec.service, spec.method, spec.http_method) else {
@@ -118,6 +126,10 @@ fn register_proto_routes(state: AppState) -> Router {
             router = router.route(&route.path, handler.clone());
         }
     }
+    router = router.route(
+        "/ajax-api/2.0/mlflow/metrics/get-history-bulk",
+        get(metric_history::get_metric_history_bulk),
+    );
     router.with_state(state)
 }
 
@@ -140,6 +152,10 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("updateExperiment", "POST") => post(experiments::update_experiment),
         ("setExperimentTag", "POST") => post(experiments::set_experiment_tag),
         ("deleteExperimentTag", "POST") => post(experiments::delete_experiment_tag),
+        ("getMetricHistory", "GET") => get(metric_history::get_metric_history),
+        ("getMetricHistoryBulkInterval", "GET") => {
+            get(metric_history::get_metric_history_bulk_interval)
+        }
         _ => return None,
     })
 }
