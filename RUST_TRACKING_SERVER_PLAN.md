@@ -1104,7 +1104,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       `Deleted_Internal` with redaction sentinels + alias removal, tags kept;
       `get_model_version_including_deleted` mirror of Python's test helper.
       copy_model_version end-to-end + Phase 12 HTTP checks ride T7.4/T12.)*
-- [ ] **T7.3 Registry search**: `search_registered_models` / `search_model_versions` with
+- [x] **T7.3 Registry search**: `search_registered_models` / `search_model_versions` with
       the DSL (§4.8), AND-of-tags HAVING-count subquery, **prompt-exclusion anti-join**
       + `_is_querying_prompt` bypass, order_by defaults and tiebreakers, offset-token
       contract (`limit(N+1)`), latest-versions via ROW_NUMBER window batch.
@@ -1113,6 +1113,22 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       stage.
       **VER:** Phase 12 suite + differential harness with a corpus mixing models and
       prompts.
+      *(Done 2026-07-15: `mlflow-registry/src/store/search.rs` using the T2.3
+      parsers. AND-of-tags HAVING-count port; prompt anti-join with the
+      untagged-row semantics (MV's anti-join reads model_version_tags grouped
+      by (workspace,name) — a prompt-tagged RM does NOT hide its versions);
+      offset tokens byte-match Python; deleted-MV exclusion; MV search omits
+      aliases; store thresholds RM 1000/MV 200000 (defaults are handler-level
+      → T7.4). Confirmed the store does NOT auto-wrap `name = 'x'` into
+      `%x%` (client-side per proto doc). Parser gap fixed additively:
+      the store's RM order-by uses `parse_order_by_for_search_registered_
+      models` key set (timestamp, not creation_timestamp) — new
+      `registered_models_order_by_store` in mlflow-search. Differential
+      corpus (`rust/tools/gen_registry_search_corpus.py`, 40 cases via the
+      genuine Python registry SqlAlchemyStore, full page walks + tokens)
+      replays clean; bring-up caught 2 real bugs (outer-alias reference in
+      subquery; positional-bind ordering on sqlite/mysql), both fixed.
+      13 behavioral + 2 corpus tests + live pg/mysql smoke (env-gated).)*
 - [ ] **T7.4 Registry REST endpoints** (§3.14, 21 endpoints) incl. the method-overloaded
       alias route and GET+POST get-latest-versions; store-side max_results limits
       (RM 100/1000, MV 10000/200000).
