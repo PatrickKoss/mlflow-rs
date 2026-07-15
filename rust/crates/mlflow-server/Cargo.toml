@@ -61,6 +61,7 @@ http-body-util = "0.1"
 mlflow-store = { workspace = true }
 mlflow-error = { workspace = true }
 mlflow-proto = { workspace = true }
+mlflow-registry = { workspace = true }
 prost = { workspace = true }
 base64 = { workspace = true }
 flate2 = { workspace = true }

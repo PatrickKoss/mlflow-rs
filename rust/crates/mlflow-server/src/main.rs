@@ -6,6 +6,7 @@
 //! can be exercised directly in tests.
 
 use clap::Parser;
+use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
 use tokio::net::TcpListener;
@@ -34,6 +35,10 @@ async fn main() -> anyhow::Result<()> {
                 .clone()
                 .unwrap_or_else(|| DEFAULT_ARTIFACT_ROOT.to_string());
             let store = TrackingStore::new(db, artifact_root);
+            // The registry tables live in the same Alembic-migrated database as
+            // the tracking tables, so the registry store shares the same `Db`
+            // pool (`_get_model_registry_store()`, `handlers.py:674`).
+            let registry_store = RegistryStore::new(store.db().clone());
 
             // Resolve the `--artifacts-destination` proxy repo once (parity with
             // Python's memoized `_artifact_repo`). Only local-FS/`file:` URIs are
@@ -42,8 +47,9 @@ async fn main() -> anyhow::Result<()> {
                 Some(dest) => Some(mlflow_artifacts::factory::repo_from_uri(dest)?),
                 None => None,
             };
-            let app_state = AppState::with_artifacts(
+            let app_state = AppState::with_registry(
                 store,
+                registry_store,
                 config.serve_artifacts,
                 proxied_repo,
                 config.artifacts_destination.clone(),

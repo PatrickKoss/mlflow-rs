@@ -22,6 +22,15 @@
 //! Multipart + presigned-URL endpoints go through the repo trait, whose local-FS
 //! backend returns `NOT_IMPLEMENTED` (parity with `LocalArtifactRepository`,
 //! which lacks the multipart/presigned mixins).
+//!
+//! * **T5.4** `GET /model-versions/get-artifact?name=&version=&path=`
+//!   (`get_model_version_artifact_handler`, `handlers.py:3033`): resolve
+//!   `storage_location or source` via the [`mlflow_registry::RegistryStore`],
+//!   then stream the file through the same proxied/direct resolution seam as
+//!   T5.1. `models:/name/version`-sourced versions already carry a resolved
+//!   `storage_location` (the registry store's `create_model_version`
+//!   resolves that at write time, per `mlflow-registry`'s docs), so no extra
+//!   indirection is needed here.
 
 use std::collections::HashMap;
 
@@ -86,6 +95,78 @@ pub async fn get_artifact(
             .get_run(workspace.name(), &run_id)
             .await?;
         let artifact_uri = run.info.artifact_uri.unwrap_or_default();
+        let resolved = state.resolve_artifact(&artifact_uri, &safe_path)?;
+        Ok::<_, MlflowError>((resolved.repo, resolved.path))
+    }
+    .await;
+
+    match result {
+        Ok((repo, path)) => mlflow_artifacts::send_artifact_response(repo.as_ref(), &path).await,
+        Err(e) => e.into_response(),
+    }
+}
+
+// ===========================================================================
+// T5.4 — GET /model-versions/get-artifact
+// ===========================================================================
+
+/// `get_model_version_artifact_handler` (`handlers.py:3033`), served at the
+/// root `/model-versions/get-artifact` (`mlflow/server/__init__.py:117`) —
+/// no ajax alias, matching Python. Plain `name`/`version`/`path` query
+/// params (not a proto message).
+pub async fn get_model_version_artifact(
+    State(state): State<AppState>,
+    workspace: Workspace,
+    parts: Parts,
+) -> Response {
+    let result = async {
+        let pairs = parts.uri.query().map(parse_query_pairs).unwrap_or_default();
+        // `request.args["path"]` raises KeyError (→ 400) when missing, which
+        // `catch_mlflow_exception` does NOT wrap; same documented, benign
+        // deviation as `get_artifact`'s missing-`path` case (see its doc
+        // comment above).
+        let Some(path) = query_param(&pairs, "path") else {
+            return Err(MlflowError::new(
+                "Request must specify a 'path' query parameter.",
+                ErrorCode::BadRequest,
+            ));
+        };
+        let safe_path = mlflow_artifacts::validate_path_is_safe(&path)?;
+        // `request.args.get("name")` — `None` when absent. The registry
+        // store's `_validate_model_name` (invoked inside
+        // `get_model_version_download_uri`) raises the exact same "Missing
+        // value for required parameter" `INVALID_PARAMETER_VALUE` error for
+        // `None` as for `""`, so passing through the empty string reproduces
+        // Python's error byte-for-byte without a separate required-param
+        // guard here.
+        let name = query_param(&pairs, "name").unwrap_or_default();
+        // `request.args.get("version")` — `None` when absent. UNLIKE `name`,
+        // `_validate_model_version` (`mlflow/utils/validation.py:684`) has no
+        // explicit `is None` check: it calls `int(model_version)` inside a
+        // `try/except ValueError`, and `int(None)` raises `TypeError`, NOT
+        // `ValueError` — so the exception is NOT caught there. It propagates
+        // out of the SQLAlchemy store's `ManagedSessionMaker` context
+        // manager, whose blanket `except Exception as e: raise
+        // MlflowException(message=e, error_code=INTERNAL_ERROR) from e`
+        // (`mlflow/store/db/utils.py:188`) wraps it into a 500
+        // `INTERNAL_ERROR`, distinct from the 400 `INVALID_PARAMETER_VALUE`
+        // a present-but-non-numeric `version` (e.g. `"abc"`, or `""` for
+        // `version=` with an empty value) gets from the caught `ValueError`
+        // path. Verified against the real Python handler. We special-case
+        // the missing-query-param case to reproduce this exact asymmetry;
+        // `validate_model_version` inside the registry store handles the
+        // present-but-invalid cases identically to Python.
+        let Some(version) = query_param(&pairs, "version") else {
+            return Err(MlflowError::internal_error(
+                "int() argument must be a string, a bytes-like object or a real number, not \
+                 'NoneType'",
+            ));
+        };
+
+        let registry = state.registry_store()?;
+        let artifact_uri = registry
+            .get_model_version_download_uri(workspace.name(), &name, &version)
+            .await?;
         let resolved = state.resolve_artifact(&artifact_uri, &safe_path)?;
         Ok::<_, MlflowError>((resolved.repo, resolved.path))
     }

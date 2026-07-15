@@ -167,9 +167,14 @@ fn register_proto_routes(state: AppState) -> Router {
     // `/v1/traces` (`mlflow/tracing/utils/otlp.py:20`); the static-prefix
     // nesting in `build_app_with_recorder` still applies to it.
     router = router.route("/v1/traces", axum::routing::post(otlp::export_traces));
-    // Artifact plane (plan T5.1/T5.3, §3.11). `/get-artifact` is served at the
-    // root (`mlflow/server/__init__.py:111`), NOT under an api/ajax prefix.
+    // Artifact plane (plan T5.1/T5.3/T5.4, §3.11). `/get-artifact` and
+    // `/model-versions/get-artifact` are served at the root
+    // (`mlflow/server/__init__.py:111,117`), NOT under an api/ajax prefix.
     router = router.route("/get-artifact", get(artifacts::get_artifact));
+    router = router.route(
+        "/model-versions/get-artifact",
+        get(artifacts::get_model_version_artifact),
+    );
     // ajax-only `upload-artifact` (`__init__.py:151`) + logged-model artifact
     // file download (`__init__.py:166`).
     router = router.route(
