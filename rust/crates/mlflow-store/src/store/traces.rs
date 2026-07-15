@@ -51,6 +51,7 @@ const TRACE_FOLDER_NAME: &str = "traces";
 /// (`EntityAssociationType`).
 pub(crate) const ENTITY_TYPE_TRACE: &str = "trace";
 pub(crate) const ENTITY_TYPE_RUN: &str = "run";
+pub(crate) const ENTITY_TYPE_PROMPT_VERSION: &str = "prompt_version";
 
 /// A trace to create via [`TrackingStore::start_trace`] (the store-level shape
 /// of a V3 `TraceInfo` write; the HTTP layer maps the proto onto this).
@@ -234,6 +235,83 @@ impl TrackingStore {
             .collect())
     }
 
+    /// `get_trace` (`sqlalchemy_store.py:5510`): the full trace (info + spans).
+    ///
+    /// When `allow_partial` is false, Python retries up to 3 times (2^n backoff)
+    /// while the trace is not fully exported, then errors
+    /// `RESOURCE_DOES_NOT_EXIST` "is not fully exported yet". We reproduce that
+    /// retry loop here so the HTTP handler stays thin. When `allow_partial` is
+    /// true, the (possibly incomplete) trace is returned directly.
+    ///
+    /// Archive-backed traces (`SPANS_LOCATION == ARCHIVE_REPO`) require object
+    /// -store payload reads and are out of scope for this DB-backed path
+    /// (plan T4.5 / D6): they surface `NOT_IMPLEMENTED`.
+    pub async fn get_trace(
+        &self,
+        workspace: &str,
+        trace_id: &str,
+        allow_partial: bool,
+    ) -> Result<TraceWithSpans, MlflowError> {
+        if allow_partial {
+            return self
+                .get_trace_once(workspace, trace_id, true)
+                .await?
+                .ok_or_else(|| not_fully_exported(trace_id));
+        }
+        for retry in 0..3 {
+            if let Some(trace) = self.get_trace_once(workspace, trace_id, false).await? {
+                return Ok(trace);
+            }
+            if retry < 2 {
+                let base = 1u64 << retry; // 1s, 2s (matches Python's 2**n)
+                tokio::time::sleep(Duration::from_millis(base * 1000)).await;
+            }
+        }
+        Err(not_fully_exported(trace_id))
+    }
+
+    /// One `get_trace` attempt. Returns `Ok(None)` only when a DB-backed trace's
+    /// spans are not fully exported yet (drives the retry). A missing trace info
+    /// raises `RESOURCE_DOES_NOT_EXIST` immediately.
+    async fn get_trace_once(
+        &self,
+        workspace: &str,
+        trace_id: &str,
+        allow_partial: bool,
+    ) -> Result<Option<TraceWithSpans>, MlflowError> {
+        let info = self.get_trace_info(workspace, trace_id).await?;
+
+        let spans_location = info.tag(super::entities::TRACE_TAG_SPANS_LOCATION);
+        if spans_location == Some(super::entities::SPANS_LOCATION_ARCHIVE_REPO) {
+            return Err(MlflowError::new(
+                "Archive-backed trace span reads are not implemented by this server.".to_string(),
+                ErrorCode::NotImplemented,
+            ));
+        }
+
+        // Only TRACKING_STORE traces carry DB span rows; anything else (no
+        // spans logged, or artifact-repo) has no tracking-store spans.
+        let spans = if spans_location == Some(super::entities::SPANS_LOCATION_TRACKING_STORE) {
+            let ids = [trace_id.to_string()];
+            let mut by_trace = load_spans_for_traces(self, &ids).await?;
+            let spans = by_trace.remove(trace_id).unwrap_or_default();
+            // Completeness check (Python's `_get_spans_with_trace_info`): when
+            // not allowing partial, compare against SIZE_STATS.num_spans.
+            if !allow_partial {
+                if let Some(expected) = expected_num_spans(&info) {
+                    if (spans.len() as i64) < expected {
+                        return Ok(None);
+                    }
+                }
+            }
+            spans
+        } else {
+            Vec::new()
+        };
+
+        Ok(Some(TraceWithSpans { info, spans }))
+    }
+
     /// `set_trace_tag`: upsert a trace tag. Errors if the trace is not in the
     /// workspace.
     pub async fn set_trace_tag(
@@ -347,6 +425,98 @@ impl TrackingStore {
         }
         tx.commit().await.map_err(internal)?;
         Ok(())
+    }
+
+    /// `link_prompts_to_trace` (`sqlalchemy_store.py:4768`): create
+    /// `entity_associations` (trace → prompt_version) for each `name/version`
+    /// pair, deduplicating against existing links. The prompt versions are not
+    /// loaded — name/version are sufficient for the link (matches Python).
+    pub async fn link_prompts_to_trace(
+        &self,
+        workspace: &str,
+        trace_id: &str,
+        prompt_versions: &[(String, String)],
+    ) -> Result<(), MlflowError> {
+        if prompt_versions.is_empty() {
+            return Ok(());
+        }
+        self.validate_trace_accessible(workspace, trace_id).await?;
+
+        let prompt_ids: Vec<String> = prompt_versions
+            .iter()
+            .map(|(name, version)| format!("{name}/{version}"))
+            .collect();
+        let existing = self
+            .existing_trace_prompt_links(trace_id, &prompt_ids)
+            .await?;
+
+        let dialect = self.db().dialect();
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        for prompt_id in &prompt_ids {
+            if existing.contains(prompt_id) {
+                continue;
+            }
+            let sql = format!(
+                "INSERT INTO entity_associations \
+                 (association_id, source_type, source_id, destination_type, destination_id) \
+                 VALUES ({}, {}, {}, {}, {})",
+                dialect.placeholder(1),
+                dialect.placeholder(2),
+                dialect.placeholder(3),
+                dialect.placeholder(4),
+                dialect.placeholder(5),
+            );
+            tx.exec(
+                &sql,
+                &[
+                    Val::Text(Uuid::new_v4().simple().to_string()),
+                    Val::Text(ENTITY_TYPE_TRACE.to_string()),
+                    Val::Text(trace_id.to_string()),
+                    Val::Text(ENTITY_TYPE_PROMPT_VERSION.to_string()),
+                    Val::Text(prompt_id.clone()),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        }
+        tx.commit().await.map_err(internal)?;
+        Ok(())
+    }
+
+    /// Existing (trace → prompt_version) association destination ids, for dedup.
+    async fn existing_trace_prompt_links(
+        &self,
+        trace_id: &str,
+        prompt_ids: &[String],
+    ) -> Result<std::collections::HashSet<String>, MlflowError> {
+        let dialect = self.db().dialect();
+        let mut binds: Vec<Val> = Vec::with_capacity(prompt_ids.len() + 3);
+        binds.push(Val::Text(ENTITY_TYPE_TRACE.to_string()));
+        binds.push(Val::Text(trace_id.to_string()));
+        binds.push(Val::Text(ENTITY_TYPE_PROMPT_VERSION.to_string()));
+        let phs: Vec<String> = prompt_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                binds.push(Val::Text(id.clone()));
+                dialect.placeholder(i + 4)
+            })
+            .collect();
+        let sql = format!(
+            "SELECT destination_id FROM entity_associations \
+             WHERE source_type = {} AND source_id = {} AND destination_type = {} \
+             AND destination_id IN ({})",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            dialect.placeholder(3),
+            phs.join(", "),
+        );
+        let rows: Vec<String> = self
+            .db()
+            .fetch_all(&sql, &binds, |r| r.get_string("destination_id"))
+            .await
+            .map_err(internal)?;
+        Ok(rows.into_iter().collect())
     }
 
     /// `delete_traces` (public entry): validate the argument combination
@@ -967,6 +1137,24 @@ where
     let mut by_id: std::collections::HashMap<String, T> =
         items.into_iter().map(|i| (key(&i).clone(), i)).collect();
     requested.iter().filter_map(|id| by_id.remove(id)).collect()
+}
+
+/// The `RESOURCE_DOES_NOT_EXIST` "not fully exported yet" error Python raises
+/// when `get_trace(allow_partial=False)` exhausts its retries.
+fn not_fully_exported(trace_id: &str) -> MlflowError {
+    MlflowError::resource_does_not_exist(format!(
+        "Trace with ID {trace_id} is not fully exported yet, please try again later."
+    ))
+}
+
+/// Parse `SIZE_STATS` metadata JSON (`{"num_spans": N}`) to the expected span
+/// count, mirroring `_get_spans_with_trace_info`'s completeness check. Returns
+/// `None` when the metadata is absent or unparseable (Python then skips the
+/// check).
+fn expected_num_spans(info: &TraceInfo) -> Option<i64> {
+    let raw = info.metadata(super::entities::TRACE_METADATA_SIZE_STATS)?;
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    value.get("num_spans").and_then(|v| v.as_i64())
 }
 
 /// Cheap non-cryptographic jitter in `[0, 100)` ms derived from the wall clock,

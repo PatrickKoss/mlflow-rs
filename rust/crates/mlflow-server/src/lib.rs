@@ -24,6 +24,7 @@ pub mod proto_http;
 pub mod routes;
 pub mod runs;
 pub mod state;
+pub mod traces;
 pub mod workspace;
 
 use axum::extract::MatchedPath;
@@ -211,6 +212,22 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("GetAssessment", "GET") => get(assessments::get_assessment),
         ("updateAssessment", "PATCH") => patch(assessments::update_assessment),
         ("deleteAssessment", "DELETE") => delete(assessments::delete_assessment),
+        // Tracing V3 (T4.1, §3.6).
+        ("startTraceV3", "POST") => post(traces::start_trace_v3),
+        ("getTraceInfoV3", "GET") => get(traces::get_trace_info_v3),
+        ("getTrace", "GET") => get(traces::get_trace),
+        ("batchGetTraces", "GET") => get(traces::batch_get_traces),
+        ("batchGetTraceInfos", "POST") => post(traces::batch_get_trace_infos),
+        ("searchTracesV3", "POST") => post(traces::search_traces_v3),
+        ("deleteTracesV3", "POST") => post(traces::delete_traces_v3),
+        ("setTraceTagV3", "PATCH") => patch(traces::set_trace_tag_v3),
+        ("deleteTraceTagV3", "DELETE") => delete(traces::delete_trace_tag_v3),
+        ("linkTracesToRun", "POST") => post(traces::link_traces_to_run),
+        ("linkPromptsToTrace", "POST") => post(traces::link_prompts_to_trace),
+        ("calculateTraceFilterCorrelation", "POST") => {
+            post(traces::calculate_trace_filter_correlation)
+        }
+        ("queryTraceMetrics", "POST") => post(traces::query_trace_metrics),
         _ => return None,
     })
 }
