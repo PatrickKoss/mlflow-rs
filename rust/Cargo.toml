@@ -63,7 +63,12 @@ protox = "0.9"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# `preserve_order` keeps JSON object keys in insertion order (backed by
+# `indexmap`). Needed so the legacy `runs/log-model` handler reproduces Python's
+# `json.dumps(model_dict)` key ordering byte-for-byte in the
+# `mlflow.log-model.history` tag. The proto JSON codec writes its own value tree
+# (field-number order) and is unaffected by this feature.
+serde_json = { version = "1.0", features = ["preserve_order"] }
 
 # Error handling
 thiserror = "2.0"

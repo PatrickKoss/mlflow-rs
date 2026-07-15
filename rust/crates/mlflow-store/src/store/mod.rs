@@ -37,6 +37,7 @@ mod metrics_bulk;
 mod names;
 mod names_data;
 mod params_tags;
+mod record_logged_model;
 mod runs;
 mod search;
 mod search_experiments;
