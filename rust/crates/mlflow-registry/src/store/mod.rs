@@ -26,17 +26,22 @@
 //! version and on the model itself) by issuing the same updates inside one
 //! transaction, then relying on the FK cascade for the tag/alias tables.
 //!
-//! ## Boundary with T7.3
+//! ## Search (T7.3)
 //!
 //! The full model-version lifecycle (create with `models:/` source resolution,
 //! `update`, `transition_model_version_stage`, soft-delete redaction) lives in
-//! [`model_versions`] (T7.2). Registry **search** (with the search DSL and
-//! prompt-exclusion anti-join) is T7.3 and intentionally absent.
+//! [`model_versions`] (T7.2). Registry **search** — `search_registered_models`
+//! and `search_model_versions`, with the search DSL, the AND-of-tags
+//! HAVING-count subquery, and the prompt-exclusion anti-join — lives in
+//! [`search`] (T7.3).
 
 mod aliases;
 mod model_versions;
 mod registered_models;
+mod search;
 mod tags;
+
+pub use search::{ModelVersionsPage, RegisteredModelsPage};
 
 use mlflow_error::MlflowError;
 use mlflow_store::Db;

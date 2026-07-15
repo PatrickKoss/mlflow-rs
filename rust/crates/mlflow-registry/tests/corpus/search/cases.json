@@ -1,0 +1,937 @@
+{
+  "registered_models": [
+    {
+      "label": "default_all",
+      "filter": null,
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta"
+        ],
+        [
+          "epsilon",
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "default_all_full",
+      "filter": null,
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta",
+          "epsilon",
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "name_eq",
+      "filter": "name = 'alpha'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha"
+      ]
+    },
+    {
+      "label": "name_like",
+      "filter": "name LIKE 'a%'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha"
+      ]
+    },
+    {
+      "label": "name_ilike",
+      "filter": "name ILIKE 'A%'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha"
+      ]
+    },
+    {
+      "label": "name_neq",
+      "filter": "name != 'alpha'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "beta",
+          "delta",
+          "epsilon"
+        ],
+        [
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        null
+      ],
+      "ordered_names": [
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "tag_eq",
+      "filter": "tags.team = 'ml'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta"
+      ]
+    },
+    {
+      "label": "tag_like",
+      "filter": "tags.stage LIKE 'pro%'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha",
+          "delta"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "delta"
+      ]
+    },
+    {
+      "label": "tag_and",
+      "filter": "tags.team = 'ml' AND tags.stage = 'prod'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha",
+          "delta"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "delta"
+      ]
+    },
+    {
+      "label": "tag_and_three",
+      "filter": "tags.team = 'ml' AND tags.stage = 'prod' AND tags.extra = 'x'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "delta"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "delta"
+      ]
+    },
+    {
+      "label": "order_name_desc",
+      "filter": null,
+      "order_by": [
+        "name DESC"
+      ],
+      "max_results": 3,
+      "pages": [
+        [
+          "gamma",
+          "epsilon",
+          "delta"
+        ],
+        [
+          "beta",
+          "alpha"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        null
+      ],
+      "ordered_names": [
+        "gamma",
+        "epsilon",
+        "delta",
+        "beta",
+        "alpha"
+      ]
+    },
+    {
+      "label": "order_last_updated_asc",
+      "filter": null,
+      "order_by": [
+        "last_updated_timestamp ASC"
+      ],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha",
+          "gamma",
+          "delta"
+        ],
+        [
+          "epsilon",
+          "beta"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "gamma",
+        "delta",
+        "epsilon",
+        "beta"
+      ]
+    },
+    {
+      "label": "order_timestamp_desc",
+      "filter": null,
+      "order_by": [
+        "timestamp DESC"
+      ],
+      "max_results": 4,
+      "pages": [
+        [
+          "beta",
+          "epsilon",
+          "delta",
+          "gamma"
+        ],
+        [
+          "alpha"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiA0fQ==",
+        null
+      ],
+      "ordered_names": [
+        "beta",
+        "epsilon",
+        "delta",
+        "gamma",
+        "alpha"
+      ]
+    },
+    {
+      "label": "prompt_default_excluded",
+      "filter": null,
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta",
+          "epsilon",
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "prompt_is_true",
+      "filter": "tags.`mlflow.prompt.is_prompt` = 'true'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "prompt_one",
+          "prompt_two"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "prompt_one",
+        "prompt_two"
+      ]
+    },
+    {
+      "label": "prompt_neq_false",
+      "filter": "tags.`mlflow.prompt.is_prompt` != 'false'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "prompt_one",
+          "prompt_two"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "prompt_one",
+        "prompt_two"
+      ]
+    },
+    {
+      "label": "prompt_eq_false",
+      "filter": "tags.`mlflow.prompt.is_prompt` = 'false'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta",
+          "epsilon",
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "prompt_neq_true",
+      "filter": "tags.`mlflow.prompt.is_prompt` != 'true'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "alpha",
+          "beta",
+          "delta",
+          "epsilon",
+          "gamma"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma"
+      ]
+    },
+    {
+      "label": "empty_result",
+      "filter": "name = 'nope'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        []
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_names": []
+    }
+  ],
+  "model_versions": [
+    {
+      "label": "default_all",
+      "filter": null,
+      "order_by": [],
+      "max_results": 4,
+      "pages": [
+        [
+          "prompt_two/1",
+          "prompt_one/1",
+          "epsilon/1",
+          "delta/1"
+        ],
+        [
+          "gamma/1",
+          "beta/1",
+          "alpha/3",
+          "alpha/2"
+        ],
+        [
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiA0fQ==",
+        "eyJvZmZzZXQiOiA4fQ==",
+        null
+      ],
+      "ordered_ids": [
+        "prompt_two/1",
+        "prompt_one/1",
+        "epsilon/1",
+        "delta/1",
+        "gamma/1",
+        "beta/1",
+        "alpha/3",
+        "alpha/2",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "default_all_full",
+      "filter": null,
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "prompt_two/1",
+          "prompt_one/1",
+          "epsilon/1",
+          "delta/1",
+          "gamma/1",
+          "beta/1",
+          "alpha/3",
+          "alpha/2",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "prompt_two/1",
+        "prompt_one/1",
+        "epsilon/1",
+        "delta/1",
+        "gamma/1",
+        "beta/1",
+        "alpha/3",
+        "alpha/2",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "name_eq",
+      "filter": "name = 'alpha'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha/3",
+          "alpha/2",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3",
+        "alpha/2",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "name_like",
+      "filter": "name LIKE 'a%'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha/3",
+          "alpha/2",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3",
+        "alpha/2",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "version_eq",
+      "filter": "version_number = 1",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "prompt_two/1",
+          "prompt_one/1",
+          "epsilon/1",
+          "delta/1",
+          "gamma/1",
+          "beta/1",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "prompt_two/1",
+        "prompt_one/1",
+        "epsilon/1",
+        "delta/1",
+        "gamma/1",
+        "beta/1",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "version_gt",
+      "filter": "version_number > 1",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "alpha/3",
+          "alpha/2"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3",
+        "alpha/2"
+      ]
+    },
+    {
+      "label": "run_id_eq",
+      "filter": "run_id = 'run_alpha_1'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "run_id_in",
+      "filter": "run_id IN ('run_alpha_1', 'run_beta_1')",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "beta/1",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "beta/1",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "source_path_eq",
+      "filter": "source_path = 'path/to/alpha/1'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "source_path_like",
+      "filter": "source_path LIKE 's3://%'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "delta/1",
+          "alpha/3"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "delta/1",
+        "alpha/3"
+      ]
+    },
+    {
+      "label": "tag_eq",
+      "filter": "tags.quality = 'high'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "delta/1",
+          "beta/1",
+          "alpha/3"
+        ],
+        [
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        null
+      ],
+      "ordered_ids": [
+        "delta/1",
+        "beta/1",
+        "alpha/3",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "tag_and",
+      "filter": "tags.quality = 'high' AND tags.vip = 'yes'",
+      "order_by": [],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha/3"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3"
+      ]
+    },
+    {
+      "label": "order_name_version",
+      "filter": null,
+      "order_by": [
+        "name ASC",
+        "version_number ASC"
+      ],
+      "max_results": 3,
+      "pages": [
+        [
+          "alpha/1",
+          "alpha/2",
+          "alpha/3"
+        ],
+        [
+          "beta/1",
+          "delta/1",
+          "epsilon/1"
+        ],
+        [
+          "gamma/1",
+          "prompt_one/1",
+          "prompt_two/1"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiAzfQ==",
+        "eyJvZmZzZXQiOiA2fQ==",
+        null
+      ],
+      "ordered_ids": [
+        "alpha/1",
+        "alpha/2",
+        "alpha/3",
+        "beta/1",
+        "delta/1",
+        "epsilon/1",
+        "gamma/1",
+        "prompt_one/1",
+        "prompt_two/1"
+      ]
+    },
+    {
+      "label": "order_version_desc",
+      "filter": null,
+      "order_by": [
+        "version_number DESC"
+      ],
+      "max_results": 4,
+      "pages": [
+        [
+          "alpha/3",
+          "alpha/2",
+          "alpha/1",
+          "beta/1"
+        ],
+        [
+          "delta/1",
+          "epsilon/1",
+          "gamma/1",
+          "prompt_one/1"
+        ],
+        [
+          "prompt_two/1"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiA0fQ==",
+        "eyJvZmZzZXQiOiA4fQ==",
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3",
+        "alpha/2",
+        "alpha/1",
+        "beta/1",
+        "delta/1",
+        "epsilon/1",
+        "gamma/1",
+        "prompt_one/1",
+        "prompt_two/1"
+      ]
+    },
+    {
+      "label": "order_creation_asc",
+      "filter": null,
+      "order_by": [
+        "creation_timestamp ASC"
+      ],
+      "max_results": 4,
+      "pages": [
+        [
+          "alpha/1",
+          "alpha/2",
+          "alpha/3",
+          "beta/1"
+        ],
+        [
+          "gamma/1",
+          "delta/1",
+          "epsilon/1",
+          "prompt_one/1"
+        ],
+        [
+          "prompt_two/1"
+        ]
+      ],
+      "page_tokens": [
+        "eyJvZmZzZXQiOiA0fQ==",
+        "eyJvZmZzZXQiOiA4fQ==",
+        null
+      ],
+      "ordered_ids": [
+        "alpha/1",
+        "alpha/2",
+        "alpha/3",
+        "beta/1",
+        "gamma/1",
+        "delta/1",
+        "epsilon/1",
+        "prompt_one/1",
+        "prompt_two/1"
+      ]
+    },
+    {
+      "label": "name_and_version",
+      "filter": "name = 'alpha' AND version_number >= 2",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "alpha/3",
+          "alpha/2"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "alpha/3",
+        "alpha/2"
+      ]
+    },
+    {
+      "label": "beta_versions",
+      "filter": "name = 'beta'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        [
+          "beta/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "beta/1"
+      ]
+    },
+    {
+      "label": "prompt_default_excluded",
+      "filter": null,
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        [
+          "prompt_two/1",
+          "prompt_one/1",
+          "epsilon/1",
+          "delta/1",
+          "gamma/1",
+          "beta/1",
+          "alpha/3",
+          "alpha/2",
+          "alpha/1"
+        ]
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": [
+        "prompt_two/1",
+        "prompt_one/1",
+        "epsilon/1",
+        "delta/1",
+        "gamma/1",
+        "beta/1",
+        "alpha/3",
+        "alpha/2",
+        "alpha/1"
+      ]
+    },
+    {
+      "label": "prompt_is_true",
+      "filter": "tags.`mlflow.prompt.is_prompt` = 'true'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        []
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": []
+    },
+    {
+      "label": "prompt_neq_false",
+      "filter": "tags.`mlflow.prompt.is_prompt` != 'false'",
+      "order_by": [],
+      "max_results": 100,
+      "pages": [
+        []
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": []
+    },
+    {
+      "label": "empty_result",
+      "filter": "name = 'nope'",
+      "order_by": [],
+      "max_results": 5,
+      "pages": [
+        []
+      ],
+      "page_tokens": [
+        null
+      ],
+      "ordered_ids": []
+    }
+  ]
+}
