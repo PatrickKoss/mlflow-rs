@@ -26,6 +26,7 @@ pub mod runs;
 pub mod state;
 pub mod trace_artifact;
 pub mod traces;
+pub mod traces_v2;
 pub mod workspace;
 
 use axum::extract::MatchedPath;
@@ -240,6 +241,16 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
             post(traces::calculate_trace_filter_correlation)
         }
         ("queryTraceMetrics", "POST") => post(traces::query_trace_metrics),
+        // Tracing V2 (T4.2, §3.7) — deprecated adapters, registered only at
+        // the `/api/2.0` prefix (`since.major = 2`), so they never collide
+        // with their V3 twins above despite sharing tail paths.
+        ("startTrace", "POST") => post(traces_v2::start_trace),
+        ("endTrace", "PATCH") => patch(traces_v2::end_trace),
+        ("getTraceInfo", "GET") => get(traces_v2::get_trace_info),
+        ("searchTraces", "GET") => get(traces_v2::search_traces),
+        ("deleteTraces", "POST") => post(traces_v2::delete_traces),
+        ("setTraceTag", "PATCH") => patch(traces_v2::set_trace_tag),
+        ("deleteTraceTag", "DELETE") => delete(traces_v2::delete_trace_tag),
         _ => return None,
     })
 }

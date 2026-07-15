@@ -312,6 +312,188 @@ impl TrackingStore {
         Ok(Some(TraceWithSpans { info, spans }))
     }
 
+    /// `deprecated_start_trace_v2` (`sqlalchemy_store.py:7492`, plan T4.2,
+    /// §3.7). DEPRECATED — kept only for the legacy V2 `POST /mlflow/traces`
+    /// endpoint. Unlike [`start_trace`](Self::start_trace) (V3), the caller
+    /// never supplies a trace id: a fresh `uuid4().hex` is generated here
+    /// (`generate_request_id_v2`), the initial status is always
+    /// `IN_PROGRESS` with no execution duration, and — critically — the
+    /// `TRACE_INFO_FINALIZED` metadata marker is **not** written (V2 traces
+    /// never race with `log_spans`' V3 finalize protocol). Metadata is
+    /// written in sorted key order for the same deadlock-avoidance discipline
+    /// as `start_trace`.
+    pub async fn deprecated_start_trace_v2(
+        &self,
+        workspace: &str,
+        experiment_id: &str,
+        timestamp_ms: i64,
+        request_metadata: &[(String, String)],
+        tags: &[(String, String)],
+    ) -> Result<TraceInfo, MlflowError> {
+        self.run_with_deadlock_retry(|| {
+            self.deprecated_start_trace_v2_once(
+                workspace,
+                experiment_id,
+                timestamp_ms,
+                request_metadata,
+                tags,
+            )
+        })
+        .await
+    }
+
+    async fn deprecated_start_trace_v2_once(
+        &self,
+        workspace: &str,
+        experiment_id: &str,
+        timestamp_ms: i64,
+        request_metadata: &[(String, String)],
+        tags: &[(String, String)],
+    ) -> Result<TraceInfo, MlflowError> {
+        let exp_id = parse_experiment_id(experiment_id)?;
+        let experiment = self
+            .fetch_experiment(workspace, exp_id, ViewType::All)
+            .await?
+            .ok_or_else(|| {
+                MlflowError::resource_does_not_exist(format!(
+                    "No Experiment with id={exp_id} exists"
+                ))
+            })?;
+        if experiment.lifecycle_stage != super::entities::LifecycleStage::ACTIVE {
+            return Err(MlflowError::invalid_parameter_value(format!(
+                "The experiment {} must be in the 'active' state. Current state is {}.",
+                experiment.experiment_id, experiment.lifecycle_stage
+            )));
+        }
+
+        // `generate_request_id_v2`: a plain `uuid4().hex`, no `tr-` prefix.
+        let trace_id = Uuid::new_v4().simple().to_string();
+        let dialect = self.db().dialect();
+
+        let artifact_uri = append_trace_artifact_location(
+            experiment.artifact_location.as_deref().unwrap_or(""),
+            &trace_id,
+        );
+        let mut all_tags: Vec<(String, String)> = tags.to_vec();
+        all_tags.push((MLFLOW_ARTIFACT_LOCATION.to_string(), artifact_uri));
+
+        let mut metadata: Vec<(String, String)> = request_metadata.to_vec();
+        metadata.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let input = StartTraceInput {
+            trace_id: trace_id.clone(),
+            experiment_id: experiment_id.to_string(),
+            request_time: timestamp_ms,
+            execution_duration: None,
+            state: super::entities::TraceState::IN_PROGRESS.to_string(),
+            client_request_id: None,
+            request_preview: None,
+            response_preview: None,
+            tags: Vec::new(),
+            trace_metadata: Vec::new(),
+            trace_metrics: Vec::new(),
+        };
+
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        upsert_trace_info(&mut tx, dialect, &input, exp_id).await?;
+        for (k, v) in &all_tags {
+            upsert_trace_child(
+                &mut tx,
+                dialect,
+                TRACE_TAGS,
+                &trace_id,
+                k,
+                Val::Text(v.clone()),
+            )
+            .await?;
+        }
+        for (k, v) in &metadata {
+            upsert_trace_child(
+                &mut tx,
+                dialect,
+                TRACE_REQUEST_METADATA,
+                &trace_id,
+                k,
+                Val::Text(v.clone()),
+            )
+            .await?;
+        }
+        tx.commit().await.map_err(map_db_err)?;
+
+        self.get_trace_info(workspace, &trace_id).await
+    }
+
+    /// `deprecated_end_trace_v2` (`sqlalchemy_store.py:7538`, plan T4.2,
+    /// §3.7). DEPRECATED — kept only for the legacy V2 `PATCH
+    /// /mlflow/traces/{request_id}` endpoint. Computes `execution_time_ms` as
+    /// `timestamp_ms - trace.request_time`, sets `status`, and *merges*
+    /// (upserts) the supplied metadata/tags on top of whatever `start_trace`
+    /// already wrote — Python's `session.merge` semantics, reproduced here as
+    /// per-row upserts. Errors `RESOURCE_DOES_NOT_EXIST` if the trace is
+    /// absent (`_get_sql_trace_info`).
+    pub async fn deprecated_end_trace_v2(
+        &self,
+        workspace: &str,
+        trace_id: &str,
+        timestamp_ms: i64,
+        status: &str,
+        request_metadata: &[(String, String)],
+        tags: &[(String, String)],
+    ) -> Result<TraceInfo, MlflowError> {
+        self.validate_trace_accessible(workspace, trace_id).await?;
+        let existing = self.get_trace_info(workspace, trace_id).await?;
+        let execution_time_ms = timestamp_ms - existing.request_time;
+
+        let dialect = self.db().dialect();
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+
+        let sql = format!(
+            "UPDATE {TRACE_INFO} SET execution_time_ms = {}, status = {} WHERE request_id = {}",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            dialect.placeholder(3),
+        );
+        tx.exec(
+            &sql,
+            &[
+                Val::Int(execution_time_ms),
+                Val::Text(status.to_string()),
+                Val::Text(trace_id.to_string()),
+            ],
+        )
+        .await
+        .map_err(map_db_err)?;
+
+        // Merge metadata in sorted key order (deadlock-avoidance discipline).
+        let mut sorted_metadata: Vec<(String, String)> = request_metadata.to_vec();
+        sorted_metadata.sort_by(|a, b| a.0.cmp(&b.0));
+        for (k, v) in &sorted_metadata {
+            upsert_trace_child(
+                &mut tx,
+                dialect,
+                TRACE_REQUEST_METADATA,
+                trace_id,
+                k,
+                Val::Text(v.clone()),
+            )
+            .await?;
+        }
+        for (k, v) in tags {
+            upsert_trace_child(
+                &mut tx,
+                dialect,
+                TRACE_TAGS,
+                trace_id,
+                k,
+                Val::Text(v.clone()),
+            )
+            .await?;
+        }
+        tx.commit().await.map_err(map_db_err)?;
+
+        self.get_trace_info(workspace, trace_id).await
+    }
+
     /// `set_trace_tag`: upsert a trace tag. Errors if the trace is not in the
     /// workspace.
     pub async fn set_trace_tag(
