@@ -38,15 +38,61 @@ pub fn parse_request<M>(parts: &Parts, body: &Bytes, type_name: &str) -> Result<
 where
     M: prost::Message + Default,
 {
+    parse_request_with_path_params(parts, body, type_name, &[])
+}
+
+/// Same as [`parse_request`], additionally overlaying `path_params` (name,
+/// value) pairs onto the parsed request as string-typed fields — the
+/// mechanism REST-style path-parameter proto endpoints
+/// (`/mlflow/logged-models/{model_id}`, `/mlflow/webhooks/{webhook_id}`,
+/// future traces/registry path params) use to get the URL segment into the
+/// request proto.
+///
+/// ## Why merge instead of setting the field after parsing
+///
+/// Python's Flask view functions receive path segments as their own function
+/// arguments (`def _get_logged_model(model_id: str)`), entirely separate from
+/// `_get_request_message`'s body/query parsing — the two are never merged in
+/// Python. Handlers that need the path value on the *request proto* itself
+/// (e.g. `_finalize_logged_model` calls `request_message.model_id`, which is
+/// only present because `FinalizeLoggedModel.model_id` is ALSO required by
+/// the request body schema — the client sends it twice, in the URL and the
+/// JSON) rely on the body already containing it; when the wire format omits
+/// it (or a GET has no query value), Python has no path-driven fallback for
+/// proto fields.
+///
+/// Rather than special-case every path-param endpoint's handler with
+/// hand-written `req.model_id = Some(...)` assignments (which would have to
+/// be duplicated per endpoint and forgotten easily), this merges path
+/// parameters into the request *before* proto parsing, as if they were an
+/// extra query/JSON field the client had supplied. This is a deliberate,
+/// documented deviation that is strictly more permissive than Python (it
+/// fills in a value Python would leave absent when the client omits the
+/// duplicate), and it matches Python's *observed* behavior whenever the
+/// client does send both (the path segment and the body value always agree —
+/// pyclient constructs both from the same `model_id`), so no real client can
+/// observe a difference. Path params always win over a conflicting body/query
+/// value for the same field, since real clients never send different values
+/// for the two.
+pub fn parse_request_with_path_params<M>(
+    parts: &Parts,
+    body: &Bytes,
+    type_name: &str,
+    path_params: &[(&str, String)],
+) -> Result<M, MlflowError>
+where
+    M: prost::Message + Default,
+{
     if parts.method == Method::GET {
-        if let Some(query) = parts.uri.query() {
-            if !query.is_empty() {
-                let pairs = parse_query_pairs(query);
-                return mlflow_proto::from_query_pairs::<M>(&pairs, type_name).map_err(codec_err);
-            }
+        let mut pairs = match parts.uri.query() {
+            Some(query) if !query.is_empty() => parse_query_pairs(query),
+            _ => Vec::new(),
+        };
+        for (name, value) in path_params {
+            pairs.retain(|(k, _)| k != name);
+            pairs.push(((*name).to_string(), value.clone()));
         }
-        // GET with no query args → empty message (Python parses `{}`).
-        return mlflow_proto::from_mlflow_json::<M>("{}", type_name).map_err(codec_err);
+        return mlflow_proto::from_query_pairs::<M>(&pairs, type_name).map_err(codec_err);
     }
 
     validate_content_type(parts)?;
@@ -56,7 +102,36 @@ where
         MlflowError::invalid_parameter_value("Request body is not valid UTF-8.".to_string())
     })?;
     let json = if text.trim().is_empty() { "{}" } else { text };
-    mlflow_proto::from_mlflow_json::<M>(json, type_name).map_err(codec_err)
+    let merged = merge_path_params(json, path_params)?;
+    mlflow_proto::from_mlflow_json::<M>(&merged, type_name).map_err(codec_err)
+}
+
+/// Overlay `path_params` as string fields onto the parsed JSON body, replacing
+/// any conflicting key. Returns the original text unchanged when there are no
+/// path params (the common case), avoiding a needless parse/reserialize.
+fn merge_path_params(json: &str, path_params: &[(&str, String)]) -> Result<String, MlflowError> {
+    if path_params.is_empty() {
+        return Ok(json.to_string());
+    }
+    let mut value: serde_json::Value = serde_json::from_str(json).map_err(|_| {
+        MlflowError::invalid_parameter_value(
+            "Malformed request. Please check the request follows JSON schema".to_string(),
+        )
+    })?;
+    let obj = match &mut value {
+        serde_json::Value::Object(obj) => obj,
+        _ => {
+            let mut obj = serde_json::Map::new();
+            for (name, v) in path_params {
+                obj.insert((*name).to_string(), serde_json::Value::String(v.clone()));
+            }
+            return Ok(serde_json::Value::Object(obj).to_string());
+        }
+    };
+    for (name, v) in path_params {
+        obj.insert((*name).to_string(), serde_json::Value::String(v.clone()));
+    }
+    Ok(value.to_string())
 }
 
 /// Build a `200 application/json` response by serializing `message` with the
