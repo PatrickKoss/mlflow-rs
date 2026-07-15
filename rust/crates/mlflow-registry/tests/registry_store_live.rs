@@ -88,6 +88,42 @@ async fn registry_smoke(uri: &str) {
     assert_eq!(mv.version, "2");
     assert_eq!(mv.aliases, vec!["champion".to_string()]);
 
+    // Stage transition with archive_existing_versions (T7.2): move v1 to
+    // Staging, then v2 to Staging with archive=true → v1 archived.
+    s.transition_model_version_stage(&ws, &new_name, "1", "Staging", false)
+        .await
+        .unwrap();
+    s.transition_model_version_stage(&ws, &new_name, "2", "Staging", true)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_model_version(&ws, &new_name, "1")
+            .await
+            .unwrap()
+            .current_stage
+            .as_deref(),
+        Some("Archived")
+    );
+    assert_eq!(
+        s.get_model_version(&ws, &new_name, "2")
+            .await
+            .unwrap()
+            .current_stage
+            .as_deref(),
+        Some("Staging")
+    );
+
+    // Soft-delete v2: alias removed + redaction applied.
+    s.delete_model_version(&ws, &new_name, "2").await.unwrap();
+    let del_err = s.get_model_version(&ws, &new_name, "2").await.unwrap_err();
+    assert_eq!(del_err.error_code, ErrorCode::ResourceDoesNotExist);
+    let deleted = s
+        .get_model_version_including_deleted(&ws, &new_name, "2")
+        .await
+        .unwrap();
+    assert_eq!(deleted.current_stage.as_deref(), Some("Deleted_Internal"));
+    assert!(deleted.source.as_deref().unwrap().contains("REDACTED"));
+
     // Cleanup so repeated CI runs stay isolated.
     s.delete_registered_model(&ws, &new_name).await.unwrap();
 }

@@ -12,6 +12,10 @@ pub const STAGE_DELETED_INTERNAL: &str = "Deleted_Internal";
 /// `ALL_STAGES` — the user-facing stages (excludes `Deleted_Internal`).
 pub const ALL_STAGES: &[&str] = &[STAGE_NONE, STAGE_STAGING, STAGE_PRODUCTION, STAGE_ARCHIVED];
 
+/// `DEFAULT_STAGES_FOR_GET_LATEST_VERSIONS` — the "active" stages. Only these
+/// are valid targets for `archive_existing_versions=true` in a stage transition.
+pub const DEFAULT_STAGES_FOR_GET_LATEST_VERSIONS: &[&str] = &[STAGE_STAGING, STAGE_PRODUCTION];
+
 /// `get_canonical_stage`: case-insensitive match against [`ALL_STAGES`],
 /// returning the canonical spelling. Errors `INVALID_PARAMETER_VALUE` on an
 /// unknown stage, with the exact Python message.

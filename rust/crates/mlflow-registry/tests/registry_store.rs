@@ -684,3 +684,502 @@ async fn download_uri_returns_source() {
         .unwrap();
     assert_eq!(uri, "s3://bucket/path");
 }
+
+// ---------------------------------------------------------------------------
+// create_model_version (fields, autoincrement, source resolution) [T7.2]
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn create_model_version_fields_and_autoincrement() {
+    let tmp = TempDb::new("create_mv");
+    let s = store(&tmp).await;
+    let name = "test_for_update_MV";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+
+    let mv1 = s
+        .create_model_version(WS, name, "a/b/CD", Some("run-1"), &[], None, None)
+        .await
+        .unwrap();
+    assert_eq!(mv1.version, "1");
+    assert_eq!(mv1.current_stage.as_deref(), Some("None"));
+    assert!(mv1.description.is_none());
+    assert_eq!(mv1.source.as_deref(), Some("a/b/CD"));
+    assert_eq!(mv1.run_id.as_deref(), Some("run-1"));
+    assert_eq!(mv1.status.as_deref(), Some("READY"));
+    assert!(mv1.status_message.is_none());
+    assert_eq!(mv1.tags, vec![]);
+    assert_eq!(mv1.creation_timestamp, mv1.last_updated_timestamp);
+
+    // Autoincrement + tags + run_link + description + no run_id.
+    let mv2 = s
+        .create_model_version(WS, name, "s", None, &[], None, None)
+        .await
+        .unwrap();
+    assert_eq!(mv2.version, "2");
+
+    let mv3 = s
+        .create_model_version(
+            WS,
+            name,
+            "s",
+            None,
+            &[("key", "value"), ("anotherKey", "some other value")],
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(mv3.version, "3");
+    let mut kv: Vec<(String, String)> = mv3
+        .tags
+        .iter()
+        .map(|t| (t.key.clone(), t.value.clone().unwrap_or_default()))
+        .collect();
+    kv.sort();
+    assert_eq!(
+        kv,
+        vec![
+            ("anotherKey".to_string(), "some other value".to_string()),
+            ("key".to_string(), "value".to_string())
+        ]
+    );
+
+    let mv4 = s
+        .create_model_version(WS, name, "s", None, &[], Some("http://run/link"), None)
+        .await
+        .unwrap();
+    assert_eq!(mv4.version, "4");
+    assert_eq!(mv4.run_link.as_deref(), Some("http://run/link"));
+
+    let mv5 = s
+        .create_model_version(WS, name, "s", None, &[], None, Some("the best model ever"))
+        .await
+        .unwrap();
+    assert_eq!(mv5.version, "5");
+    assert_eq!(mv5.description.as_deref(), Some("the best model ever"));
+
+    let mv6 = s
+        .create_model_version(WS, name, "s", None, &[], None, None)
+        .await
+        .unwrap();
+    assert_eq!(mv6.version, "6");
+    assert!(mv6.run_id.is_none());
+}
+
+#[tokio::test]
+async fn create_model_version_resolves_models_source() {
+    // A `models:/name/version` source resolves storage_location to the
+    // referenced version's download URI, while `source` stays verbatim.
+    let tmp = TempDb::new("create_mv_models_src");
+    let s = store(&tmp).await;
+    let src_name = "src_model";
+    s.create_registered_model(WS, src_name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, src_name, "s3://real/artifact", None, &[], None, None)
+        .await
+        .unwrap();
+
+    let dst_name = "dst_model";
+    s.create_registered_model(WS, dst_name, &[], None)
+        .await
+        .unwrap();
+    let models_uri = format!("models:/{src_name}/1");
+    let copied = s
+        .create_model_version(WS, dst_name, &models_uri, None, &[], None, None)
+        .await
+        .unwrap();
+    // Proto source is the verbatim models:/ URI.
+    assert_eq!(copied.source.as_deref(), Some(models_uri.as_str()));
+    // Download URI resolves to the original artifact path.
+    assert_eq!(
+        s.get_model_version_download_uri(WS, dst_name, "1")
+            .await
+            .unwrap(),
+        "s3://real/artifact"
+    );
+}
+
+#[tokio::test]
+async fn create_model_version_runs_source_stored_verbatim() {
+    let tmp = TempDb::new("create_mv_runs_src");
+    let s = store(&tmp).await;
+    let name = "runs_model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    let runs_uri = "runs:/abc123/model";
+    s.create_model_version(WS, name, runs_uri, None, &[], None, None)
+        .await
+        .unwrap();
+    // runs:/ sources are stored verbatim (no in-store resolution).
+    assert_eq!(
+        s.get_model_version_download_uri(WS, name, "1")
+            .await
+            .unwrap(),
+        runs_uri
+    );
+}
+
+// ---------------------------------------------------------------------------
+// update_model_version [T7.2]
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn update_model_version_description() {
+    let tmp = TempDb::new("update_mv");
+    let s = store(&tmp).await;
+    let name = "test_for_update_MV";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, name, "src", None, &[], None, None)
+        .await
+        .unwrap();
+    let updated = s
+        .update_model_version(WS, name, "1", Some("test model version"))
+        .await
+        .unwrap();
+    assert_eq!(updated.description.as_deref(), Some("test model version"));
+    assert_eq!(
+        s.get_model_version(WS, name, "1")
+            .await
+            .unwrap()
+            .description
+            .as_deref(),
+        Some("test model version")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// transition_model_version_stage [T7.2]
+// ---------------------------------------------------------------------------
+
+fn stage_of(s_mv: &mlflow_registry::ModelVersion) -> String {
+    s_mv.current_stage.clone().unwrap_or_default()
+}
+
+#[tokio::test]
+async fn transition_stage_case_insensitive_and_invalid() {
+    let tmp = TempDb::new("transition_basic");
+    let s = store(&tmp).await;
+    let name = "model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, name, "src", None, &[], None, None)
+        .await
+        .unwrap();
+
+    s.transition_model_version_stage(WS, name, "1", "Production", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "1").await.unwrap()),
+        "Production"
+    );
+
+    // Case-insensitive canonicalization.
+    for st in ["STAGING", "staging", "StAgInG"] {
+        s.transition_model_version_stage(WS, name, "1", st, false)
+            .await
+            .unwrap();
+        assert_eq!(
+            stage_of(&s.get_model_version(WS, name, "1").await.unwrap()),
+            "Staging"
+        );
+    }
+
+    // Unknown stage errors.
+    let err = s
+        .transition_model_version_stage(WS, name, "1", "unknown", false)
+        .await
+        .unwrap_err();
+    assert_eq!(err.error_code, ErrorCode::InvalidParameterValue);
+    assert_eq!(
+        err.message,
+        "Invalid Model Version stage: unknown. Value must be one of None, Staging, Production, Archived."
+    );
+}
+
+#[tokio::test]
+async fn transition_stage_archive_existing_false() {
+    let tmp = TempDb::new("transition_no_archive");
+    let s = store(&tmp).await;
+    let name = "model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        s.create_model_version(WS, name, "src", None, &[], None, None)
+            .await
+            .unwrap();
+    }
+    // Transitioning to inactive stages with archive=false does not throw.
+    for st in ["Archived", "None"] {
+        s.transition_model_version_stage(WS, name, "1", st, false)
+            .await
+            .unwrap();
+    }
+    s.transition_model_version_stage(WS, name, "1", "Staging", false)
+        .await
+        .unwrap();
+    s.transition_model_version_stage(WS, name, "2", "Production", false)
+        .await
+        .unwrap();
+    s.transition_model_version_stage(WS, name, "3", "Staging", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "1").await.unwrap()),
+        "Staging"
+    );
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "2").await.unwrap()),
+        "Production"
+    );
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "3").await.unwrap()),
+        "Staging"
+    );
+    // Two versions can coexist in the same stage when archive=false.
+    s.transition_model_version_stage(WS, name, "3", "Production", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "2").await.unwrap()),
+        "Production"
+    );
+    assert_eq!(
+        stage_of(&s.get_model_version(WS, name, "3").await.unwrap()),
+        "Production"
+    );
+}
+
+#[tokio::test]
+async fn transition_stage_archive_existing_true() {
+    let tmp = TempDb::new("transition_archive");
+    let s = store(&tmp).await;
+    let name = "model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        s.create_model_version(WS, name, "src", None, &[], None, None)
+            .await
+            .unwrap();
+    }
+    // Archiving to an inactive stage throws.
+    for st in ["Archived", "None"] {
+        let err = s
+            .transition_model_version_stage(WS, name, "1", st, true)
+            .await
+            .unwrap_err();
+        assert_eq!(err.error_code, ErrorCode::InvalidParameterValue);
+        assert!(
+            err.message.contains(
+                "Model version transition cannot archive existing model versions because"
+            ) && err.message.contains("is not an Active stage"),
+            "{}",
+            err.message
+        );
+    }
+
+    s.transition_model_version_stage(WS, name, "1", "Staging", false)
+        .await
+        .unwrap();
+    s.transition_model_version_stage(WS, name, "2", "Production", false)
+        .await
+        .unwrap();
+    // Move v3 to Staging with archive=true: v1 (the other Staging version) is archived.
+    s.transition_model_version_stage(WS, name, "3", "Staging", true)
+        .await
+        .unwrap();
+    let v1 = s.get_model_version(WS, name, "1").await.unwrap();
+    let v2 = s.get_model_version(WS, name, "2").await.unwrap();
+    let v3 = s.get_model_version(WS, name, "3").await.unwrap();
+    assert_eq!(stage_of(&v1), "Archived");
+    assert_eq!(stage_of(&v2), "Production");
+    assert_eq!(stage_of(&v3), "Staging");
+    // Archived sibling and moved version share the same last_updated timestamp.
+    assert_eq!(v1.last_updated_timestamp, v3.last_updated_timestamp);
+
+    // Move v3 to Production with archive=true: v2 archived.
+    s.transition_model_version_stage(WS, name, "3", "Production", true)
+        .await
+        .unwrap();
+    let v2 = s.get_model_version(WS, name, "2").await.unwrap();
+    let v3 = s.get_model_version(WS, name, "3").await.unwrap();
+    assert_eq!(stage_of(&v2), "Archived");
+    assert_eq!(stage_of(&v3), "Production");
+    assert_eq!(v2.last_updated_timestamp, v3.last_updated_timestamp);
+}
+
+// ---------------------------------------------------------------------------
+// delete_model_version (soft-delete, redaction, alias removal) [T7.2]
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn delete_model_version_soft_delete_and_errors() {
+    let tmp = TempDb::new("delete_mv");
+    let s = store(&tmp).await;
+    let name = "test_for_delete_MV";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, name, "src", None, &[("key", "value")], None, None)
+        .await
+        .unwrap();
+    s.delete_model_version(WS, name, "1").await.unwrap();
+
+    // get / update / delete all error not-found after soft-delete.
+    for err in [
+        s.get_model_version(WS, name, "1").await.unwrap_err(),
+        s.update_model_version(WS, name, "1", Some("deleted!"))
+            .await
+            .unwrap_err(),
+        s.delete_model_version(WS, name, "1").await.unwrap_err(),
+        s.get_model_version_download_uri(WS, name, "1")
+            .await
+            .unwrap_err(),
+    ] {
+        assert_eq!(err.error_code, ErrorCode::ResourceDoesNotExist);
+        assert_eq!(
+            err.message,
+            format!("Model Version (name={name}, version=1) not found")
+        );
+    }
+}
+
+#[tokio::test]
+async fn delete_model_version_redaction() {
+    let tmp = TempDb::new("delete_mv_redact");
+    let s = store(&tmp).await;
+    let name = "test_for_delete_MV_redaction";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(
+        WS,
+        name,
+        "path/to/source",
+        Some("12345"),
+        &[],
+        Some("http://localhost:5000/path/to/run"),
+        Some("desc"),
+    )
+    .await
+    .unwrap();
+    s.delete_model_version(WS, name, "1").await.unwrap();
+
+    let deleted = s
+        .get_model_version_including_deleted(WS, name, "1")
+        .await
+        .unwrap();
+    assert_eq!(stage_of(&deleted), "Deleted_Internal");
+    assert!(deleted.source.as_deref().unwrap().contains("REDACTED"));
+    assert!(deleted.run_id.as_deref().unwrap().contains("REDACTED"));
+    assert!(deleted.run_link.as_deref().unwrap().contains("REDACTED"));
+    assert!(deleted.description.is_none());
+    assert!(deleted.user_id.is_none());
+    assert!(deleted.status_message.is_none());
+}
+
+#[tokio::test]
+async fn delete_model_version_removes_alias() {
+    let tmp = TempDb::new("delete_mv_alias");
+    let s = store(&tmp).await;
+    let name = "alias_del_model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, name, "src", None, &[], None, None)
+        .await
+        .unwrap();
+    s.set_registered_model_alias(WS, name, "champion", "1")
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_registered_model(WS, name)
+            .await
+            .unwrap()
+            .aliases
+            .len(),
+        1
+    );
+
+    s.delete_model_version(WS, name, "1").await.unwrap();
+    // Alias pointing at the deleted version is gone.
+    assert_eq!(
+        s.get_registered_model(WS, name).await.unwrap().aliases,
+        vec![]
+    );
+}
+
+#[tokio::test]
+async fn deleted_version_excluded_from_latest() {
+    let tmp = TempDb::new("deleted_excl_latest");
+    let s = store(&tmp).await;
+    let name = "excl_model";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        s.create_model_version(WS, name, "src", None, &[], None, None)
+            .await
+            .unwrap();
+    }
+    // Latest in stage None is version 2.
+    assert_eq!(
+        latest_by_stage(&s.get_latest_versions(WS, name, None).await.unwrap()),
+        vec![("None".to_string(), "2".to_string())]
+    );
+    // Soft-delete version 2; latest falls back to version 1.
+    s.delete_model_version(WS, name, "2").await.unwrap();
+    assert_eq!(
+        latest_by_stage(&s.get_latest_versions(WS, name, None).await.unwrap()),
+        vec![("None".to_string(), "1".to_string())]
+    );
+}
+
+#[tokio::test]
+async fn download_uri_unchanged_after_update_and_transition() {
+    let tmp = TempDb::new("dl_uri_stable");
+    let s = store(&tmp).await;
+    let name = "test_for_update_MV";
+    let src = "path/to/source";
+    s.create_registered_model(WS, name, &[], None)
+        .await
+        .unwrap();
+    s.create_model_version(WS, name, src, Some("run"), &[], None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_model_version_download_uri(WS, name, "1")
+            .await
+            .unwrap(),
+        src
+    );
+    s.transition_model_version_stage(WS, name, "1", "Production", false)
+        .await
+        .unwrap();
+    s.update_model_version(WS, name, "1", Some("Test for Path"))
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_model_version(WS, name, "1")
+            .await
+            .unwrap()
+            .source
+            .as_deref(),
+        Some(src)
+    );
+    assert_eq!(
+        s.get_model_version_download_uri(WS, name, "1")
+            .await
+            .unwrap(),
+        src
+    );
+}

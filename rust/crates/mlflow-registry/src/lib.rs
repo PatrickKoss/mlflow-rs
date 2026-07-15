@@ -4,7 +4,7 @@
 //! registered models, model versions, tags, and aliases, all with
 //! **workspace-leading composite primary keys**.
 //!
-//! ## What T7.1 implements
+//! ## What T7.1 + T7.2 implement
 //!
 //! * [`schema`] — data structs for the 5 registry tables.
 //! * [`entities`] — the owned `RegisteredModel` / `ModelVersion` entities
@@ -14,16 +14,20 @@
 //!   `ON UPDATE CASCADE`), `get_latest_versions` (ROW_NUMBER window,
 //!   READY-only per stage, `Deleted_Internal` excluded), registered-model and
 //!   model-version tag set/delete (upsert + no-op delete), and alias
-//!   set/delete/get-by-alias — every method workspace-scoped.
-//! * A **minimal** `create_model_version` (plain-DB `MAX(version)+1` insert, no
-//!   `models:/` source resolution) needed to exercise latest-versions and
-//!   aliases in tests.
+//!   set/delete/get-by-alias — every method workspace-scoped (**T7.1**).
+//! * The full model-version lifecycle (**T7.2**): `create_model_version`
+//!   (`MAX(version)+1` retry loop + `models:/name/version` source resolution),
+//!   `update_model_version`, `transition_model_version_stage` (with
+//!   `archive_existing_versions`), soft-delete `delete_model_version` (redaction
+//!   + alias removal), `get_model_version`, and `get_model_version_download_uri`.
 //!
-//! ## Boundary with T7.2
+//! ## Boundary with T7.3
 //!
-//! `models:/`/`runs:/` source resolution, stage transitions, soft-delete
-//! redaction, `update_model_version`, and registry **search** (with the
-//! prompt-exclusion anti-join) are T7.2/T7.3 — intentionally absent here.
+//! Registry **search** (`search_registered_models` / `search_model_versions`
+//! with the search DSL and prompt-exclusion anti-join) is T7.3 — intentionally
+//! absent here. The bare `models:/<logged-model-id>` source form needs a
+//! cross-store logged-model lookup and is stored verbatim (see
+//! [`store`]/`model_versions` docs).
 //!
 //! ## Reuse of `mlflow-store`
 //!

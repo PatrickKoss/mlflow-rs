@@ -226,3 +226,58 @@ async fn alias_ops_are_workspace_scoped() {
     let a = s.get_registered_model(TEAM_A, "alpha").await.unwrap();
     assert_eq!(a.aliases.len(), 1);
 }
+
+#[tokio::test]
+async fn model_version_lifecycle_is_workspace_scoped() {
+    let tmp = TempDb::new("mv_lifecycle_scoped");
+    let s = store(&tmp).await;
+    // Same model name + version in both workspaces.
+    for ws in [TEAM_A, TEAM_B] {
+        s.create_registered_model(ws, "alpha", &[], None)
+            .await
+            .unwrap();
+        s.create_model_version(ws, "alpha", "src", None, &[], None, None)
+            .await
+            .unwrap();
+    }
+
+    // Transition team-a's version; team-b's stays "None".
+    s.transition_model_version_stage(TEAM_A, "alpha", "1", "Production", false)
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_model_version(TEAM_A, "alpha", "1")
+            .await
+            .unwrap()
+            .current_stage
+            .as_deref(),
+        Some("Production")
+    );
+    assert_eq!(
+        s.get_model_version(TEAM_B, "alpha", "1")
+            .await
+            .unwrap()
+            .current_stage
+            .as_deref(),
+        Some("None")
+    );
+
+    // team-b transition/update/delete on the OTHER workspace's version is bounded
+    // by workspace: operating on team-b's own version never touches team-a's.
+    s.update_model_version(TEAM_B, "alpha", "1", Some("b desc"))
+        .await
+        .unwrap();
+    assert!(s
+        .get_model_version(TEAM_A, "alpha", "1")
+        .await
+        .unwrap()
+        .description
+        .is_none());
+
+    // Delete team-b's version; team-a's version survives.
+    s.delete_model_version(TEAM_B, "alpha", "1").await.unwrap();
+    let a1 = s.get_model_version(TEAM_A, "alpha", "1").await.unwrap();
+    assert_eq!(a1.current_stage.as_deref(), Some("Production"));
+    let b_err = s.get_model_version(TEAM_B, "alpha", "1").await.unwrap_err();
+    assert_eq!(b_err.error_code, ErrorCode::ResourceDoesNotExist);
+}
