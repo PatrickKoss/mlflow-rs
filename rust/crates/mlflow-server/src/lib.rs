@@ -13,7 +13,9 @@
 //! `Router` without booting a real listener.
 
 pub mod config;
+pub mod datasets;
 pub mod experiments;
+pub mod logged_models;
 pub mod metrics;
 pub mod proto_http;
 pub mod routes;
@@ -108,6 +110,13 @@ pub fn build_app_with_recorder(
 /// register the bare `/api/…` + `/ajax-api/…` paths here (passing an empty
 /// prefix to `expand`). `with_state` erases the state type so the result merges
 /// into the ops router.
+///
+/// Route-table paths use Flask's `<param>` path-parameter syntax (T1.2); axum
+/// (matchit) uses `{param}` instead, so [`to_axum_path`] converts before
+/// registering. The one hand-registered exception is the correctly-slashed
+/// `search-datasets` ajax route (`mlflow/server/__init__.py:135`) — the route
+/// table only produces the leading-slash-missing form (§3.4 quirk), so the
+/// second, real ajax path is added directly here.
 fn register_proto_routes(state: AppState) -> Router {
     let mut router: Router<AppState> = Router::new();
     for spec in mlflow_proto::ROUTE_TABLE {
@@ -115,17 +124,27 @@ fn register_proto_routes(state: AppState) -> Router {
             continue;
         };
         for route in spec.expand("") {
-            router = router.route(&route.path, handler.clone());
+            router = router.route(&to_axum_path(&route.path), handler.clone());
         }
     }
+    router = router.route(
+        "/ajax-api/2.0/mlflow/experiments/search-datasets",
+        axum::routing::post(datasets::search_datasets),
+    );
     router.with_state(state)
+}
+
+/// Convert a Flask-style path (`<param>`) to axum/matchit syntax (`{param}`).
+/// Non-parameterized paths pass through unchanged.
+fn to_axum_path(path: &str) -> String {
+    path.replace('<', "{").replace('>', "}")
 }
 
 /// Map a `(service, method, http_method)` route-table entry to its axum
 /// handler. Returns `None` for endpoints not yet implemented (they fall through
 /// to the 404 `_not_implemented` form). Extend this as later phases land.
 fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodRouter<AppState>> {
-    use axum::routing::{get, post};
+    use axum::routing::{delete, get, patch, post};
     if service != "MlflowService" {
         return None;
     }
@@ -140,6 +159,15 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("updateExperiment", "POST") => post(experiments::update_experiment),
         ("setExperimentTag", "POST") => post(experiments::set_experiment_tag),
         ("deleteExperimentTag", "POST") => post(experiments::delete_experiment_tag),
+        ("searchDatasets", "POST") => post(datasets::search_datasets),
+        ("createLoggedModel", "POST") => post(logged_models::create_logged_model),
+        ("finalizeLoggedModel", "PATCH") => patch(logged_models::finalize_logged_model),
+        ("getLoggedModel", "GET") => get(logged_models::get_logged_model),
+        ("deleteLoggedModel", "DELETE") => delete(logged_models::delete_logged_model),
+        ("searchLoggedModels", "POST") => post(logged_models::search_logged_models),
+        ("setLoggedModelTags", "PATCH") => patch(logged_models::set_logged_model_tags),
+        ("deleteLoggedModelTag", "DELETE") => delete(logged_models::delete_logged_model_tag),
+        ("LogLoggedModelParams", "POST") => post(logged_models::log_logged_model_params),
         _ => return None,
     })
 }
@@ -313,5 +341,21 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn to_axum_path_converts_flask_param_syntax() {
+        assert_eq!(
+            to_axum_path("/mlflow/logged-models/<model_id>"),
+            "/mlflow/logged-models/{model_id}"
+        );
+        assert_eq!(
+            to_axum_path("/mlflow/logged-models/<model_id>/tags/<tag_key>"),
+            "/mlflow/logged-models/{model_id}/tags/{tag_key}"
+        );
+        assert_eq!(
+            to_axum_path("/mlflow/experiments/create"),
+            "/mlflow/experiments/create"
+        );
     }
 }
