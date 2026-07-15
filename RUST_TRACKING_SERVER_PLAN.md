@@ -1035,19 +1035,36 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 7 — Model Registry
 
-- [ ] **T7.1 Registry schema + store core**: 5 tables with workspace-leading composite
+- [x] **T7.1 Registry schema + store core**: 5 tables with workspace-leading composite
       PKs; registered model CRUD incl. rename (cascades via FK onupdate), tag CRUD,
       alias CRUD; `storage_location` handling.
       **AC:** behaviors match `tests/store/model_registry/test_sqlalchemy_store.py`
       (mirrored over HTTP in Phase 12).
       **VER:** Rust unit tests + Phase 12 registry sections.
-- [ ] **T7.2 Model version lifecycle**: create with `models:/`/`runs:/` source resolution
+      *(Done 2026-07-15: `mlflow-registry/src/store/` — much of the groundwork
+      (schema/entities/stages/validation/dbutil, RM CRUD, rename cascade,
+      get_latest_versions via ROW_NUMBER, tag/alias CRUD) predated this task
+      and was verified against the Python spec rather than rewritten.
+      Workspace-scoped throughout; `user_id` never returned on RegisteredModel.
+      Registry crate at 50 tests incl. 2 env-gated live pg/mysql smokes.)*
+- [x] **T7.2 Model version lifecycle**: create with `models:/`/`runs:/` source resolution
       + `MAX(version)+1` retry loop; update; **transition-stage** with canonical stage
       names + archive_existing_versions; **soft-delete** with redaction + alias removal;
       get-download-uri.
       **AC:** stage-transition and soft-delete edge cases from the store suite pass;
       copy-model-version flow (client-side) works end-to-end.
       **VER:** Phase 12 suite + an explicit copy_model_version client test.
+      *(Done 2026-07-15: `store/model_versions.rs` — create with
+      `models:/name/version` → storage_location resolution (via download-uri
+      path); `runs:/` and bare `models:/<id>` stored verbatim, matching the
+      Python registry store (the logged-model-id lookup is a cross-store
+      MlflowClient call — caller/HTTP-layer responsibility, documented);
+      MAX+1 retry; update; transition-stage (case-insensitive canonical
+      stages, archive_existing_versions transactional over siblings,
+      Python's `['Staging', 'Production']` list-repr error); soft-delete →
+      `Deleted_Internal` with redaction sentinels + alias removal, tags kept;
+      `get_model_version_including_deleted` mirror of Python's test helper.
+      copy_model_version end-to-end + Phase 12 HTTP checks ride T7.4/T12.)*
 - [ ] **T7.3 Registry search**: `search_registered_models` / `search_model_versions` with
       the DSL (§4.8), AND-of-tags HAVING-count subquery, **prompt-exclusion anti-join**
       + `_is_querying_prompt` bypass, order_by defaults and tiebreakers, offset-token
