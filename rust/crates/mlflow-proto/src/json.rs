@@ -277,7 +277,52 @@ fn well_known_to_json(message: &DynamicMessage) -> Option<JsonValue> {
             let d: prost_types::Duration = message.transcode_to().ok()?;
             Some(JsonValue::Str(quote_json_string(&format_duration(&d))))
         }
+        // `google.protobuf.Value`/`Struct`/`ListValue` (used by
+        // `assessments.Feedback`/`Expectation.value`, T4.4): these collapse to
+        // their bare JSON representation — a `Value` with its `kind` oneof
+        // unset serializes as `null` (verified against Python's
+        // `MessageToJson(Value())` == `"null"`, matching `ParseDict(None,
+        // Value())`'s round-trip for a feedback/expectation value of `None`),
+        // a `struct_value`/`list_value` recurses into an object/array, and the
+        // scalar kinds recurse through `value_to_json` on the one present
+        // field. `Struct` (a bare `{string: Value}` map, when it appears
+        // outside a `Value.struct_value`) and `ListValue` (a bare `[Value]`)
+        // are handled the same way for completeness, though no MLflow proto
+        // currently embeds them directly.
+        "google.protobuf.Value" => Some(value_message_to_json(message)),
+        "google.protobuf.Struct" => Some(struct_message_to_json(message)),
+        "google.protobuf.ListValue" => Some(list_value_message_to_json(message)),
         _ => None,
+    }
+}
+
+/// `google.protobuf.Value` -> JSON: the one present field of the `kind` oneof
+/// (field numbers 1-6: `null_value`, `number_value`, `string_value`,
+/// `bool_value`, `struct_value`, `list_value`), or `null` when unset. A set
+/// `null_value` already renders as `JsonValue::Null` via `value_to_json`'s
+/// `google.protobuf.NullValue` special case, same as the unset fallback.
+fn value_message_to_json(message: &DynamicMessage) -> JsonValue {
+    match message.fields().next() {
+        Some((fd, value)) => value_to_json(value, &fd.kind()),
+        None => JsonValue::Null,
+    }
+}
+
+/// `google.protobuf.Struct` -> JSON object: the `fields` map (`string ->
+/// Value`), sorted the same way ordinary proto maps are (see the module docs
+/// on map-key ordering).
+fn struct_message_to_json(message: &DynamicMessage) -> JsonValue {
+    match message.fields().next() {
+        Some((fd, value)) => value_to_json(value, &fd.kind()),
+        None => JsonValue::Object(Vec::new()),
+    }
+}
+
+/// `google.protobuf.ListValue` -> JSON array: the `values` repeated `Value`.
+fn list_value_message_to_json(message: &DynamicMessage) -> JsonValue {
+    match message.fields().next() {
+        Some((fd, value)) => value_to_json(value, &fd.kind()),
+        None => JsonValue::Array(Vec::new()),
     }
 }
 
