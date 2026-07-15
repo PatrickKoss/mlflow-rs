@@ -1721,6 +1721,7 @@ dependencies = [
  "mlflow-store",
  "mlflow-webhooks",
  "prost",
+ "prost-types",
  "serde",
  "serde_json",
  "thiserror",

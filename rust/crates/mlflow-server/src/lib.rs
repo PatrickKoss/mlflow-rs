@@ -12,6 +12,7 @@
 //! [`build_app`] so tests (and later tasks) can compose/exercise the
 //! `Router` without booting a real listener.
 
+pub mod assessments;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
@@ -206,6 +207,10 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("getMetricHistoryBulkInterval", "GET") => {
             get(metric_history::get_metric_history_bulk_interval)
         }
+        ("createAssessment", "POST") => post(assessments::create_assessment),
+        ("GetAssessment", "GET") => get(assessments::get_assessment),
+        ("updateAssessment", "PATCH") => patch(assessments::update_assessment),
+        ("deleteAssessment", "DELETE") => delete(assessments::delete_assessment),
         _ => return None,
     })
 }
