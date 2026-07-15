@@ -1042,11 +1042,23 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       (proto route `…/artifacts/directories`) + ajax logged-model file
       download (`…/artifacts/files`) — closes the T3.4 deferral. 13 HTTP
       tests + 5 state unit tests across T5.1-T5.3. UI smoke rides T11.6.)*
-- [ ] **T5.4 `/model-versions/get-artifact`** (§3.11): registry-store URI resolution
+- [x] **T5.4 `/model-versions/get-artifact`** (§3.11): registry-store URI resolution
       (`storage_location or source`), proxied-artifact handling, workspace prefixes.
       **AC:** model artifact downloads work for `models:/`-sourced and directly-sourced
       versions.
       **VER:** registry artifact tests + UI smoke on model page.
+      *(Done 2026-07-15: `get_model_version_artifact` in
+      `mlflow-server/src/artifacts.rs`, root route only (matches
+      `__init__.py:117`). Resolution via
+      `RegistryStore::get_model_version_download_uri` through the T5.1
+      `resolve_artifact` seam; `models:/`-sourced versions work because the
+      store resolves them to storage_location at create time. AppState gained
+      `Option<RegistryStore>` (`with_registry` constructor); main.rs wires it
+      from the same Db pool. Python quirk reproduced: missing `version` →
+      `int(None)` TypeError escapes `_validate_model_version`'s ValueError
+      catch → 500 INTERNAL_ERROR with verbatim message (present-but-invalid
+      version → 400). 10 HTTP tests. Workspace prefixing stays the Phase 10
+      seam.)*
 
 ### Phase 6 — GraphQL
 
