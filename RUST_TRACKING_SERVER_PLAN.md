@@ -1003,18 +1003,45 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 5 — Artifacts
 
-- [ ] **T5.1 `/get-artifact` streaming download** with artifact-URI resolution and path
+- [x] **T5.1 `/get-artifact` streaming download** with artifact-URI resolution and path
       safety.
       **AC:** artifact browser works; traversal attempts → 400.
       **VER:** artifact suite sections + explicit traversal tests.
-- [ ] **T5.2 `mlflow-artifacts` proxy** (§3.11) over `object_store`: full surface,
+      *(Done 2026-07-15: root-mounted `/get-artifact` in
+      `mlflow-server/src/artifacts.rs`; run artifact-URI resolution incl.
+      `mlflow-artifacts://` + `http(s)://…/mlflow-artifacts/artifacts/`
+      proxied forms (`AppState::resolve_artifact` ports
+      `_is_servable_proxied_run_artifact_root` + destination-path logic);
+      streamed via object_store `into_stream` (no buffering);
+      traversal → 400. Deviation: missing-`path` → JSON 400 (Python:
+      Flask KeyError HTML 400). Workspace prefixing elided at the
+      `resolve_artifact` seam for Phase 10.)*
+- [x] **T5.2 `mlflow-artifacts` proxy** (§3.11) over `object_store`: full surface,
       streamed both directions (Python's WSGI bridge buffers whole bodies —
       `fastapi_app.py:41` — Rust must not).
       **AC:** `tests/tracking/test_mlflow_artifacts.py` passes; 5 GB upload keeps Rust
       RSS growth < 100 MB.
       **VER:** Phase 12 runner + memory probe.
-- [ ] **T5.3 ajax `upload-artifact` + logged-model artifact routes.**
+      *(Done 2026-07-15: all 8 endpoints on both prefixes via a new
+      `MlflowArtifactsService` branch in `handler_for` (previously
+      early-returned for non-MlflowService); `to_axum_path` extended for
+      Flask `<path:…>` → axum `{*…}` wildcards. Uploads stream chunk-by-chunk
+      into object_store multipart put; downloads stream out; 256 MiB
+      RSS-probe test (<128 MiB growth) — the 5 GB probe is Phase 12.
+      `--serve-artifacts` (default true) + `--artifacts-destination` added to
+      Cli/ServerConfig; disabled mode returns Python's exact 503. Local
+      FS/`file:` backend; cloud schemes + multipart/presigned →
+      NOT_IMPLEMENTED (parity with LocalArtifactRepository, which lacks those
+      mixins). Real bug fixed: `local_repo` now create_dir_all's the root
+      (run artifact dirs exist only on first write; uploads 500'd before).
+      Python-suite run (test_mlflow_artifacts.py) rides Phase 12.)*
+- [x] **T5.3 ajax `upload-artifact` + logged-model artifact routes.**
       **AC/VER:** UI artifact upload/download smoke + suite sections.
+      *(Done 2026-07-15: ajax `upload-artifact` (buffered with Python's 10 MB
+      cap — parity, not a streaming path); `listLoggedModelArtifacts`
+      (proto route `…/artifacts/directories`) + ajax logged-model file
+      download (`…/artifacts/files`) — closes the T3.4 deferral. 13 HTTP
+      tests + 5 state unit tests across T5.1-T5.3. UI smoke rides T11.6.)*
 - [ ] **T5.4 `/model-versions/get-artifact`** (§3.11): registry-store URI resolution
       (`storage_location or source`), proxied-artifact handling, workspace prefixes.
       **AC:** model artifact downloads work for `models:/`-sourced and directly-sourced
