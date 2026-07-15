@@ -81,6 +81,8 @@ impl TestServer {
             static_prefix: None,
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         };
         // Per-router recorder handle so multiple test servers can coexist in
         // one process (a global recorder can only be installed once).

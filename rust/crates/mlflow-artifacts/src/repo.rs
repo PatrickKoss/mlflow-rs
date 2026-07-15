@@ -328,9 +328,20 @@ fn is_directory_error(e: &object_store::Error) -> bool {
 }
 
 /// Construct the local-filesystem [`LocalFileSystem`] store rooted at
-/// `artifact_dir` (which must exist). Used by [`factory::repo_from_uri`] and by
-/// the router factory.
+/// `artifact_dir`. The directory tree is created if absent — mirroring
+/// `LocalArtifactRepository`, whose `log_artifact`/`download_artifacts` create
+/// the artifact root on demand (`os.makedirs(..., exist_ok=True)`). This is
+/// required because `object_store`'s `LocalFileSystem::new_with_prefix`
+/// canonicalizes and rejects a non-existent root, whereas a run's artifact
+/// directory only comes into existence on first write. Used by
+/// [`factory::repo_from_uri`] and the router factory.
 pub fn local_repo(artifact_dir: &std::path::Path) -> Result<ObjectStoreRepo, MlflowError> {
+    std::fs::create_dir_all(artifact_dir).map_err(|e| {
+        MlflowError::internal_error(format!(
+            "Failed to create local artifact store at {}: {e}",
+            artifact_dir.display()
+        ))
+    })?;
     let store = LocalFileSystem::new_with_prefix(artifact_dir).map_err(|e| {
         MlflowError::internal_error(format!(
             "Failed to open local artifact store at {}: {e}",

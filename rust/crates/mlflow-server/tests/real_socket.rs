@@ -22,6 +22,8 @@ async fn serves_health_over_real_socket_and_shuts_down_gracefully() {
         static_prefix: None,
         backend_store_uri: None,
         default_artifact_root: None,
+        serve_artifacts: true,
+        artifacts_destination: None,
     };
     let app = build_app(&config);
 

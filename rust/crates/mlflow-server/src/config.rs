@@ -40,6 +40,23 @@ pub struct Cli {
     /// Used as the parent of per-experiment default artifact locations.
     #[arg(long)]
     pub default_artifact_root: Option<String>,
+
+    /// Enable serving of artifacts through the `mlflow-artifacts` proxy
+    /// endpoints (`mlflow server --serve-artifacts` / `--no-serve-artifacts`).
+    /// When on, the server sets `_SERVE_ARTIFACTS_ENV_VAR="true"`, gating the
+    /// `MlflowArtifactsService` surface (`_disable_unless_serve_artifacts`).
+    /// Python defaults this to `True`; we mirror that default so the proxy is
+    /// live out of the box.
+    #[arg(long, default_value_t = true)]
+    pub serve_artifacts: bool,
+
+    /// The base artifact-store URI the `mlflow-artifacts` proxy reads/writes
+    /// (`mlflow server --artifacts-destination`, env
+    /// `_MLFLOW_SERVER_ARTIFACT_DESTINATION`). Only local-FS / `file:` URIs are
+    /// wired in v1 (cloud schemes return NOT_IMPLEMENTED via
+    /// `mlflow_artifacts::factory::repo_from_uri`).
+    #[arg(long)]
+    pub artifacts_destination: Option<String>,
 }
 
 /// Error returned when `--static-prefix` (or `MLFLOW_STATIC_PREFIX`) fails
@@ -61,6 +78,11 @@ pub struct ServerConfig {
     pub static_prefix: Option<String>,
     pub backend_store_uri: Option<String>,
     pub default_artifact_root: Option<String>,
+    /// Whether the `mlflow-artifacts` proxy surface is enabled
+    /// (`--serve-artifacts`). Mirrors `_is_serving_proxied_artifacts()`.
+    pub serve_artifacts: bool,
+    /// The `--artifacts-destination` base URI for the proxy repo, if configured.
+    pub artifacts_destination: Option<String>,
 }
 
 impl fmt::Display for ServerConfig {
@@ -86,6 +108,8 @@ impl ServerConfig {
             static_prefix,
             backend_store_uri: cli.backend_store_uri,
             default_artifact_root: cli.default_artifact_root,
+            serve_artifacts: cli.serve_artifacts,
+            artifacts_destination: cli.artifacts_destination,
         })
     }
 }
@@ -170,6 +194,8 @@ mod tests {
             static_prefix: Some("/cli-prefix".to_string()),
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/cli-prefix"));
@@ -190,6 +216,8 @@ mod tests {
             static_prefix: None,
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/env-prefix"));
@@ -210,6 +238,8 @@ mod tests {
             static_prefix: None,
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix, None);
