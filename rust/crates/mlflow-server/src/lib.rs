@@ -22,6 +22,7 @@ pub mod metric_history;
 pub mod metrics;
 pub mod otlp;
 pub mod proto_http;
+pub mod registry;
 pub mod routes;
 pub mod runs;
 pub mod state;
@@ -223,6 +224,46 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
             ("completeMultipartUpload", "POST") => post(artifacts::proxy_complete_multipart),
             ("abortMultipartUpload", "POST") => post(artifacts::proxy_abort_multipart),
             ("getPresignedDownloadUrl", "GET") => get(artifacts::proxy_presigned_download),
+            _ => return None,
+        });
+    }
+    // `ModelRegistryService` (plan T7.4, §3.14) — the 21 model-registry RPCs
+    // under `/(api|ajax-api)/2.0/mlflow/{registered-models,model-versions}/...`.
+    // The three alias RPCs share one path (`/mlflow/registered-models/alias`)
+    // distinguished only by HTTP method; `register_proto_routes` calls
+    // `Router::route` once per (path, method) route-table entry, and axum 0.8
+    // merges the resulting `MethodRouter`s for a repeated path as long as the
+    // methods are disjoint (POST/DELETE/GET here) — so the method-overloaded
+    // alias route (and the POST+GET `get-latest-versions`) fall out naturally
+    // from returning a distinct single-method `MethodRouter` per entry.
+    if service == "ModelRegistryService" {
+        return Some(match (method, http_method) {
+            ("createRegisteredModel", "POST") => post(registry::create_registered_model),
+            ("renameRegisteredModel", "POST") => post(registry::rename_registered_model),
+            ("updateRegisteredModel", "PATCH") => patch(registry::update_registered_model),
+            ("deleteRegisteredModel", "DELETE") => delete(registry::delete_registered_model),
+            ("getRegisteredModel", "GET") => get(registry::get_registered_model),
+            ("searchRegisteredModels", "GET") => get(registry::search_registered_models),
+            ("getLatestVersions", "POST") => post(registry::get_latest_versions),
+            ("getLatestVersions", "GET") => get(registry::get_latest_versions),
+            ("setRegisteredModelTag", "POST") => post(registry::set_registered_model_tag),
+            ("deleteRegisteredModelTag", "DELETE") => delete(registry::delete_registered_model_tag),
+            ("createModelVersion", "POST") => post(registry::create_model_version),
+            ("updateModelVersion", "PATCH") => patch(registry::update_model_version),
+            ("transitionModelVersionStage", "POST") => {
+                post(registry::transition_model_version_stage)
+            }
+            ("deleteModelVersion", "DELETE") => delete(registry::delete_model_version),
+            ("getModelVersion", "GET") => get(registry::get_model_version),
+            ("searchModelVersions", "GET") => get(registry::search_model_versions),
+            ("getModelVersionDownloadUri", "GET") => get(registry::get_model_version_download_uri),
+            ("setModelVersionTag", "POST") => post(registry::set_model_version_tag),
+            ("deleteModelVersionTag", "DELETE") => delete(registry::delete_model_version_tag),
+            ("setRegisteredModelAlias", "POST") => post(registry::set_registered_model_alias),
+            ("deleteRegisteredModelAlias", "DELETE") => {
+                delete(registry::delete_registered_model_alias)
+            }
+            ("getModelVersionByAlias", "GET") => get(registry::get_model_version_by_alias),
             _ => return None,
         });
     }
