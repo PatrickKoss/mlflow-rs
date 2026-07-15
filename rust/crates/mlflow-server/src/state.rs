@@ -27,6 +27,7 @@ use mlflow_artifacts::ArtifactRepo;
 use mlflow_error::MlflowError;
 use mlflow_registry::RegistryStore;
 use mlflow_store::TrackingStore;
+use mlflow_webhooks::WebhookStore;
 
 /// A resolved artifact repository plus the repo-relative path to operate on —
 /// the output of resolving a run's / logged model's artifact URI against the
@@ -51,6 +52,10 @@ struct AppStateInner {
     /// configuration ([`AppState::new`]) used by tests that don't touch the
     /// registry.
     registry_store: Option<RegistryStore>,
+    /// The webhook store (T8.1/T8.2), sharing the tracking DB pool. `None` for
+    /// backends that don't support webhooks (e.g. a future file store); the
+    /// webhook handlers return a `not-implemented`-style error when absent.
+    webhook_store: Option<WebhookStore>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -69,7 +74,24 @@ impl AppState {
     /// use [`AppState::with_artifacts`] (+ [`AppState::with_registry`] for the
     /// registry-store handle).
     pub fn new(tracking_store: TrackingStore) -> Self {
-        Self::build(tracking_store, None, false, None, None)
+        Self::build(tracking_store, None, None, false, None, None)
+    }
+
+    /// Attach a [`WebhookStore`] to this state (T8.1/T8.2). Additive builder so
+    /// existing constructors stay valid; returns a new `AppState` sharing the
+    /// same inner fields plus the webhook store.
+    pub fn with_webhook_store(self, webhook_store: WebhookStore) -> Self {
+        let inner = &self.inner;
+        Self {
+            inner: Arc::new(AppStateInner {
+                tracking_store: inner.tracking_store.clone(),
+                registry_store: inner.registry_store.clone(),
+                webhook_store: Some(webhook_store),
+                serve_artifacts: inner.serve_artifacts,
+                proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
+                artifacts_destination: inner.artifacts_destination.clone(),
+            }),
+        }
     }
 
     /// Build the state with the artifact proxy configuration. `serve_artifacts`
@@ -84,6 +106,7 @@ impl AppState {
     ) -> Self {
         Self::build(
             tracking_store,
+            None,
             None,
             serve_artifacts,
             proxied_artifacts_repo,
@@ -104,6 +127,7 @@ impl AppState {
         Self::build(
             tracking_store,
             Some(registry_store),
+            None,
             serve_artifacts,
             proxied_artifacts_repo,
             artifacts_destination,
@@ -113,6 +137,7 @@ impl AppState {
     fn build(
         tracking_store: TrackingStore,
         registry_store: Option<RegistryStore>,
+        webhook_store: Option<WebhookStore>,
         serve_artifacts: bool,
         proxied_artifacts_repo: Option<Arc<dyn ArtifactRepo>>,
         artifacts_destination: Option<String>,
@@ -121,6 +146,7 @@ impl AppState {
             inner: Arc::new(AppStateInner {
                 tracking_store,
                 registry_store,
+                webhook_store,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
@@ -144,6 +170,17 @@ impl AppState {
         self.inner.registry_store.as_ref().ok_or_else(|| {
             MlflowError::internal_error(
                 "The MLflow server is not configured with a model registry store.",
+            )
+        })
+    }
+
+    /// The webhook store, or a `RESOURCE_DOES_NOT_EXIST`-shaped error when the
+    /// backend does not support webhooks (`None`). Mirrors how the Python
+    /// handlers assume the model-registry store implements the webhook APIs.
+    pub fn webhook_store(&self) -> Result<&WebhookStore, MlflowError> {
+        self.inner.webhook_store.as_ref().ok_or_else(|| {
+            MlflowError::not_implemented(
+                "Webhooks are not supported by the configured backend store.".to_string(),
             )
         })
     }

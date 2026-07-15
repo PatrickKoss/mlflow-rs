@@ -9,6 +9,7 @@ use clap::Parser;
 use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
+use mlflow_webhooks::WebhookStore;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -34,6 +35,10 @@ async fn main() -> anyhow::Result<()> {
                 .default_artifact_root
                 .clone()
                 .unwrap_or_else(|| DEFAULT_ARTIFACT_ROOT.to_string());
+            // The webhook store shares the tracking DB pool (`Db` is a cheap
+            // Arc-backed clone). Its Fernet cipher is resolved from
+            // `MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY` (ephemeral key when unset).
+            let webhook_store = WebhookStore::new(db.clone())?;
             let store = TrackingStore::new(db, artifact_root);
             // The registry tables live in the same Alembic-migrated database as
             // the tracking tables, so the registry store shares the same `Db`
@@ -53,7 +58,8 @@ async fn main() -> anyhow::Result<()> {
                 config.serve_artifacts,
                 proxied_repo,
                 config.artifacts_destination.clone(),
-            );
+            )
+            .with_webhook_store(webhook_store);
             build_app_with_state(&config, app_state)
         }
         None => build_app(&config),

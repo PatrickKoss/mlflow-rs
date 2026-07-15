@@ -12,5 +12,39 @@ workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+# The webhook store reuses `mlflow-store`'s connection/dialect infrastructure
+# (the `Db` pool enum and `Dialect` SQL helpers). Its query-execution helpers
+# (`Val`/`Tx`/`RowLike`) are `pub(crate)`, so — like `mlflow-registry` — a small
+# local copy lives in this crate's `dbutil` module (see its docs) pending
+# consolidation into a shared crate.
+mlflow-store = { workspace = true }
+# The MLflow error model (codes/messages/wire shape); the store/validation
+# return `MlflowError`s so handler layers surface Python-identical errors.
+mlflow-error = { workspace = true }
+# Offset page tokens (`base64(json {"offset": N})`) reuse the shared parser.
+mlflow-search = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Fernet-encrypted webhook secrets — validated Rust<->Python-compatible in
+# `rust/spikes/` (T0.4). Same crate/version as the spike.
+fernet = "0.2"
+# HMAC-SHA256 `v1,<b64>` webhook signing (`mlflow/webhooks/delivery.py:121`).
+hmac = "0.12"
+sha2 = "0.10"
+base64 = { workspace = true }
+# Outbound HTTP for the `/test` endpoint's single real delivery. `reqwest`
+# would pull a TLS stack; the test path only needs one plain request with
+# headers + a timeout, so we use the already-vendored low-level hyper client
+# (the async delivery engine, retries, and SSRF adapter are T8.3, not here).
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
+http-body-util = "0.1"
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+fernet = "0.2"

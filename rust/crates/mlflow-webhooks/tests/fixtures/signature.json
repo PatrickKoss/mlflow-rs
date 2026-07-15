@@ -1,0 +1,7 @@
+{
+  "secret": "my-webhook-secret",
+  "delivery_id": "11111111-2222-3333-4444-555555555555",
+  "timestamp": "1704067200",
+  "payload": "{\"entity\":\"registered_model\",\"action\":\"created\",\"data\":{\"name\":\"m\"}}",
+  "signature": "v1,5sj65iWHI+j7kgV0w3tlN7LlwWyamuKy4Ay6Pc9KSQo="
+}
