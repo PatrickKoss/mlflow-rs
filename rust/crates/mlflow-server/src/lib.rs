@@ -24,6 +24,7 @@ pub mod proto_http;
 pub mod routes;
 pub mod runs;
 pub mod state;
+pub mod trace_artifact;
 pub mod traces;
 pub mod workspace;
 
@@ -146,6 +147,17 @@ fn register_proto_routes(state: AppState) -> Router {
     router = router.route(
         "/ajax-api/2.0/mlflow/metrics/get-history-bulk",
         get(metric_history::get_metric_history_bulk),
+    );
+    // `get-trace-artifact` (plan T4.5, §3.10) — ajax-only, served under both
+    // the 2.0 and 3.0 ajax prefixes (`mlflow/server/__init__.py:159-161`);
+    // not proto-route-table-driven (plain `request_id`/`path` query params).
+    router = router.route(
+        "/ajax-api/2.0/mlflow/get-trace-artifact",
+        get(trace_artifact::get_trace_artifact),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/get-trace-artifact",
+        get(trace_artifact::get_trace_artifact),
     );
     // OTLP trace ingestion (plan T4.3, §3.8) — not a proto-route-table
     // endpoint (its own wire protocol, `mlflow/server/otel_api.py`), so it is

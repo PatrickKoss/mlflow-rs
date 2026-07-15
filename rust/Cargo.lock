@@ -1707,6 +1707,7 @@ dependencies = [
  "base64",
  "clap",
  "flate2",
+ "futures",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -1724,12 +1725,14 @@ dependencies = [
  "prost-types",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
  "tower",
  "tower-http 0.7.0",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

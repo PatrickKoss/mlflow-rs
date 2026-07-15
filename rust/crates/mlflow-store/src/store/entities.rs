@@ -278,6 +278,13 @@ pub const SPANS_LOCATION_TRACKING_STORE: &str = "TRACKING_STORE";
 /// The `SpansLocation.ARCHIVE_REPO` value (archive-backed span payloads).
 pub const SPANS_LOCATION_ARCHIVE_REPO: &str = "ARCHIVE_REPO";
 
+/// The `SpansLocation.ARTIFACT_REPO` value (span payloads live in the trace's
+/// artifact repo, e.g. `traces.json` written by the OSS client SDK before V3
+/// tracking-store span persistence existed). `handlers.py:4177-4234`
+/// (`get_trace_artifact_handler`) treats this — and any other/absent tag value
+/// that isn't `ARCHIVE_REPO` — as "read `traces.json` from the artifact repo".
+pub const SPANS_LOCATION_ARTIFACT_REPO: &str = "ARTIFACT_REPO";
+
 /// Trace-metadata key holding the JSON size stats (`TraceMetadataKey.SIZE_STATS`),
 /// used to decide whether all spans are exported (`{"num_spans": N}`).
 pub const TRACE_METADATA_SIZE_STATS: &str = "mlflow.trace.sizeStats";

@@ -56,7 +56,8 @@ pub use entities::{
     DatasetSummary, Experiment, ExperimentTag, InputTag, LifecycleStage, LoggedModelInput,
     LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo, RunInputs,
     RunOutputs, RunStatus, RunTag, StoredSpan, TraceAssessment, TraceInfo, TraceState,
-    TraceWithSpans,
+    TraceWithSpans, MLFLOW_ARTIFACT_LOCATION, SPANS_LOCATION_ARCHIVE_REPO,
+    SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
 };
 pub use experiments::ViewType;
 pub use logged_models::{
