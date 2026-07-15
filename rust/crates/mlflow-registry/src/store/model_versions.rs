@@ -1,22 +1,39 @@
-//! Minimal model-version support for T7.1.
+//! Model-version lifecycle, mirroring the model-version methods in
+//! `mlflow/store/model_registry/sqlalchemy_store.py`.
 //!
-//! ## Scope boundary (T7.1 vs T7.2)
-//!
-//! This module implements only the plain-DB parts of the model-version
-//! lifecycle needed to exercise `get_latest_versions`, aliases, and the rename
-//! cascade in tests:
+//! Covers (T7.1 core + T7.2 lifecycle):
 //!
 //! * [`RegistryStore::create_model_version`] — the `MAX(version)+1` insert with
-//!   the contention retry loop, `storage_location = source` (no `models:/` /
-//!   `runs:/` resolution), `current_stage = "None"`, `status = "READY"`. It does
-//!   NOT resolve `models://` sources, transition stages, or soft-delete.
+//!   the contention retry loop, `models:/name/version` → `storage_location`
+//!   source resolution (`runs:/` and other sources stored verbatim),
+//!   `current_stage = "None"`, `status = "READY"`.
+//! * [`RegistryStore::update_model_version`] — set description, bump
+//!   `last_updated_time`.
+//! * [`RegistryStore::transition_model_version_stage`] — canonical stage names,
+//!   `archive_existing_versions` (archives all other versions in the target
+//!   stage, only valid for Staging/Production), transactional over siblings.
+//! * [`RegistryStore::delete_model_version`] — soft-delete →
+//!   `Deleted_Internal` with source/run_id/run_link/description/status_message
+//!   redaction and alias removal.
 //! * [`RegistryStore::get_model_version`] / `get_model_version_download_uri` /
 //!   [`RegistryStore::require_model_version`] — reads that skip
 //!   `Deleted_Internal` versions.
 //!
-//! Everything else (source resolution, `transition_model_version_stage`,
-//! `delete_model_version` soft-delete + redaction, `update_model_version`,
-//! search) is **T7.2** and intentionally absent here.
+//! ## `models:/` source resolution (`sqlalchemy_store.py:1016-1035`)
+//!
+//! When `source` has scheme `models` and parses to `models:/name/version`, the
+//! store resolves `storage_location` to that referenced version's download URI
+//! (`storage_location or source`) via [`RegistryStore::get_model_version_download_uri`].
+//! The proto `source` column keeps the verbatim `models:/...` string.
+//!
+//! The bare `models:/<model_id>` form (a logged-model id, not a name/version)
+//! requires a cross-store `MlflowClient().get_logged_model()` call in Python;
+//! the registry store cannot resolve it alone, so — matching the boundary of
+//! this crate — such a source is stored verbatim (`storage_location = source`),
+//! leaving the logged-model lookup to the caller/HTTP layer.
+//!
+//! `runs:/` sources are **not** specially handled by the Python registry store
+//! either; they are stored verbatim.
 
 use mlflow_error::MlflowError;
 use mlflow_store::Db;
@@ -26,20 +43,29 @@ use super::{internal, is_unique_violation, now_millis, RegistryStore};
 use crate::dbutil::{DbExt, RowLike, Val};
 use crate::entities::{ModelVersion, ModelVersionTag};
 use crate::schema::{MODEL_VERSIONS, MODEL_VERSION_TAGS, REGISTERED_MODELS};
-use crate::stages::{STAGE_DELETED_INTERNAL, STAGE_NONE};
+use crate::stages::{
+    get_canonical_stage, DEFAULT_STAGES_FOR_GET_LATEST_VERSIONS, STAGE_ARCHIVED,
+    STAGE_DELETED_INTERNAL, STAGE_NONE,
+};
 use crate::validation;
 
 /// `ModelVersionStatus.READY` string.
 const STATUS_READY: &str = "READY";
+
+/// Redaction sentinels written on soft-delete (`sqlalchemy_store.py:1269-1271`).
+const REDACTED_SOURCE: &str = "REDACTED-SOURCE-PATH";
+const REDACTED_RUN_ID: &str = "REDACTED-RUN-ID";
+const REDACTED_RUN_LINK: &str = "REDACTED-RUN-LINK";
 
 /// Number of MAX(version)+1 insert retries under contention
 /// (`CREATE_MODEL_VERSION_RETRIES`).
 const CREATE_MODEL_VERSION_RETRIES: usize = 3;
 
 impl RegistryStore {
-    /// Minimal `create_model_version` (see module docs for the T7.1/T7.2
-    /// boundary). Assigns `MAX(version)+1` for the model, retrying on a
-    /// primary-key collision from a concurrent insert.
+    /// `create_model_version`. Assigns `MAX(version)+1` for the model, retrying
+    /// on a primary-key collision from a concurrent insert. Resolves a
+    /// `models:/name/version` source to its `storage_location` (see module docs);
+    /// other sources are stored verbatim.
     ///
     /// The parameter list mirrors the Python `create_model_version` signature
     /// (name/source/run_id/tags/run_link/description), hence the arg count.
@@ -58,8 +84,10 @@ impl RegistryStore {
         for (k, v) in tags {
             validation::validate_model_version_tag(k, v)?;
         }
-        // No `models:/`/`runs:/` resolution in T7.1 — storage_location = source.
-        let storage_location = source;
+        // Resolve `models:/name/version` sources to the referenced version's
+        // download URI; everything else (incl. `runs:/` and bare `models:/<id>`)
+        // is stored verbatim. See module docs.
+        let storage_location = self.resolve_storage_location(workspace, source).await?;
 
         let creation_time = now_millis();
         let dialect = self.db().dialect();
@@ -196,6 +224,52 @@ impl RegistryStore {
         Ok(row.into_entity(tags, alias_names))
     }
 
+    /// `_get_sql_model_version_including_deleted`: fetch a version **including**
+    /// soft-deleted (`Deleted_Internal`) rows. Mirrors the Python test helper
+    /// used to verify redaction on delete. Errors `RESOURCE_DOES_NOT_EXIST` when
+    /// no such row exists in the workspace.
+    pub async fn get_model_version_including_deleted(
+        &self,
+        workspace: &str,
+        name: &str,
+        version: &str,
+    ) -> Result<ModelVersion, MlflowError> {
+        validation::validate_model_name(name)?;
+        validation::validate_model_version(version)?;
+        let version_num: i64 = version.parse().expect("validated as integer");
+        let dialect = self.db().dialect();
+        let sql = format!(
+            "SELECT workspace, name, version, creation_time, last_updated_time, description, \
+             user_id, current_stage, source, run_id, status, status_message, run_link \
+             FROM {MODEL_VERSIONS} WHERE workspace = {} AND name = {} AND version = {}",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            dialect.placeholder(3),
+        );
+        let row = self
+            .db()
+            .fetch_optional(
+                &sql,
+                &[
+                    Val::Text(workspace.to_string()),
+                    Val::Text(name.to_string()),
+                    Val::Int(version_num),
+                ],
+                map_model_version_row,
+            )
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| mv_not_found(name, version))?;
+        let tags = fetch_model_version_tags(self.db(), workspace, name, row.version).await?;
+        let aliases = self.fetch_registered_model_aliases(workspace, name).await?;
+        let alias_names = aliases
+            .into_iter()
+            .filter(|a| a.version == row.version.to_string())
+            .map(|a| a.alias)
+            .collect();
+        Ok(row.into_entity(tags, alias_names))
+    }
+
     /// `get_model_version_download_uri`: `storage_location or source`.
     pub async fn get_model_version_download_uri(
         &self,
@@ -230,6 +304,261 @@ impl RegistryStore {
             .map_err(internal)?
             .flatten();
         Ok(uri.unwrap_or_default())
+    }
+
+    /// `update_model_version`: set the description, bump `last_updated_time`.
+    /// Errors `RESOURCE_DOES_NOT_EXIST` when the version is absent or soft-deleted.
+    pub async fn update_model_version(
+        &self,
+        workspace: &str,
+        name: &str,
+        version: &str,
+        description: Option<&str>,
+    ) -> Result<ModelVersion, MlflowError> {
+        let mv = self.require_model_version(workspace, name, version).await?;
+        let now = now_millis();
+        let dialect = self.db().dialect();
+        let sql = format!(
+            "UPDATE {MODEL_VERSIONS} SET description = {}, last_updated_time = {} \
+             WHERE workspace = {} AND name = {} AND version = {}",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            dialect.placeholder(3),
+            dialect.placeholder(4),
+            dialect.placeholder(5),
+        );
+        self.db()
+            .exec(
+                &sql,
+                &[
+                    Val::OptText(description.map(str::to_string)),
+                    Val::Int(now),
+                    Val::Text(workspace.to_string()),
+                    Val::Text(name.to_string()),
+                    Val::Int(mv.version),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        self.get_model_version(workspace, name, version).await
+    }
+
+    /// `transition_model_version_stage`: move a version to `stage` (canonical,
+    /// case-insensitive). When `archive_existing_versions` is set, every *other*
+    /// version currently in the target stage is moved to `Archived` in the same
+    /// transaction; this is only valid when the target is an active stage
+    /// (Staging/Production), else `INVALID_PARAMETER_VALUE`. Bumps
+    /// `last_updated_time` on the moved version, each archived sibling, and the
+    /// registered model. Mirrors `sqlalchemy_store.py:1192-1242`.
+    pub async fn transition_model_version_stage(
+        &self,
+        workspace: &str,
+        name: &str,
+        version: &str,
+        stage: &str,
+        archive_existing_versions: bool,
+    ) -> Result<ModelVersion, MlflowError> {
+        let canonical = get_canonical_stage(stage)?;
+        let is_active_stage = DEFAULT_STAGES_FOR_GET_LATEST_VERSIONS.contains(&canonical);
+        if archive_existing_versions && !is_active_stage {
+            // Python formats the Python list repr `['Staging', 'Production']`.
+            return Err(MlflowError::invalid_parameter_value(format!(
+                "Model version transition cannot archive existing model versions because \
+                 '{stage}' is not an Active stage. Valid stages are ['Staging', 'Production']"
+            )));
+        }
+        // Validates the version exists (workspace-scoped, non-deleted).
+        let mv = self.require_model_version(workspace, name, version).await?;
+        let now = now_millis();
+        let dialect = self.db().dialect();
+        let ph = |i| dialect.placeholder(i);
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+
+        if archive_existing_versions {
+            let archive_sql = format!(
+                "UPDATE {MODEL_VERSIONS} SET current_stage = {}, last_updated_time = {} \
+                 WHERE workspace = {} AND name = {} AND version <> {} AND current_stage = {}",
+                ph(1),
+                ph(2),
+                ph(3),
+                ph(4),
+                ph(5),
+                ph(6),
+            );
+            tx.exec(
+                &archive_sql,
+                &[
+                    Val::Text(STAGE_ARCHIVED.to_string()),
+                    Val::Int(now),
+                    Val::Text(workspace.to_string()),
+                    Val::Text(name.to_string()),
+                    Val::Int(mv.version),
+                    Val::Text(canonical.to_string()),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        }
+
+        let set_stage_sql = format!(
+            "UPDATE {MODEL_VERSIONS} SET current_stage = {}, last_updated_time = {} \
+             WHERE workspace = {} AND name = {} AND version = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+            ph(4),
+            ph(5),
+        );
+        tx.exec(
+            &set_stage_sql,
+            &[
+                Val::Text(canonical.to_string()),
+                Val::Int(now),
+                Val::Text(workspace.to_string()),
+                Val::Text(name.to_string()),
+                Val::Int(mv.version),
+            ],
+        )
+        .await
+        .map_err(internal)?;
+
+        let bump_rm_sql = format!(
+            "UPDATE {REGISTERED_MODELS} SET last_updated_time = {} \
+             WHERE workspace = {} AND name = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+        );
+        tx.exec(
+            &bump_rm_sql,
+            &[
+                Val::Int(now),
+                Val::Text(workspace.to_string()),
+                Val::Text(name.to_string()),
+            ],
+        )
+        .await
+        .map_err(internal)?;
+
+        tx.commit().await.map_err(internal)?;
+        self.get_model_version(workspace, name, version).await
+    }
+
+    /// `delete_model_version`: soft-delete → `Deleted_Internal`. Redacts
+    /// `source`/`run_id`/`run_link` to sentinels, nulls `description`/`user_id`/
+    /// `status_message`, removes any aliases pointing at this version, and bumps
+    /// `last_updated_time` on the version and the registered model — all in one
+    /// transaction. Tags are intentionally kept (Python comment at `:1255`).
+    /// Mirrors `sqlalchemy_store.py:1244-1273`.
+    pub async fn delete_model_version(
+        &self,
+        workspace: &str,
+        name: &str,
+        version: &str,
+    ) -> Result<(), MlflowError> {
+        let mv = self.require_model_version(workspace, name, version).await?;
+        let now = now_millis();
+        let dialect = self.db().dialect();
+        let ph = |i| dialect.placeholder(i);
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+
+        // Remove aliases pointing at this version.
+        let del_alias_sql = format!(
+            "DELETE FROM {aliases} WHERE workspace = {} AND name = {} AND version = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+            aliases = crate::schema::REGISTERED_MODEL_ALIASES,
+        );
+        tx.exec(
+            &del_alias_sql,
+            &[
+                Val::Text(workspace.to_string()),
+                Val::Text(name.to_string()),
+                Val::Int(mv.version),
+            ],
+        )
+        .await
+        .map_err(internal)?;
+
+        // Redact + move to the internal deleted stage.
+        let redact_sql = format!(
+            "UPDATE {MODEL_VERSIONS} SET current_stage = {}, last_updated_time = {}, \
+             description = NULL, user_id = NULL, source = {}, run_id = {}, run_link = {}, \
+             status_message = NULL \
+             WHERE workspace = {} AND name = {} AND version = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+            ph(4),
+            ph(5),
+            ph(6),
+            ph(7),
+            ph(8),
+        );
+        tx.exec(
+            &redact_sql,
+            &[
+                Val::Text(STAGE_DELETED_INTERNAL.to_string()),
+                Val::Int(now),
+                Val::Text(REDACTED_SOURCE.to_string()),
+                Val::Text(REDACTED_RUN_ID.to_string()),
+                Val::Text(REDACTED_RUN_LINK.to_string()),
+                Val::Text(workspace.to_string()),
+                Val::Text(name.to_string()),
+                Val::Int(mv.version),
+            ],
+        )
+        .await
+        .map_err(internal)?;
+
+        // Bump the registered model's last_updated_time.
+        let bump_rm_sql = format!(
+            "UPDATE {REGISTERED_MODELS} SET last_updated_time = {} \
+             WHERE workspace = {} AND name = {}",
+            ph(1),
+            ph(2),
+            ph(3),
+        );
+        tx.exec(
+            &bump_rm_sql,
+            &[
+                Val::Int(now),
+                Val::Text(workspace.to_string()),
+                Val::Text(name.to_string()),
+            ],
+        )
+        .await
+        .map_err(internal)?;
+
+        tx.commit().await.map_err(internal)
+    }
+
+    /// Resolve the `storage_location` for a new model version's `source`
+    /// (`sqlalchemy_store.py:1016-1035`). Only `models:/name/version` is
+    /// resolved (to the referenced version's download URI); every other source
+    /// — `runs:/`, plain paths, and bare `models:/<model_id>` — is stored
+    /// verbatim. See the module docs for why the logged-model-id form is left
+    /// to the caller.
+    async fn resolve_storage_location(
+        &self,
+        workspace: &str,
+        source: &str,
+    ) -> Result<String, MlflowError> {
+        let Some((ref_name, ref_version)) = parse_models_name_version(source) else {
+            return Ok(source.to_string());
+        };
+        match self
+            .get_model_version_download_uri(workspace, &ref_name, &ref_version)
+            .await
+        {
+            Ok(uri) => Ok(uri),
+            Err(e) => Err(MlflowError::invalid_parameter_value(format!(
+                "Unable to fetch model from model URI source artifact location '{source}'.\
+                 Error: {}",
+                e.message
+            ))),
+        }
     }
 
     /// `_get_sql_model_version`: fetch the raw row (skipping `Deleted_Internal`)
@@ -376,6 +705,30 @@ pub(crate) async fn fetch_model_version_tags(
     )
     .await
     .map_err(internal)
+}
+
+/// Parse a `models:/name/version` source into `(name, version)` when the
+/// suffix is a plain integer version, mirroring the subset of `_parse_model_uri`
+/// the registry store's `create_model_version` acts on. Returns `None` for any
+/// other source (non-`models` scheme, alias/stage/latest suffix, or bare
+/// `models:/<id>`), which is stored verbatim.
+fn parse_models_name_version(source: &str) -> Option<(String, String)> {
+    let rest = source.strip_prefix("models:/")?;
+    // Reject alias (`name@alias`) and empty forms up front.
+    if rest.contains('@') {
+        return None;
+    }
+    let (name, suffix) = rest.split_once('/')?;
+    if name.is_empty() || suffix.is_empty() || suffix.contains('/') {
+        return None;
+    }
+    // Only a purely-numeric suffix is a version (stages/`latest` are not
+    // resolvable within the registry store).
+    if suffix.chars().all(|c| c.is_ascii_digit()) {
+        Some((name.to_string(), suffix.to_string()))
+    } else {
+        None
+    }
 }
 
 /// `Model Version (name={name}, version={version}) not found`.

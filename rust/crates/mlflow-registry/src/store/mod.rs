@@ -26,13 +26,12 @@
 //! version and on the model itself) by issuing the same updates inside one
 //! transaction, then relying on the FK cascade for the tag/alias tables.
 //!
-//! ## Boundary with T7.2
+//! ## Boundary with T7.3
 //!
-//! Full model-version lifecycle — `models:/`/`runs:/` source resolution, stage
-//! transitions, and soft-delete redaction — is T7.2. This module implements
-//! only the minimal, plain-DB `create_model_version` (MAX(version)+1 insert, no
-//! source resolution) needed to exercise `get_latest_versions`, aliases, and
-//! the rename cascade in tests. See [`model_versions`].
+//! The full model-version lifecycle (create with `models:/` source resolution,
+//! `update`, `transition_model_version_stage`, soft-delete redaction) lives in
+//! [`model_versions`] (T7.2). Registry **search** (with the search DSL and
+//! prompt-exclusion anti-join) is T7.3 and intentionally absent.
 
 mod aliases;
 mod model_versions;
