@@ -174,7 +174,12 @@ fn validate_content_type(parts: &Parts) -> Result<(), MlflowError> {
 /// Map a codec error to an `MlflowError`. A malformed body (`ParseJson`) is an
 /// `INVALID_PARAMETER_VALUE`; an unknown message type is a server bug
 /// (`INTERNAL_ERROR`); the bool-query error carries Python's verbatim message.
-fn codec_err(e: JsonCodecError) -> MlflowError {
+///
+/// `pub(crate)` so handlers that need to drop down to [`mlflow_proto::from_query_pairs`]
+/// directly (bypassing [`parse_request`]'s all-or-nothing parse for a field
+/// that needs special per-field tolerance, e.g. `get_metric_history`'s
+/// `max_results`) can still map codec errors the same way.
+pub(crate) fn codec_err(e: JsonCodecError) -> MlflowError {
     match e {
         JsonCodecError::InvalidBoolQueryValue(_) => {
             MlflowError::new(e.to_string(), ErrorCode::InvalidParameterValue)
@@ -191,7 +196,13 @@ fn codec_err(e: JsonCodecError) -> MlflowError {
 /// Parse a URL query string into ordered `(key, value)` pairs, percent-decoding
 /// both. Repeated keys are preserved in order (matching werkzeug's `MultiDict`),
 /// which the repeated-field handling in [`mlflow_proto::from_query_pairs`] needs.
-fn parse_query_pairs(query: &str) -> Vec<(String, String)> {
+///
+/// `pub(crate)` so non-proto-backed handlers (e.g. the ajax-only, hand-rolled
+/// `get-history-bulk`, `handlers.py:2112`) can also read repeated query
+/// params without going through a proto message — axum's `Query` extractor
+/// (backed by `serde_urlencoded`) doesn't support collecting repeated
+/// same-named keys into a `Vec`, so it can't be used there.
+pub(crate) fn parse_query_pairs(query: &str) -> Vec<(String, String)> {
     query
         .split('&')
         .filter(|s| !s.is_empty())

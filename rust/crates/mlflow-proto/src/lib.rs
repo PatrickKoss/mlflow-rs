@@ -90,7 +90,7 @@ pub mod scalapb {
 mod json;
 pub use json::{
     dynamic_from_mlflow_json, dynamic_from_query_pairs, from_mlflow_json, from_query_pairs,
-    to_mlflow_json, JsonCodecError,
+    python_float_repr, quote_json_string, to_mlflow_json, JsonCodecError,
 };
 
 mod routes;

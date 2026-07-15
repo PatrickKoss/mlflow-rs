@@ -637,12 +637,9 @@ async fn bad_max_results_is_invalid_parameter_value() {
 #[tokio::test]
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
-    // A metrics endpoint that isn't registered yet (T3.3) → 404 (no route match).
-    let res = get(
-        &server,
-        "/api/2.0",
-        "/mlflow/metrics/get-history?run_id=0&metric_key=m",
-    )
-    .await;
+    // A trace endpoint that isn't registered yet (T4.2) → 404 (no route match).
+    let res = get(&server, "/api/2.0", "/mlflow/traces?experiment_ids=0").await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
+    // Route miss, not a JSON error body from a matched handler.
+    assert!(res.body.is_empty(), "{}", res.body);
 }

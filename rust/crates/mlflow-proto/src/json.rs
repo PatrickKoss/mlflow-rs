@@ -507,7 +507,12 @@ fn push_indent(out: &mut String, indent: usize) {
 /// `ensure_ascii=True`: control chars use short escapes where defined, other
 /// control chars and all non-ASCII use `\uXXXX` (astral scalar values become a
 /// UTF-16 surrogate pair). Forward slash is NOT escaped.
-fn quote_json_string(s: &str) -> String {
+///
+/// Exposed (not just used internally) so hand-rolled JSON endpoints — e.g. the
+/// ajax-only `get-history-bulk` (`handlers.py:2112`, a Flask `dict` return via
+/// `jsonify`, not proto-serialized) — can reproduce Python's exact string
+/// escaping without duplicating this logic.
+pub fn quote_json_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for ch in s.chars() {
@@ -544,11 +549,16 @@ fn quote_json_string(s: &str) -> String {
 /// Format an `f64` exactly like CPython's `repr()` / `json.dumps` (shortest
 /// round-trip, `1e+20`/`1.0`/`-0.0`/`Infinity` forms).
 ///
+/// Exposed for the same reason as [`quote_json_string`]: hand-rolled JSON
+/// endpoints need Python's `allow_nan=True` float formatting (`NaN`/
+/// `Infinity`/`-Infinity` literals), which `serde_json` does not reproduce
+/// (it silently maps non-finite floats to `null`).
+///
 /// NB: Rust's shortest-float algorithm (ryu/grisu) and CPython's dtoa can pick a
 /// different *final digit* in rare tie-break cases (~0.01% of arbitrary bit
 /// patterns); both still round-trip to the same `f64`. Real metric values are
 /// exceedingly unlikely to hit this. Documented as a wire risk in the plan.
-fn python_float_repr(x: f64) -> String {
+pub fn python_float_repr(x: f64) -> String {
     if x == 0.0 {
         return if x.is_sign_negative() {
             "-0.0".to_string()

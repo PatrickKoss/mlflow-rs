@@ -16,6 +16,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod logged_models;
+pub mod metric_history;
 pub mod metrics;
 pub mod proto_http;
 pub mod routes;
@@ -115,11 +116,17 @@ pub fn build_app_with_recorder(
 ///
 /// Route-table paths use Flask's `<param>` path-parameter syntax (T1.2); axum
 /// (matchit) uses `{param}` instead, so [`to_axum_path`] converts before
-/// registering. The one hand-registered exception is the correctly-slashed
-/// `search-datasets` ajax route (`mlflow/server/__init__.py:135`) — the route
-/// table only produces the leading-slash-missing form (§3.4 quirk), so the
-/// second, real ajax path is added directly here.
+/// registering.
+///
+/// A few routes are hand-registered alongside the route-table-driven ones
+/// (same pre-static-prefix router, so `_add_static_prefix` nesting still
+/// applies): the correctly-slashed `search-datasets` ajax route
+/// (`mlflow/server/__init__.py:135` — the route table only produces the
+/// leading-slash-missing form, §3.4 quirk) and the ajax-only,
+/// non-proto-backed `get-history-bulk` (plan T3.3).
 fn register_proto_routes(state: AppState) -> Router {
+    use axum::routing::get;
+
     let mut router: Router<AppState> = Router::new();
     for spec in mlflow_proto::ROUTE_TABLE {
         let Some(handler) = handler_for(spec.service, spec.method, spec.http_method) else {
@@ -132,6 +139,10 @@ fn register_proto_routes(state: AppState) -> Router {
     router = router.route(
         "/ajax-api/2.0/mlflow/experiments/search-datasets",
         axum::routing::post(datasets::search_datasets),
+    );
+    router = router.route(
+        "/ajax-api/2.0/mlflow/metrics/get-history-bulk",
+        get(metric_history::get_metric_history_bulk),
     );
     router.with_state(state)
 }
@@ -184,6 +195,10 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("logModel", "POST") => post(runs::log_model),
         ("logInputs", "POST") => post(runs::log_inputs),
         ("logOutputs", "POST") => post(runs::log_outputs),
+        ("getMetricHistory", "GET") => get(metric_history::get_metric_history),
+        ("getMetricHistoryBulkInterval", "GET") => {
+            get(metric_history::get_metric_history_bulk_interval)
+        }
         _ => return None,
     })
 }
