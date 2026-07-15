@@ -21,13 +21,13 @@
 //!   `archive_existing_versions`), soft-delete `delete_model_version` (redaction
 //!   + alias removal), `get_model_version`, and `get_model_version_download_uri`.
 //!
-//! ## Boundary with T7.3
+//! ## Search (T7.3)
 //!
 //! Registry **search** (`search_registered_models` / `search_model_versions`
-//! with the search DSL and prompt-exclusion anti-join) is T7.3 — intentionally
-//! absent here. The bare `models:/<logged-model-id>` source form needs a
-//! cross-store logged-model lookup and is stored verbatim (see
-//! [`store`]/`model_versions` docs).
+//! with the search DSL, AND-of-tags HAVING-count subquery, and prompt-exclusion
+//! anti-join) lives in the store's `search` module. The bare
+//! `models:/<logged-model-id>` source form needs a cross-store logged-model
+//! lookup and is stored verbatim (see [`store`]/`model_versions` docs).
 //!
 //! ## Reuse of `mlflow-store`
 //!
@@ -48,4 +48,4 @@ pub use entities::{
     ModelVersion, ModelVersionTag, RegisteredModel, RegisteredModelAlias, RegisteredModelTag,
 };
 pub use stages::{ALL_STAGES, STAGE_ARCHIVED, STAGE_NONE, STAGE_PRODUCTION, STAGE_STAGING};
-pub use store::RegistryStore;
+pub use store::{ModelVersionsPage, RegisteredModelsPage, RegistryStore};

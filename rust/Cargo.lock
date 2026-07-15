@@ -1681,9 +1681,13 @@ dependencies = [
 name = "mlflow-registry"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "mlflow-error",
+ "mlflow-search",
  "mlflow-store",
+ "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "tokio",

@@ -21,10 +21,20 @@ mlflow-store = { workspace = true }
 # The MLflow error model (codes/messages/wire shape); the store returns
 # `MlflowError`s so handler layers surface Python-identical errors.
 mlflow-error = { workspace = true }
+# The filter/order_by DSL parsers (`SearchModelUtils` / `SearchModelVersionUtils`
+# ports, T2.3) and the offset page-token codec, used by registry search (T7.3).
+mlflow-search = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
+# Offset page-token codec (`base64(json {"offset": N})`), matching the tracking
+# store's `create_page_token`.
+base64 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 mlflow-store = { workspace = true }
+# The registry-search differential corpus (`tests/search_corpus.rs`) reads
+# `cases.json` produced by `rust/tools/gen_registry_search_corpus.py`.
+serde = { workspace = true }
+serde_json = { workspace = true }

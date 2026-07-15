@@ -42,6 +42,34 @@ pub fn parse_order_by(order_by: &str) -> Result<OrderBy> {
     })
 }
 
+/// The order-by keys the **store** accepts (`SearchUtils`-bound
+/// `VALID_ORDER_BY_KEYS_REGISTERED_MODELS`, `search_utils.py:232` — NOT the
+/// `SearchModelUtils`-bound set at `:1270` used by [`parse_order_by`]/client-side
+/// `sort`). The store's `_parse_search_registered_models_order_by`
+/// (`sqlalchemy_store.py:846`) calls `SearchUtils.parse_order_by_for_search_registered_models`,
+/// so `timestamp`/`last_updated_timestamp` are valid and `creation_timestamp` is
+/// **not**.
+const STORE_VALID_ORDER_BY_KEYS: &[&str] = &["timestamp", "last_updated_timestamp", "name"];
+
+/// `SearchUtils.parse_order_by_for_search_registered_models` (the **store**
+/// variant, `search_utils.py:843-853`): returns the raw `(token_value,
+/// ascending)` after validating the (stripped) token against the store's key set
+/// (`name`/`timestamp`/`last_updated_timestamp`). Unlike [`parse_order_by`] this
+/// does **not** go through `_get_identifier`; it is a plain membership check, so
+/// the caller (the registry store) maps `timestamp`/`last_updated_timestamp` to
+/// the `last_updated_time` column itself.
+pub fn parse_order_by_store(order_by: &str) -> Result<(String, bool)> {
+    let (token_value, is_ascending) = parse_order_by_string(order_by)?;
+    let token_value = token_value.trim().to_string();
+    if !STORE_VALID_ORDER_BY_KEYS.contains(&token_value.as_str()) {
+        return Err(SearchError::invalid_parameter_value(format!(
+            "Invalid order by key '{token_value}' specified. Valid keys are '{}'",
+            py_set(&["name", "timestamp"])
+        )));
+    }
+    Ok((token_value, is_ascending))
+}
+
 /// `_get_model_search_identifier` (shared shape with model_versions).
 pub(crate) struct Ident {
     pub entity_type: String,

@@ -59,6 +59,7 @@ pub mod parse {
     };
     pub use crate::domains::registered_models::{
         parse_order_by as registered_models_order_by,
+        parse_order_by_store as registered_models_order_by_store,
         parse_search_filter as registered_models_filter,
     };
     pub use crate::domains::runs::{

@@ -124,8 +124,78 @@ async fn registry_smoke(uri: &str) {
     assert_eq!(deleted.current_stage.as_deref(), Some("Deleted_Internal"));
     assert!(deleted.source.as_deref().unwrap().contains("REDACTED"));
 
+    // Search smoke (T7.3), on the live dialect: exercises the LIKE predicate
+    // (MySQL binary-collation double-bind + SQLite/PG paths), the AND-of-tags
+    // HAVING-count subquery, the prompt anti-join, and offset pagination — all
+    // of which build multi-placeholder SQL that must line up per dialect.
+    let prompt_name = format!("p-{}", unique());
+    s.create_registered_model(
+        &ws,
+        &prompt_name,
+        &[("mlflow.prompt.is_prompt", "true"), ("owner", "team")],
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Name LIKE finds the renamed (non-prompt) model; the prompt is excluded by
+    // default even though it also matches `owner = 'team'`.
+    let by_name = s
+        .search_registered_models(
+            &ws,
+            Some(&format!("name LIKE '{new_name}%'")),
+            100,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        by_name
+            .registered_models
+            .iter()
+            .map(|r| r.name.clone())
+            .collect::<Vec<_>>(),
+        vec![new_name.clone()]
+    );
+
+    // AND-of-tags: only the prompt has BOTH is_prompt + owner; querying the
+    // prompt tag with `= 'true'` bypasses the anti-join so it is returned.
+    let prompts = s
+        .search_registered_models(
+            &ws,
+            Some("tags.`mlflow.prompt.is_prompt` = 'true' AND tags.owner = 'team'"),
+            100,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        prompts
+            .registered_models
+            .iter()
+            .map(|r| r.name.clone())
+            .collect::<Vec<_>>(),
+        vec![prompt_name.clone()]
+    );
+
+    // Model-version search excludes the soft-deleted v2; v1 (Archived) remains.
+    let mvs = s
+        .search_model_versions(&ws, Some(&format!("name = '{new_name}'")), 100, &[], None)
+        .await
+        .unwrap();
+    assert_eq!(
+        mvs.model_versions
+            .iter()
+            .map(|m| m.version.clone())
+            .collect::<Vec<_>>(),
+        vec!["1".to_string()]
+    );
+
     // Cleanup so repeated CI runs stay isolated.
     s.delete_registered_model(&ws, &new_name).await.unwrap();
+    s.delete_registered_model(&ws, &prompt_name).await.unwrap();
 }
 
 /// A cheap unique suffix without pulling in the `uuid`/`rand` crates.
