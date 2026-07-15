@@ -87,6 +87,8 @@ uuid = { version = "1.23", features = ["v4", "serde"] }
 base64 = "0.22"
 bytes = "1.12"
 futures = "0.3"
+# gzip/deflate decompression for OTLP `Content-Encoding` (T4.3, `/v1/traces`).
+flate2 = "1.1"
 
 [workspace.lints.clippy]
 all = "warn"
