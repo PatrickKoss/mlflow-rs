@@ -127,7 +127,7 @@ impl TrackingStore {
     /// preserving order and de-duplicating. Non-integer ids raise the same
     /// `INVALID_PARAMETER_VALUE` Python's `int(e)` would
     /// (`_filter_experiment_ids`).
-    async fn filter_trace_experiment_ids(
+    pub(crate) async fn filter_trace_experiment_ids(
         &self,
         workspace: &str,
         experiment_ids: &[String],
@@ -338,16 +338,16 @@ struct Query {
     binds: Vec<Val>,
 }
 
-struct Ph {
+pub(crate) struct Ph {
     dialect: Dialect,
     idx: usize,
 }
 
 impl Ph {
-    fn new(dialect: Dialect) -> Self {
+    pub(crate) fn new(dialect: Dialect) -> Self {
         Self { dialect, idx: 0 }
     }
-    fn next(&mut self, binds: &mut Vec<Val>, v: Val) -> String {
+    pub(crate) fn next(&mut self, binds: &mut Vec<Val>, v: Val) -> String {
         self.idx += 1;
         binds.push(v);
         self.dialect.placeholder(self.idx)
@@ -442,6 +442,37 @@ fn build_search_sql(
     }
 
     Ok(Query { sql, binds })
+}
+
+/// Build the WHERE predicates for a trace-search `filter` string against the
+/// `trace_info ti` alias, reusing the full search filter machinery
+/// (attribute/tag/metadata/span/assessment/run_id). Used by
+/// `calculate_trace_filter_correlation` (and any caller needing a "traces
+/// matching this filter" subquery) so the correlation counts share
+/// byte-identical filter semantics with `search_traces`.
+///
+/// Appends to `binds`/`ph`; an empty/absent filter yields no predicates.
+pub(crate) fn build_trace_filter_wheres(
+    dialect: Dialect,
+    filter: Option<&str>,
+    ph: &mut Ph,
+    binds: &mut Vec<Val>,
+) -> Result<Vec<String>, MlflowError> {
+    let filters = parse_filter(filter)?;
+    let mut wheres: Vec<String> = Vec::new();
+    let mut span_conditions: Vec<String> = Vec::new();
+    for f in &filters {
+        if let Some(pred) = build_filter_predicate(dialect, f, ph, binds, &mut span_conditions)? {
+            wheres.push(pred);
+        }
+    }
+    if !span_conditions.is_empty() {
+        wheres.push(format!(
+            "EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = ti.request_id AND {})",
+            span_conditions.join(" AND ")
+        ));
+    }
+    Ok(wheres)
 }
 
 /// Build one filter comparison into a WHERE predicate. Span predicates are

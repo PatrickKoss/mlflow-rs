@@ -42,7 +42,9 @@ mod runs;
 mod search;
 mod search_experiments;
 mod spans;
+mod trace_correlation;
 mod traces;
+mod traces_analytics;
 mod traces_search;
 mod uri_util;
 mod validation;
@@ -68,6 +70,10 @@ pub use search::{RunsPage, SEARCH_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_THRESH
 pub use search_experiments::ExperimentsPage;
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};
 pub use traces::{StartTraceInput, MAX_TRACE_LINKS_PER_REQUEST};
+pub use traces_analytics::{
+    MetricAggregation, MetricDataPoint, MetricViewType, TraceFilterCorrelationResult,
+    MAX_RESULTS_QUERY_TRACE_METRICS,
+};
 pub use traces_search::{TracesPage, SEARCH_TRACES_DEFAULT_MAX_RESULTS};
 
 use crate::db::Db;

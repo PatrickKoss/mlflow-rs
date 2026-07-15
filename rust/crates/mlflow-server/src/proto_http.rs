@@ -83,19 +83,23 @@ pub fn parse_request_with_path_params<M>(
 where
     M: prost::Message + Default,
 {
+    // `_get_request_message`: for GET, parse from the query args *only when the
+    // query string is non-empty* (`GET and flask_request.args`); otherwise fall
+    // through to the JSON body — GET-with-body endpoints (`getTrace`,
+    // `batchGetTraces`) rely on this. Content-Type is validated for POST/PUT
+    // only, so the GET body path skips it.
     if parts.method == Method::GET {
-        let mut pairs = match parts.uri.query() {
-            Some(query) if !query.is_empty() => parse_query_pairs(query),
-            _ => Vec::new(),
-        };
-        for (name, value) in path_params {
-            pairs.retain(|(k, _)| k != name);
-            pairs.push(((*name).to_string(), value.clone()));
+        if let Some(query) = parts.uri.query().filter(|q| !q.is_empty()) {
+            let mut pairs = parse_query_pairs(query);
+            for (name, value) in path_params {
+                pairs.retain(|(k, _)| k != name);
+                pairs.push(((*name).to_string(), value.clone()));
+            }
+            return mlflow_proto::from_query_pairs::<M>(&pairs, type_name).map_err(codec_err);
         }
-        return mlflow_proto::from_query_pairs::<M>(&pairs, type_name).map_err(codec_err);
+    } else {
+        validate_content_type(parts)?;
     }
-
-    validate_content_type(parts)?;
 
     // `get_json(force=True, silent=True)`: empty/whitespace body → treat as `{}`.
     let text = std::str::from_utf8(body).map_err(|_| {

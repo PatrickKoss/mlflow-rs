@@ -1669,6 +1669,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64",
  "clap",
  "http-body-util",
  "hyper",
@@ -1684,6 +1685,7 @@ dependencies = [
  "mlflow-store",
  "mlflow-webhooks",
  "prost",
+ "prost-types",
  "serde",
  "serde_json",
  "thiserror",

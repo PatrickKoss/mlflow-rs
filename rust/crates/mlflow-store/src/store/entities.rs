@@ -275,6 +275,13 @@ pub const TRACE_TAG_SPANS_LOCATION: &str = "mlflow.trace.spansLocation";
 /// The `SpansLocation.TRACKING_STORE` value written by `log_spans`.
 pub const SPANS_LOCATION_TRACKING_STORE: &str = "TRACKING_STORE";
 
+/// The `SpansLocation.ARCHIVE_REPO` value (archive-backed span payloads).
+pub const SPANS_LOCATION_ARCHIVE_REPO: &str = "ARCHIVE_REPO";
+
+/// Trace-metadata key holding the JSON size stats (`TraceMetadataKey.SIZE_STATS`),
+/// used to decide whether all spans are exported (`{"num_spans": N}`).
+pub const TRACE_METADATA_SIZE_STATS: &str = "mlflow.trace.sizeStats";
+
 /// `TraceState` string values (persisted verbatim in `trace_info.status`).
 pub struct TraceState;
 
