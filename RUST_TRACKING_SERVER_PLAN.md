@@ -1,6 +1,18 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phases 3 + 4 complete — tracking + tracing HTTP APIs landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+Status: **in progress — Phases 3, 4, 5 complete; Phase 7 complete except T7.5;
+Phase 8 T8.1/T8.2 complete; paused before Phase 9 for review (2026-07-15).**
+· Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+
+**Paused-state notes (2026-07-15):** T6.1/T6.2 (GraphQL), T8.3 (webhook delivery
+engine), and T7.5 (prompts API validation) were in flight when work paused; their
+agents were stopped mid-task with UNCOMMITTED partial code left in
+`.claude/worktrees/agent-{a7eb52ff0f8515490,a0e3b48480b2c2c0a,aaa45a7022ac4825a}`
+(GraphQL / T8.3 / T7.5 respectively — the first two looked near completion,
+salvage or redo on resume). T8.4 (event triggers) not started; T7.4 left
+`// WEBHOOK SEAM:` markers at every registry trigger site for it. Also open
+pre-Phase-9: T2.2 CI matrix. Phase 9+ (auth/RBAC, workspaces, deployment,
+compliance) not started, pending review.
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
