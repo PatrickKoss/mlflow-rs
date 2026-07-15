@@ -1,6 +1,6 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 complete; Phase 4 — T4.1/T4.3/T4.4 landed, T4.2/T4.5 in progress)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phases 3 + 4 complete — tracking + tracing HTTP APIs landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -931,9 +931,21 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       responses start empty (Phase 12); OTLP span links not decoded;
       MySQL float casts use DECIMAL(38,10) — advanced-view dialect
       verification rides Phase 12.)*
-- [ ] **T4.2 V2 trace endpoints** (§3.7) as adapters.
+- [x] **T4.2 V2 trace endpoints** (§3.7) as adapters.
       **AC:** UI contains-traces check works; V2 tests pass.
       **VER:** Phase 12 runner + UI smoke.
+      *(Done 2026-07-15: all 7 endpoints in `mlflow-server/src/traces_v2.rs`;
+      new store methods `deprecated_start_trace_v2`/`deprecated_end_trace_v2` —
+      deliberately NOT reusing V3 `start_trace`, since V2 start never writes
+      the `TRACE_INFO_FINALIZED` marker and generates its own `uuid4().hex`
+      request id; endTrace is fully implemented in Python (execution_time from
+      request_time, status, metadata/tag merge-upsert) and ported as such.
+      `TraceInfoV2.to_proto` field truncation (250/250/4096) applied.
+      `_assert_map_key_present` ported with Python's exact invalid_value
+      message. UI contains-traces GET shape covered by test. 20 HTTP tests.
+      Known gap, documented, shared with V3: `_validate_trace_tag_handler_
+      mutation` (spansLocation/archiveLocation tag-mutation guard) not yet
+      implemented for either version — kept symmetric, follow-up in Phase 12.)*
 - [x] **T4.3 OTLP `/v1/traces`** (§3.8): protobuf + JSON, gzip, headers, all-or-nothing,
       200/400/422/501.
       **AC:** `test_rest_store_logs_spans_via_otel_endpoint` passes; Rust + Python OTel
@@ -968,11 +980,26 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       (update has no such kwarg) → 500, reproduced + flagged for the Phase 12
       differential allowlist; oneof auto-vivification defers type-mismatch
       errors to the store-side check. No store changes needed. 17 HTTP tests.)*
-- [ ] **T4.5 get-trace-artifact** (§3.10): DB spans + ARTIFACT_REPO fallback + attachments
+- [x] **T4.5 get-trace-artifact** (§3.10): DB spans + ARTIFACT_REPO fallback + attachments
       with path validation.
       **AC:** `test_get_trace_artifact_handler` passes; trace explorer renders both
       storage locations.
       **VER:** Phase 12 runner + UI smoke.
+      *(Done 2026-07-15: `mlflow-server/src/trace_artifact.rs`, hand-registered
+      on both ajax prefixes. Ports `_fetch_trace_data_from_store` + handler
+      fallback exactly — NOT via the T4.1 `get_trace` store method, whose
+      getTrace-endpoint semantics return empty spans where this handler must
+      fall through to the artifact repo. TRACKING_STORE → `{"spans": [...]}`
+      from stored span-dict JSON (compact json.dumps separators);
+      other/untagged → artifact repo `traces.json` via
+      `mlflow_artifacts::repo_from_uri` (local FS/`file://`; cloud schemes
+      NOT_IMPLEMENTED until Phase 5); attachments via `attachments/{uuid}`
+      with `_validate_attachment_path` + `validate_path_is_safe` (traversal →
+      400 exact body); ARCHIVE_REPO → 501 per D6. Response headers mirror
+      `_response_with_file_attachment_headers`. 11 HTTP + 3 unit tests.
+      Deviations documented: not-found messages use repo-relative paths (not
+      Python's per-call temp-dir absolute paths); third-party OTEL spanType
+      backfill (`translate_loaded_span`) not ported.)*
 
 ### Phase 5 — Artifacts
 
