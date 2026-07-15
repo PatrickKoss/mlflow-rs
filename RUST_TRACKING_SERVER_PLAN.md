@@ -1,6 +1,6 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 complete — tracking HTTP API T3.1–T3.5 landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phase 3 complete; Phase 4 — T4.1/T4.3/T4.4 landed, T4.2/T4.5 in progress)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -911,21 +911,63 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 4 — Tracing HTTP API
 
-- [ ] **T4.1 V3 trace endpoints** (§3.6).
+- [x] **T4.1 V3 trace endpoints** (§3.6).
       **AC:** trace sections of `test_rest_tracking.py` pass (start/search/delete/tags/
       link/correlation/metrics).
       **VER:** Phase 12 runner `-k trace`.
+      *(Done 2026-07-15: all 13 endpoints in `mlflow-server/src/traces.rs` on
+      both `/api/3.0` + `/ajax-api/3.0`. Store additions: `get_trace` (retry +
+      `num_spans` completeness check, ARCHIVE_REPO → NOT_IMPLEMENTED per D6),
+      `link_prompts_to_trace`, new `traces_analytics.rs`
+      (calculate_trace_filter_correlation + query_trace_metrics reusing the
+      trace-search filter machinery) and `trace_correlation.rs` (pure-math NPMI
+      port, 6 unit tests). `proto_http` GET parsing fixed to Python's
+      `GET and flask_request.args` (query args only when non-empty, else JSON
+      body — the GET-with-body quirk, §4.9). getTrace assembles TraceInfoV3 +
+      OTLP spans decoded from stored span-dict JSON. 22 HTTP tests. Deferred,
+      documented in doc comments: queryTraceMetrics PERCENTILE +
+      time_interval_seconds bucketing (→ INVALID_PARAMETER_VALUE; pagination
+      matches Python's always-None token); assessments on TraceInfoV3
+      responses start empty (Phase 12); OTLP span links not decoded;
+      MySQL float casts use DECIMAL(38,10) — advanced-view dialect
+      verification rides Phase 12.)*
 - [ ] **T4.2 V2 trace endpoints** (§3.7) as adapters.
       **AC:** UI contains-traces check works; V2 tests pass.
       **VER:** Phase 12 runner + UI smoke.
-- [ ] **T4.3 OTLP `/v1/traces`** (§3.8): protobuf + JSON, gzip, headers, all-or-nothing,
+- [x] **T4.3 OTLP `/v1/traces`** (§3.8): protobuf + JSON, gzip, headers, all-or-nothing,
       200/400/422/501.
       **AC:** `test_rest_store_logs_spans_via_otel_endpoint` passes; Rust + Python OTel
       exporters both ingest.
       **VER:** Phase 12 runner + `rust/tests/otlp_ingest.rs`.
-- [ ] **T4.4 Assessments endpoints** (§3.9).
+      *(Done 2026-07-15: hand-registered `/v1/traces` in `lib.rs`; new
+      `mlflow-server/src/otlp/{mod,json,translate}.rs`. Handler reproduces
+      `otel_api.py:95-259` status/body split exactly incl. FastAPI's compact
+      `{"detail": ...}` 422 shape (verified against Starlette internals);
+      gzip/deflate via flate2. `translate.rs` is the OTLP→row translation
+      T2.11 deferred: fused `Span.from_otel_proto`/`to_dict`/
+      `sanitize_attributes` (base64 big-endian ids, OTel status names in
+      `content` vs plain names in the status column, ensure_ascii escaping,
+      dimension_attributes, LLM-cost span_metrics, root-span service.name
+      allowlist). Hand-rolled OTLP/JSON→prost decoder (hex ids,
+      camel+snake case). 30 unit + 15 integration tests. Deferred, documented:
+      the 11 vendor OTEL attribute-inference translators
+      (OpenInference/Traceloop/…) — spans persist fine without vendor-inferred
+      attributes; server-side telemetry recording (no Rust telemetry infra).)*
+- [x] **T4.4 Assessments endpoints** (§3.9).
       **AC:** `test_assessments_end_to_end` passes.
       **VER:** Phase 12 runner `-k assessment`.
+      *(Done 2026-07-15: 4 endpoints in `mlflow-server/src/assessments.rs`
+      (create/get/update PATCH/delete) with path params, both prefixes.
+      FieldMask JSON parsing came free from prost-reflect (canonical
+      well-known-type mapping, verified). Shared codec gap fixed:
+      `google.protobuf.Value`/`Struct`/`ListValue` support added to
+      `mlflow-proto/src/json.rs` (byte-matched vs Python MessageToJson incl.
+      int→`4.0` double widening, unset Value → null) — needed for
+      Feedback/Expectation values, useful beyond assessments. Python quirks
+      reproduced: `valid` mask path raises an uncaught TypeError in Python
+      (update has no such kwarg) → 500, reproduced + flagged for the Phase 12
+      differential allowlist; oneof auto-vivification defers type-mismatch
+      errors to the store-side check. No store changes needed. 17 HTTP tests.)*
 - [ ] **T4.5 get-trace-artifact** (§3.10): DB spans + ARTIFACT_REPO fallback + attachments
       with path validation.
       **AC:** `test_get_trace_artifact_handler` passes; trace explorer renders both
