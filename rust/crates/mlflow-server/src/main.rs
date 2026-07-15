@@ -34,7 +34,21 @@ async fn main() -> anyhow::Result<()> {
                 .clone()
                 .unwrap_or_else(|| DEFAULT_ARTIFACT_ROOT.to_string());
             let store = TrackingStore::new(db, artifact_root);
-            build_app_with_state(&config, AppState::new(store))
+
+            // Resolve the `--artifacts-destination` proxy repo once (parity with
+            // Python's memoized `_artifact_repo`). Only local-FS/`file:` URIs are
+            // wired in v1; cloud schemes error at request time.
+            let proxied_repo = match &config.artifacts_destination {
+                Some(dest) => Some(mlflow_artifacts::factory::repo_from_uri(dest)?),
+                None => None,
+            };
+            let app_state = AppState::with_artifacts(
+                store,
+                config.serve_artifacts,
+                proxied_repo,
+                config.artifacts_destination.clone(),
+            );
+            build_app_with_state(&config, app_state)
         }
         None => build_app(&config),
     };

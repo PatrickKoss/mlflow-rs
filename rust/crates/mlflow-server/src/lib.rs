@@ -12,6 +12,7 @@
 //! [`build_app`] so tests (and later tasks) can compose/exercise the
 //! `Router` without booting a real listener.
 
+pub mod artifacts;
 pub mod assessments;
 pub mod config;
 pub mod datasets;
@@ -166,24 +167,65 @@ fn register_proto_routes(state: AppState) -> Router {
     // `/v1/traces` (`mlflow/tracing/utils/otlp.py:20`); the static-prefix
     // nesting in `build_app_with_recorder` still applies to it.
     router = router.route("/v1/traces", axum::routing::post(otlp::export_traces));
+    // Artifact plane (plan T5.1/T5.3, §3.11). `/get-artifact` is served at the
+    // root (`mlflow/server/__init__.py:111`), NOT under an api/ajax prefix.
+    router = router.route("/get-artifact", get(artifacts::get_artifact));
+    // ajax-only `upload-artifact` (`__init__.py:151`) + logged-model artifact
+    // file download (`__init__.py:166`).
+    router = router.route(
+        "/ajax-api/2.0/mlflow/upload-artifact",
+        axum::routing::post(artifacts::upload_artifact),
+    );
+    router = router.route(
+        "/ajax-api/2.0/mlflow/logged-models/{model_id}/artifacts/files",
+        get(artifacts::get_logged_model_artifact),
+    );
     router.with_state(state)
 }
 
-/// Convert a Flask-style path (`<param>`) to axum/matchit syntax (`{param}`).
+/// Convert a Flask-style path to axum/matchit syntax:
+///  * `<param>` → `{param}` (a single path segment);
+///  * `<path:param>` → `{*param}` (Flask's `path` converter matches slashes, so
+///    it becomes an axum wildcard capture — used by the `MlflowArtifactsService`
+///    routes' `<path:artifact_path>`).
+///
 /// Non-parameterized paths pass through unchanged.
 fn to_axum_path(path: &str) -> String {
-    path.replace('<', "{").replace('>', "}")
+    // Do the `path:` wildcard rewrite first so the generic `<`/`>` swap below
+    // doesn't need to know about the converter prefix.
+    path.replace("<path:", "{*")
+        .replace('<', "{")
+        .replace('>', "}")
 }
 
 /// Map a `(service, method, http_method)` route-table entry to its axum
 /// handler. Returns `None` for endpoints not yet implemented (they fall through
 /// to the 404 `_not_implemented` form). Extend this as later phases land.
 fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodRouter<AppState>> {
-    use axum::routing::{delete, get, patch, post};
+    use axum::routing::{delete, get, patch, post, put};
+    // `MlflowArtifactsService` (plan T5.2, §3.11) is a distinct proto service —
+    // its 8 endpoints live under `/(api|ajax-api)/2.0/mlflow-artifacts/...` and
+    // route to the artifact-proxy handlers (gated by `--serve-artifacts` inside
+    // each handler). Their `<path:artifact_path>` segments become axum wildcards
+    // via `to_axum_path`.
+    if service == "MlflowArtifactsService" {
+        return Some(match (method, http_method) {
+            ("downloadArtifact", "GET") => get(artifacts::proxy_download),
+            ("uploadArtifact", "PUT") => put(artifacts::proxy_upload),
+            ("listArtifacts", "GET") => get(artifacts::proxy_list),
+            ("deleteArtifact", "DELETE") => delete(artifacts::proxy_delete),
+            ("createMultipartUpload", "POST") => post(artifacts::proxy_create_multipart),
+            ("completeMultipartUpload", "POST") => post(artifacts::proxy_complete_multipart),
+            ("abortMultipartUpload", "POST") => post(artifacts::proxy_abort_multipart),
+            ("getPresignedDownloadUrl", "GET") => get(artifacts::proxy_presigned_download),
+            _ => return None,
+        });
+    }
     if service != "MlflowService" {
         return None;
     }
     Some(match (method, http_method) {
+        ("listLoggedModelArtifacts", "GET") => get(artifacts::list_logged_model_artifacts),
         ("createExperiment", "POST") => post(experiments::create_experiment),
         ("getExperiment", "GET") => get(experiments::get_experiment),
         ("getExperimentByName", "GET") => get(experiments::get_experiment_by_name),
@@ -270,6 +312,8 @@ mod tests {
             static_prefix: static_prefix.map(str::to_string),
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         }
     }
 

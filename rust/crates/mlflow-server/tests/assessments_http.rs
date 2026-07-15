@@ -94,6 +94,8 @@ impl TestServer {
             static_prefix: None,
             backend_store_uri: None,
             default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
         let app = build_app_with_recorder(&config, recorder, Some(AppState::new(store.clone())));
