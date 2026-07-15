@@ -18,6 +18,7 @@ pub mod experiments;
 pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
+pub mod otlp;
 pub mod proto_http;
 pub mod routes;
 pub mod runs;
@@ -144,6 +145,12 @@ fn register_proto_routes(state: AppState) -> Router {
         "/ajax-api/2.0/mlflow/metrics/get-history-bulk",
         get(metric_history::get_metric_history_bulk),
     );
+    // OTLP trace ingestion (plan T4.3, §3.8) — not a proto-route-table
+    // endpoint (its own wire protocol, `mlflow/server/otel_api.py`), so it is
+    // hand-registered here like the routes above. `OTLP_TRACES_PATH` is
+    // `/v1/traces` (`mlflow/tracing/utils/otlp.py:20`); the static-prefix
+    // nesting in `build_app_with_recorder` still applies to it.
+    router = router.route("/v1/traces", axum::routing::post(otlp::export_traces));
     router.with_state(state)
 }
 
