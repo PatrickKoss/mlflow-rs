@@ -637,8 +637,10 @@ async fn bad_max_results_is_invalid_parameter_value() {
 #[tokio::test]
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
-    // A trace endpoint that isn't registered yet (T4.2) → 404 (no route match).
-    let res = get(&server, "/api/2.0", "/mlflow/traces?experiment_ids=0").await;
+    // A model-registry endpoint: `handler_for` only wires up `MlflowService`
+    // methods so far (registry HTTP wiring is a later phase) → 404 (no route
+    // match). Was previously a V2 trace endpoint, but those landed in T4.2.
+    let res = get(&server, "/api/2.0", "/mlflow/registered-models/get?name=x").await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     // Route miss, not a JSON error body from a matched handler.
     assert!(res.body.is_empty(), "{}", res.body);

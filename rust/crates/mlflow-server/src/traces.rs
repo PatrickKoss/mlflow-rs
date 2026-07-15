@@ -879,14 +879,19 @@ fn json_u64(v: &serde_json::Value) -> Option<u64> {
 }
 
 /// Same required/non-empty check as [`crate::experiments::require_non_empty`].
-fn require_non_empty<'a>(value: Option<&'a str>, param: &str) -> Result<&'a str, MlflowError> {
+/// `pub(crate)` so the V2 adapters in [`crate::traces_v2`] (plan T4.2, §3.7)
+/// share the exact same "Missing value for required parameter" wording.
+pub(crate) fn require_non_empty<'a>(
+    value: Option<&'a str>,
+    param: &str,
+) -> Result<&'a str, MlflowError> {
     match value {
         Some(v) if !v.is_empty() => Ok(v),
         _ => Err(missing_param(param)),
     }
 }
 
-fn missing_param(param: &str) -> MlflowError {
+pub(crate) fn missing_param(param: &str) -> MlflowError {
     MlflowError::invalid_parameter_value(format!(
         "Missing value for required parameter '{param}'. \
          See the API docs for more information about request parameters."
@@ -894,7 +899,9 @@ fn missing_param(param: &str) -> MlflowError {
 }
 
 /// Build the `path_params` overlay slice (see [`crate::logged_models`]).
-fn path_param_pairs(
+/// `pub(crate)` so [`crate::traces_v2`]'s `{request_id}`-keyed path routes
+/// (`setTraceTag`/`deleteTraceTag`/`endTrace`) reuse it.
+pub(crate) fn path_param_pairs(
     path_params: &HashMap<String, String>,
     names: &[&'static str],
 ) -> Vec<(&'static str, String)> {
