@@ -24,6 +24,7 @@
 use std::sync::Arc;
 
 use mlflow_artifacts::ArtifactRepo;
+use mlflow_auth::AuthStore;
 use mlflow_error::MlflowError;
 use mlflow_registry::RegistryStore;
 use mlflow_store::TrackingStore;
@@ -61,6 +62,13 @@ struct AppStateInner {
     /// [`WebhookDispatcher::fire`] through [`AppState::webhook_dispatcher`].
     /// `None` when webhooks are unsupported (mirrors `webhook_store`).
     webhook_dispatcher: Option<WebhookDispatcher>,
+    /// The auth/RBAC store (T9.1 DB layer over the shared `basic_auth.db`).
+    /// `Some` only when the server is started with the basic-auth app enabled
+    /// (Python: `--app-name basic-auth` / `MLFLOW_AUTH_CONFIG_PATH`). When
+    /// `None`, the auth API routes (T9.2 users, T9.3 roles/permissions) are not
+    /// mounted at all — mirroring Python, where those endpoints exist only in
+    /// the `mlflow.server.auth` app, so a plain tracking server 404s on them.
+    auth_store: Option<AuthStore>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -98,6 +106,29 @@ impl AppState {
                 registry_store: inner.registry_store.clone(),
                 webhook_store: Some(webhook_store),
                 webhook_dispatcher: Some(webhook_dispatcher),
+                auth_store: inner.auth_store.clone(),
+                serve_artifacts: inner.serve_artifacts,
+                proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
+                artifacts_destination: inner.artifacts_destination.clone(),
+            }),
+        }
+    }
+
+    /// Attach the auth/RBAC [`AuthStore`] (T9.1 DB layer) to this state, enabling
+    /// the auth API surface (T9.2 users). Additive builder mirroring
+    /// [`AppState::with_webhook_store`]: returns a new `AppState` sharing every
+    /// existing field plus the auth store. `main` calls this when the basic-auth
+    /// app is enabled; when it isn't, `auth_store` stays `None` and the routes
+    /// are never mounted (Python: the endpoints only exist in the auth app).
+    pub fn with_auth_store(self, auth_store: AuthStore) -> Self {
+        let inner = &self.inner;
+        Self {
+            inner: Arc::new(AppStateInner {
+                tracking_store: inner.tracking_store.clone(),
+                registry_store: inner.registry_store.clone(),
+                webhook_store: inner.webhook_store.clone(),
+                webhook_dispatcher: inner.webhook_dispatcher.clone(),
+                auth_store: Some(auth_store),
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
@@ -159,11 +190,26 @@ impl AppState {
                 registry_store,
                 webhook_store,
                 webhook_dispatcher: None,
+                auth_store: None,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
             }),
         }
+    }
+
+    /// The auth/RBAC store, or `None` when the server was not started with the
+    /// basic-auth app enabled. The auth API handlers (T9.2) use this; when it is
+    /// `None`, the routes are never registered (see [`AppState::auth_enabled`]).
+    pub fn auth_store(&self) -> Option<&AuthStore> {
+        self.inner.auth_store.as_ref()
+    }
+
+    /// Whether the auth/RBAC API surface is enabled for this server instance
+    /// (i.e. an [`AuthStore`] was wired in). Drives conditional route
+    /// registration in `lib.rs`.
+    pub fn auth_enabled(&self) -> bool {
+        self.inner.auth_store.is_some()
     }
 
     /// The tracking store (experiments, runs, metrics, traces, …).

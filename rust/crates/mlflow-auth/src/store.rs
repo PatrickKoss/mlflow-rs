@@ -192,6 +192,56 @@ impl AuthStore {
         })
     }
 
+    /// `delete_user` (`sqlalchemy_store.py:222-241`): remove the user's row.
+    ///
+    /// The user's per-resource grants live as `role_permissions` rows under a
+    /// synthetic `__user_<id>__` role; Python deletes that role (cascading to
+    /// its permissions and assignments) before deleting the user so strict-FK
+    /// backends don't block on dangling references. We reproduce that here by
+    /// deleting the synthetic role's `role_permissions` and
+    /// `user_role_assignments` rows, then the role, then the user — all in one
+    /// transaction. Errors `RESOURCE_DOES_NOT_EXIST` when the user is gone
+    /// (matching `_get_user`'s `NoResultFound` mapping).
+    ///
+    /// The `__user_<id>__` synthetic-role convention is owned by the RBAC layer
+    /// (T9.3); the name is reconstructed here from the user id exactly as
+    /// `_synthetic_user_role_name` does (`sqlalchemy_store.py:263-265`).
+    pub async fn delete_user(&self, username: &str) -> Result<(), MlflowError> {
+        let user = self.get_user(username).await?;
+        let synthetic_role = format!("__user_{}__", user.id);
+
+        let dialect = self.db.writer().dialect();
+        let ph = |i| dialect.placeholder(i);
+        let mut tx = self.db.writer().begin_tx().await.map_err(internal)?;
+
+        // Delete the synthetic role's permissions and assignments, then the role
+        // itself. The subquery resolves the synthetic role id by name.
+        let del_perms = format!(
+            "DELETE FROM {ROLE_PERMISSIONS} WHERE role_id IN \
+             (SELECT id FROM {ROLES} WHERE name = {})",
+            ph(1),
+        );
+        let del_assignments = format!(
+            "DELETE FROM {USER_ROLE_ASSIGNMENTS} WHERE role_id IN \
+             (SELECT id FROM {ROLES} WHERE name = {})",
+            ph(1),
+        );
+        let del_role = format!("DELETE FROM {ROLES} WHERE name = {}", ph(1));
+        let del_user = format!("DELETE FROM {USERS} WHERE id = {}", ph(1));
+
+        let role_val = vec![Val::Text(synthetic_role)];
+        tx.exec(&del_perms, &role_val).await.map_err(internal)?;
+        tx.exec(&del_assignments, &role_val)
+            .await
+            .map_err(internal)?;
+        tx.exec(&del_role, &role_val).await.map_err(internal)?;
+        tx.exec(&del_user, &[Val::Int(user.id)])
+            .await
+            .map_err(internal)?;
+        tx.commit().await.map_err(internal)?;
+        Ok(())
+    }
+
     /// The roles assigned to a user (via `user_role_assignments`), each with its
     /// `role_permissions`. This is the RBAC grant surface for a user — the
     /// "list permissions" half of the T9.1 AC. Ordered by role id then

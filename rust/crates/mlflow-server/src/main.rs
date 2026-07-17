@@ -6,6 +6,7 @@
 //! can be exercised directly in tests.
 
 use clap::Parser;
+use mlflow_auth::{AuthDb, AuthStore};
 use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
@@ -15,6 +16,22 @@ use tracing_subscriber::EnvFilter;
 
 /// `DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH` (`mlflow/store/tracking/__init__.py:12`).
 const DEFAULT_ARTIFACT_ROOT: &str = "./mlruns";
+
+/// Python's enable signal for the basic-auth app: the `MLFLOW_AUTH_CONFIG_PATH`
+/// env var (set by `mlflow server --app-name basic-auth`). We opt into the auth
+/// API surface when it is present.
+///
+/// T9.8 SEAM: full `basic_auth.ini` parsing (`default_permission`,
+/// `database_uri`, `read_database_uri`, admin bootstrap, cache config) lands in
+/// T9.8. Until then we take an env-driven shortcut: the config-path presence is
+/// the enable flag, and the auth DB URI comes from `MLFLOW_AUTH_DATABASE_URI`
+/// (default `sqlite:///basic_auth.db`, matching the shipped ini's
+/// `database_uri`).
+const MLFLOW_AUTH_CONFIG_PATH_ENV: &str = "MLFLOW_AUTH_CONFIG_PATH";
+const MLFLOW_AUTH_DATABASE_URI_ENV: &str = "MLFLOW_AUTH_DATABASE_URI";
+const MLFLOW_AUTH_READ_DATABASE_URI_ENV: &str = "MLFLOW_AUTH_READ_DATABASE_URI";
+/// The shipped `basic_auth.ini` default (`database_uri = sqlite:///basic_auth.db`).
+const DEFAULT_AUTH_DATABASE_URI: &str = "sqlite:///basic_auth.db";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -59,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
                 Some(dest) => Some(mlflow_artifacts::factory::repo_from_uri(dest)?),
                 None => None,
             };
-            let app_state = AppState::with_registry(
+            let mut app_state = AppState::with_registry(
                 store,
                 registry_store,
                 config.serve_artifacts,
@@ -67,6 +84,13 @@ async fn main() -> anyhow::Result<()> {
                 config.artifacts_destination.clone(),
             )
             .with_webhook_store(webhook_store, webhook_dispatcher);
+
+            // Enable the auth/RBAC API (T9.2 users, later T9.3 roles) when the
+            // basic-auth app is configured. See the T9.8 SEAM note above.
+            if let Some(auth_store) = build_auth_store().await? {
+                app_state = app_state.with_auth_store(auth_store);
+            }
+
             build_app_with_state(&config, app_state)
         }
         None => build_app(&config),
@@ -82,6 +106,26 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("mlflow-server shut down");
     Ok(())
+}
+
+/// Build the auth store when the basic-auth app is enabled, else `None`.
+///
+/// T9.8 SEAM: this reads env vars instead of parsing `basic_auth.ini`. Presence
+/// of `MLFLOW_AUTH_CONFIG_PATH` (set by `--app-name basic-auth`) is the enable
+/// flag; the DB URI comes from `MLFLOW_AUTH_DATABASE_URI` (default
+/// `sqlite:///basic_auth.db`) and the optional read replica from
+/// `MLFLOW_AUTH_READ_DATABASE_URI`. The admin-user bootstrap
+/// (`create_admin_user`) also belongs to T9.8's full config wiring.
+async fn build_auth_store() -> anyhow::Result<Option<AuthStore>> {
+    if std::env::var_os(MLFLOW_AUTH_CONFIG_PATH_ENV).is_none() {
+        return Ok(None);
+    }
+    let db_uri = std::env::var(MLFLOW_AUTH_DATABASE_URI_ENV)
+        .unwrap_or_else(|_| DEFAULT_AUTH_DATABASE_URI.to_string());
+    let read_uri = std::env::var(MLFLOW_AUTH_READ_DATABASE_URI_ENV).ok();
+    let auth_db = AuthDb::connect_and_verify(&db_uri, read_uri.as_deref()).await?;
+    tracing::info!(db_uri = %db_uri, "basic-auth app enabled; auth API mounted");
+    Ok(Some(AuthStore::new(auth_db)))
 }
 
 /// Resolves once SIGINT (Ctrl-C) or SIGTERM is received, so
