@@ -52,7 +52,12 @@ from engine import (
     substitute,
 )
 
-from mlflow.server import ARTIFACT_ROOT_ENV_VAR, BACKEND_STORE_URI_ENV_VAR
+from mlflow.server import (
+    ARTIFACT_ROOT_ENV_VAR,
+    ARTIFACTS_DESTINATION_ENV_VAR,
+    BACKEND_STORE_URI_ENV_VAR,
+    SERVE_ARTIFACTS_ENV_VAR,
+)
 
 # Reuse the T12.1 launch plumbing so seeding/booting matches the integration
 # suite exactly (same env-var names, same rust-binary resolution).
@@ -128,11 +133,17 @@ class DualServers:
         seed_db: Path,
         artifact_root: Path,
         extra_env: dict[str, str] | None = None,
+        python_app: str = "mlflow.server:app",
     ) -> None:
         self.workdir = workdir
         self.seed_db = seed_db
         self.artifact_root = artifact_root
         self.extra_env = extra_env or {}
+        # The flask `--app` target. The plain sections use the base tracking
+        # app; the auth section must use the auth app factory (the auth
+        # endpoints exist only there), mirroring
+        # `tests/server/auth/test_auth.py`'s `app="mlflow.server.auth:create_app"`.
+        self.python_app = python_app
         self.python: ServerHandle | None = None
         self.rust: ServerHandle | None = None
 
@@ -144,6 +155,14 @@ class DualServers:
             **os.environ,
             BACKEND_STORE_URI_ENV_VAR: backend_uri,
             ARTIFACT_ROOT_ENV_VAR: str(art),
+            # The Rust boot passes `--serve-artifacts --artifacts-destination`
+            # (see `_rust_server_cmd`); the Python app enables its artifact
+            # proxy from these env vars instead (`mlflow/server/__init__.py:76`).
+            # Without them the Python side 404s every /mlflow-artifacts route
+            # and the whole artifacts section reads as a status mismatch.
+            # Harmless for the Rust process, which reads CLI flags only.
+            SERVE_ARTIFACTS_ENV_VAR: "true",
+            ARTIFACTS_DESTINATION_ENV_VAR: str(art),
             **self.extra_env,
         }
         proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -168,7 +187,7 @@ class DualServers:
             "-m",
             "flask",
             "--app",
-            "mlflow.server:app",
+            self.python_app,
             "run",
             "--host",
             LOCALHOST,
@@ -669,12 +688,27 @@ def _run_auth_section(
     artifact_root = workroot / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
     extra_env = {
+        # Both servers read the ini via MLFLOW_AUTH_CONFIG_PATH (its
+        # `database_uri` names the auth DB — the old MLFLOW_AUTH_DATABASE_URI
+        # env override was retired by T9.8 on the Rust side and never existed
+        # on the Python side).
         "MLFLOW_AUTH_CONFIG_PATH": str(ini),
-        "MLFLOW_AUTH_DATABASE_URI": auth_db_uri,
+        # Python's `create_app` refuses to start without a static secret key
+        # (CSRF); the Rust server owns its own per-process secret (plan D12)
+        # and ignores this.
+        "MLFLOW_FLASK_SERVER_SECRET_KEY": "t124-compliance-secret",
     }
     results: list[CaseResult] = []
     try:
-        with DualServers(workroot, seed_db, artifact_root, extra_env=extra_env) as servers:
+        with DualServers(
+            workroot,
+            seed_db,
+            artifact_root,
+            extra_env=extra_env,
+            # The auth endpoints exist only in the auth app factory; the base
+            # `mlflow.server:app` 404s them all.
+            python_app="mlflow.server.auth:create_app",
+        ) as servers:
             # Create the non-admin user on both servers via the admin account.
             for h in (servers.python, servers.rust):
                 requests.post(
