@@ -27,7 +27,7 @@ use mlflow_artifacts::ArtifactRepo;
 use mlflow_error::MlflowError;
 use mlflow_registry::RegistryStore;
 use mlflow_store::TrackingStore;
-use mlflow_webhooks::WebhookStore;
+use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
 /// A resolved artifact repository plus the repo-relative path to operate on —
 /// the output of resolving a run's / logged model's artifact URI against the
@@ -56,6 +56,11 @@ struct AppStateInner {
     /// backends that don't support webhooks (e.g. a future file store); the
     /// webhook handlers return a `not-implemented`-style error when absent.
     webhook_store: Option<WebhookStore>,
+    /// The async webhook delivery engine (T8.3). Built once at startup over the
+    /// webhook store; T8.4's registry event triggers call
+    /// [`WebhookDispatcher::fire`] through [`AppState::webhook_dispatcher`].
+    /// `None` when webhooks are unsupported (mirrors `webhook_store`).
+    webhook_dispatcher: Option<WebhookDispatcher>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -77,16 +82,22 @@ impl AppState {
         Self::build(tracking_store, None, None, false, None, None)
     }
 
-    /// Attach a [`WebhookStore`] to this state (T8.1/T8.2). Additive builder so
+    /// Attach a [`WebhookStore`] plus its async delivery [`WebhookDispatcher`]
+    /// to this state (T8.1/T8.2 store, T8.3 dispatcher). Additive builder so
     /// existing constructors stay valid; returns a new `AppState` sharing the
-    /// same inner fields plus the webhook store.
-    pub fn with_webhook_store(self, webhook_store: WebhookStore) -> Self {
+    /// same inner fields plus the webhook store and dispatcher.
+    pub fn with_webhook_store(
+        self,
+        webhook_store: WebhookStore,
+        webhook_dispatcher: WebhookDispatcher,
+    ) -> Self {
         let inner = &self.inner;
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store: inner.tracking_store.clone(),
                 registry_store: inner.registry_store.clone(),
                 webhook_store: Some(webhook_store),
+                webhook_dispatcher: Some(webhook_dispatcher),
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
@@ -147,6 +158,7 @@ impl AppState {
                 tracking_store,
                 registry_store,
                 webhook_store,
+                webhook_dispatcher: None,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
@@ -183,6 +195,14 @@ impl AppState {
                 "Webhooks are not supported by the configured backend store.".to_string(),
             )
         })
+    }
+
+    /// The async webhook delivery engine (T8.3), or `None` when webhooks are
+    /// unsupported by the configured backend. T8.4's registry event triggers use
+    /// this to `fire` deliveries; it is intentionally **not** called by any
+    /// registry code yet (that wiring is T8.4).
+    pub fn webhook_dispatcher(&self) -> Option<&WebhookDispatcher> {
+        self.inner.webhook_dispatcher.as_ref()
     }
 
     /// `_is_serving_proxied_artifacts()` — whether the `mlflow-artifacts` proxy

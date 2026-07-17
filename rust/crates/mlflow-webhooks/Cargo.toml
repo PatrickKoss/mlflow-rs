@@ -35,13 +35,19 @@ fernet = "0.2"
 hmac = "0.12"
 sha2 = "0.10"
 base64 = { workspace = true }
-# Outbound HTTP for the `/test` endpoint's single real delivery. `reqwest`
-# would pull a TLS stack; the test path only needs one plain request with
-# headers + a timeout, so we use the already-vendored low-level hyper client
-# (the async delivery engine, retries, and SSRF adapter are T8.3, not here).
+# Outbound HTTP for webhook delivery (the `/test` path and the T8.3 async
+# engine). `reqwest` would pull a TLS stack and its own connection pool; the
+# SSRF guard needs to own resolution + connect-time peer validation, so we
+# drive the low-level hyper client over a `TcpStream` we connect to a validated
+# IP ourselves (see `http_send.rs`).
 hyper = { workspace = true, features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
 http-body-util = "0.1"
+# uuid4 delivery ids (`str(uuid.uuid4())`, `delivery.py:175`).
+uuid = { workspace = true }
+# Structured logging for fire-and-forget delivery failures (Python's
+# `_logger.error(...)` in `_send_webhook_with_error_handling` / `deliver_webhook`).
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

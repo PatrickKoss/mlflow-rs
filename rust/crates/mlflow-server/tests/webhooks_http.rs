@@ -19,7 +19,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
-use mlflow_webhooks::{SecretCipher, WebhookStore};
+use mlflow_webhooks::{SecretCipher, WebhookDispatcher, WebhookStore};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
@@ -97,7 +97,8 @@ impl TestServer {
             artifacts_destination: None,
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
-        let state = AppState::new(store).with_webhook_store(webhook_store);
+        let dispatcher = WebhookDispatcher::new(webhook_store.clone(), "default");
+        let state = AppState::new(store).with_webhook_store(webhook_store, dispatcher);
         let app = build_app_with_recorder(&config, recorder, Some(state));
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");

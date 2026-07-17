@@ -20,9 +20,16 @@
 //! * [`payloads`] — the example event payloads the `/test` endpoint sends.
 //! * [`WebhookStore`] — create/get/list/update/delete + `list_webhooks_by_event`,
 //!   all workspace-scoped with soft delete (**T8.1**).
-//! * [`delivery`] — the `/test` endpoint's single real HTTP delivery with the
-//!   signature + three headers (**T8.2**). The full async delivery engine
-//!   (retries, TTL cache, connect-time SSRF adapter) is **T8.3**, not here.
+//! * [`delivery`] — the wrapped/signed request assembly + the `/test` endpoint
+//!   delivery (**T8.2**).
+//! * [`http_send`] — the connect-time SSRF-guarded HTTP sender (resolve +
+//!   validate peer IP, connect to a pinned IP, retry-on-status backoff, redirect
+//!   re-validation), porting `mlflow/webhooks/ssrf.py` + the session's `Retry`
+//!   config (**T8.3**).
+//! * [`WebhookDispatcher`] — the fire-and-forget async delivery engine: TTL
+//!   cache of webhooks-by-event, bounded tokio task pool, signing, enqueue.
+//!   `WebhookDispatcher::fire(event, payload)` is the API T8.4's registry event
+//!   triggers call (**T8.3**).
 //!
 //! ## Deviation: missing encryption key
 //!
@@ -45,7 +52,9 @@ mod dbutil;
 
 pub mod crypto;
 pub mod delivery;
+pub mod dispatcher;
 pub mod entities;
+pub mod http_send;
 pub mod payloads;
 pub mod schema;
 pub mod signing;
@@ -53,7 +62,9 @@ pub mod store;
 pub mod validation;
 
 pub use crypto::SecretCipher;
+pub use dispatcher::WebhookDispatcher;
 pub use entities::{
     Webhook, WebhookAction, WebhookEntity, WebhookEvent, WebhookStatus, WebhookTestResult,
 };
+pub use http_send::{Resolver, SystemResolver};
 pub use store::{WebhookPage, WebhookStore};
