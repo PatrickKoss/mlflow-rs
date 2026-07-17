@@ -40,6 +40,20 @@ use crate::workspace::{resolve_workspace, WORKSPACE_HEADER_NAME};
 use path_matchers::{dispatch_request, Dispatched};
 use validators::RequestCtx;
 
+/// The authenticated identity for the current request, attached to the request
+/// extensions by [`authorize`] once credentials are verified (T9.6). Handlers
+/// that run their own in-band per-field authorization (the `/graphql` executor)
+/// read it back to mirror Python's `authenticate_request()` +
+/// `store.get_user(username).is_admin` inside the graphene auth middleware.
+///
+/// Only attached when the basic-auth app is enabled; a plain tracking server
+/// leaves it absent (auth is off, so the gate is a no-op).
+#[derive(Debug, Clone)]
+pub struct AuthContext {
+    pub username: String,
+    pub is_admin: bool,
+}
+
 /// `_UNPROTECTED_PATH_PREFIXES` (`__init__.py:454`) plus the Rust server's ops
 /// endpoints. Python's auth app only carries `/static`, `/favicon.ico`,
 /// `/health`; this Rust binary additionally serves `/version` and `/metrics` as
@@ -145,7 +159,11 @@ fn hex(c: u8) -> Option<u8> {
 /// The tower middleware entry (`axum::middleware::from_fn_with_state`). Buffers
 /// the body, runs the before-request authorization, then either short-circuits
 /// (401/403) or forwards the reconstructed request to `next`.
-pub async fn authorize(State(state): State<AppState>, req: Request<Body>, next: Next) -> Response {
+pub async fn authorize(
+    State(state): State<AppState>,
+    mut req: Request<Body>,
+    next: Next,
+) -> Response {
     let path = req.uri().path().to_string();
 
     // 1. Unprotected routes pass through untouched.
@@ -169,11 +187,21 @@ pub async fn authorize(State(state): State<AppState>, req: Request<Body>, next: 
     }
 
     // 3. Admin bypass (`sender_is_admin`). A store error here surfaces as the
-    //    matching HTTP status (`catch_mlflow_exception`).
-    match auth_store.get_user(&username).await {
-        Ok(user) if user.is_admin => return next.run(req).await,
-        Ok(_) => {}
+    //    matching HTTP status (`catch_mlflow_exception`). Whichever way it goes,
+    //    stamp the authenticated identity onto the request extensions first so a
+    //    downstream handler that runs its own in-band authorization (the
+    //    `/graphql` executor, T9.6) can read it — this mirrors Python, where the
+    //    graphene auth middleware re-derives username + `is_admin` per request.
+    let is_admin = match auth_store.get_user(&username).await {
+        Ok(user) => user.is_admin,
         Err(e) => return error_response(&e),
+    };
+    req.extensions_mut().insert(AuthContext {
+        username: username.clone(),
+        is_admin,
+    });
+    if is_admin {
+        return next.run(req).await;
     }
 
     // 4. Dispatch to the validator.
