@@ -1150,10 +1150,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       Python trigger site for T8.4. Deferred: the `model_id` back-link tag
       Python writes via the tracking store after MV create (cross-store
       boundary, same as T7.2's logged-model-id note). 21 HTTP + 7 unit tests.)*
-- [ ] **T7.5 Prompts-on-registry validation**: the Prompts UI (list/create/version/alias
+- [x] **T7.5 Prompts-on-registry validation**: the Prompts UI (list/create/version/alias
       prompt) works against the Rust registry unchanged.
       **AC:** UI smoke: prompts pages function; models pages never show prompts.
       **VER:** T11.6 checklist items.
+      *(Done 2026-07-17: prompts share the RegisteredModel/ModelVersion REST
+      surface unchanged (tagged `mlflow.prompt.is_prompt='true'`); T7.3 already
+      ported the search-time anti-join that hides prompts from default model
+      listings, and T7.4 already ported the handler-level prompt branches
+      (source-validation prompt path, webhook seams). The one real gap was
+      `registered_models.rs`'s `create_registered_model` collision path, which
+      only had the plain "already exists" message — ported Python's
+      `handle_resource_already_exist_error` (`mlflow/prompt/registry_utils.py:
+      264-290`) so a name collision between a model and a prompt gets the
+      cross-type message (with `repr()`-correct quoting) instead of a generic
+      one. Added `registry_http.rs` coverage driving the Prompts UI's exact
+      REST call shapes end-to-end (create prompt, create prompt version via
+      the "dummy-source" placeholder, tag set/delete, alias set, the
+      `tags.\`mlflow.prompt.is_prompt\` = 'true'` search filter) plus both
+      collision directions and a default-search prompt-exclusion check. 3 new
+      HTTP tests (24 total in the file); one `registry_store.rs` assertion
+      updated for the message's new trailing period.)*
 
 ### Phase 8 — Webhooks
 
