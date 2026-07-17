@@ -1570,7 +1570,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 11 — Server config, nginx, deployment
 
-- [ ] **T11.1 CLI/env parity**: `--backend-store-uri`, `--read-replica-backend-store-uri`,
+- [x] **T11.1 CLI/env parity**: `--backend-store-uri`, `--read-replica-backend-store-uri`,
       `--registry-store-uri`, `--default-artifact-root`, `--serve-artifacts`,
       `--artifacts-destination`, `--artifacts-only`, `--host/--port/--workers` (threads),
       `--static-prefix`, `--allowed-hosts`, `--cors-allowed-origins`,
@@ -1580,6 +1580,21 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       family mapped to the Rust pool.
       **AC:** documented parity matrix; unsupported flags fail loudly.
       **VER:** CLI integration tests.
+      *(Done 2026-07-17: every `server` flag wired in `config.rs` with
+      Python-matching name/default/env. Supported: backend/registry/default-
+      artifact-root/serve-artifacts/artifacts-destination/artifacts-only
+      (gates routes to the proxy + root get/upload-artifact)/host(-H)/port/
+      static-prefix/allowed-hosts/cors/x-frame/workspace-store-uri/
+      enable-disable-workspaces (flag overrides env). Mapped: expose-prometheus
+      (gates `/metrics`), app-name (only `basic-auth`). Accepted-noop:
+      --workers (async server, logged+ignored), read-replica (stored+warned —
+      tracking `Db` has no read-split seam yet; only `AuthDb` does), POOLCLASS.
+      Fail-loud (clap exit 2 / ConfigError): registry-uri ≠ backend, unknown
+      flags (--dev/--gunicorn-opts/--uvicorn-opts/--waitress-opts/
+      --trace-archival-config/--secrets-cache-*). Pool env family mapped in
+      `pool.rs`. Parity matrix doc at `mlflow-server/CLI_PARITY.md`. 18 config
+      + 5 CLI-integration + 1 artifacts-only tests. Deferred: tracking
+      read-replica split (SEAM).)*
 - [x] **T11.2 Security middleware parity**: host-header allowlist, CORS, X-Frame-Options
       (mirror `mlflow/server/security.py`).
       **AC:** identical responses to disallowed Host/CORS preflights.
