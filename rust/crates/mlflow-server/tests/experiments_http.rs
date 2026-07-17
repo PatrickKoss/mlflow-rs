@@ -83,6 +83,9 @@ impl TestServer {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            allowed_hosts: None,
+            cors_allowed_origins: None,
+            x_frame_options: "SAMEORIGIN".to_string(),
         };
         // Per-router recorder handle so multiple test servers can coexist in
         // one process (a global recorder can only be installed once).

@@ -14,6 +14,17 @@ use clap::Parser;
 /// fallback (`mlflow/cli/__init__.py:434`).
 pub const MLFLOW_STATIC_PREFIX_ENV_VAR: &str = "MLFLOW_STATIC_PREFIX";
 
+/// Security-middleware env vars (`mlflow/environment_variables.py:1101-1124`).
+/// Python has no CLI flags for these — they are env-only — but we expose CLI
+/// flags too (T11.2), with the flag taking precedence over the env var, matching
+/// the `--static-prefix`/`MLFLOW_STATIC_PREFIX` pattern.
+pub const MLFLOW_SERVER_ALLOWED_HOSTS_ENV_VAR: &str = "MLFLOW_SERVER_ALLOWED_HOSTS";
+pub const MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR: &str = "MLFLOW_SERVER_CORS_ALLOWED_ORIGINS";
+pub const MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR: &str = "MLFLOW_SERVER_X_FRAME_OPTIONS";
+
+/// Default `X-Frame-Options` value (`MLFLOW_SERVER_X_FRAME_OPTIONS` default).
+pub const DEFAULT_X_FRAME_OPTIONS: &str = "SAMEORIGIN";
+
 #[derive(Debug, Parser)]
 #[command(name = "mlflow-server", about = "MLflow tracking server (Rust)")]
 pub struct Cli {
@@ -57,6 +68,25 @@ pub struct Cli {
     /// `mlflow_artifacts::factory::repo_from_uri`).
     #[arg(long)]
     pub artifacts_destination: Option<String>,
+
+    /// Comma-separated allowed `Host` headers (DNS-rebinding protection).
+    /// Falls back to `MLFLOW_SERVER_ALLOWED_HOSTS`; when neither is set,
+    /// defaults to localhost variants + private IP ranges
+    /// (`mlflow/server/security_utils.py:149`). `*` disables the check.
+    #[arg(long)]
+    pub allowed_hosts: Option<String>,
+
+    /// Comma-separated allowed CORS origins. Falls back to
+    /// `MLFLOW_SERVER_CORS_ALLOWED_ORIGINS`; when neither is set, only
+    /// localhost origins are allowed. `*` enables (credential-less) wildcard
+    /// CORS.
+    #[arg(long)]
+    pub cors_allowed_origins: Option<String>,
+
+    /// `X-Frame-Options` header value (`SAMEORIGIN` default, `DENY`, or `NONE`
+    /// to disable). Falls back to `MLFLOW_SERVER_X_FRAME_OPTIONS`.
+    #[arg(long)]
+    pub x_frame_options: Option<String>,
 }
 
 /// Error returned when `--static-prefix` (or `MLFLOW_STATIC_PREFIX`) fails
@@ -83,6 +113,17 @@ pub struct ServerConfig {
     pub serve_artifacts: bool,
     /// The `--artifacts-destination` base URI for the proxy repo, if configured.
     pub artifacts_destination: Option<String>,
+    /// Comma-split allowed `Host` headers (`--allowed-hosts` /
+    /// `MLFLOW_SERVER_ALLOWED_HOSTS`). `None` means "unset" — the security
+    /// layer then applies the localhost + private-IP defaults.
+    pub allowed_hosts: Option<Vec<String>>,
+    /// Comma-split allowed CORS origins (`--cors-allowed-origins` /
+    /// `MLFLOW_SERVER_CORS_ALLOWED_ORIGINS`). `None` means "unset" (localhost
+    /// origins only).
+    pub cors_allowed_origins: Option<Vec<String>>,
+    /// `X-Frame-Options` value (`--x-frame-options` /
+    /// `MLFLOW_SERVER_X_FRAME_OPTIONS`, default `SAMEORIGIN`; `NONE` disables).
+    pub x_frame_options: String,
 }
 
 impl fmt::Display for ServerConfig {
@@ -102,6 +143,15 @@ impl ServerConfig {
             .static_prefix
             .or_else(|| std::env::var(MLFLOW_STATIC_PREFIX_ENV_VAR).ok());
         let static_prefix = validate_static_prefix(raw_prefix)?;
+        let allowed_hosts = resolve_csv(cli.allowed_hosts, MLFLOW_SERVER_ALLOWED_HOSTS_ENV_VAR);
+        let cors_allowed_origins = resolve_csv(
+            cli.cors_allowed_origins,
+            MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR,
+        );
+        let x_frame_options = cli
+            .x_frame_options
+            .or_else(|| std::env::var(MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR).ok())
+            .unwrap_or_else(|| DEFAULT_X_FRAME_OPTIONS.to_string());
         Ok(Self {
             host: cli.host,
             port: cli.port,
@@ -110,8 +160,24 @@ impl ServerConfig {
             default_artifact_root: cli.default_artifact_root,
             serve_artifacts: cli.serve_artifacts,
             artifacts_destination: cli.artifacts_destination,
+            allowed_hosts,
+            cors_allowed_origins,
+            x_frame_options,
         })
     }
+}
+
+/// Resolve a comma-separated flag/env pair, mirroring
+/// `get_allowed_hosts_from_env` / `get_allowed_origins_from_env`
+/// (`security_utils.py:79,86`): the CLI flag wins over the env var, and the
+/// resolved string is split on `,` with each entry trimmed. An unset value (or
+/// empty string) yields `None`.
+fn resolve_csv(flag: Option<String>, env_var: &str) -> Option<Vec<String>> {
+    let raw = flag.or_else(|| std::env::var(env_var).ok())?;
+    if raw.is_empty() {
+        return None;
+    }
+    Some(raw.split(',').map(|s| s.trim().to_string()).collect())
 }
 
 /// Validates a static prefix the same way Python's `_validate_static_prefix`
@@ -196,6 +262,9 @@ mod tests {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            allowed_hosts: None,
+            cors_allowed_origins: None,
+            x_frame_options: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/cli-prefix"));
@@ -218,6 +287,9 @@ mod tests {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            allowed_hosts: None,
+            cors_allowed_origins: None,
+            x_frame_options: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix.as_deref(), Some("/env-prefix"));
@@ -240,6 +312,9 @@ mod tests {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            allowed_hosts: None,
+            cors_allowed_origins: None,
+            x_frame_options: None,
         };
         let config = ServerConfig::from_cli(cli).unwrap();
         assert_eq!(config.static_prefix, None);
