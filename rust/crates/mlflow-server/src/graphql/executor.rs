@@ -89,10 +89,7 @@ where
             // the closed schema + real queries never exercise this).
             continue;
         };
-        let key = field
-            .alias
-            .clone()
-            .unwrap_or_else(|| field.name.clone());
+        let key = field.alias.clone().unwrap_or_else(|| field.name.clone());
 
         // `__typename` at the root resolves to the operation's type name. No
         // real MLflow query selects a root `__typename`, so `Query` is a safe,
@@ -141,17 +138,6 @@ where
     assemble_body(&results, &errors)
 }
 
-/// The GraphQL type name of the executing operation's root (`Query` or
-/// `Mutation`), for a root-level `__typename`.
-fn operation_type_name(request: &GraphQlRequest) -> &'static str {
-    // The only mutations are `mlflowSearchRuns` / `mlflowSearchDatasets` /
-    // `testMutation`; everything else is a query. We don't track which the
-    // parser chose here, so fall back to "Query" — no real MLflow query selects
-    // a root `__typename`, so this is never observed. Kept for completeness.
-    let _ = request;
-    "Query"
-}
-
 /// `select_operation`: pick the operation definition to run. With a single
 /// operation, `operationName` is optional; with multiple, it must name one.
 fn select_operation<'r, 'a>(
@@ -180,9 +166,9 @@ fn select_operation<'r, 'a>(
             .find(|(n, _)| n.as_deref() == Some(name))
             .map(|(_, set)| *set)
             .ok_or_else(|| format!("Unknown operation named \"{name}\".")),
-        (None, _) => Err(
-            "Must provide operation name if query contains multiple operations.".to_string(),
-        ),
+        (None, _) => {
+            Err("Must provide operation name if query contains multiple operations.".to_string())
+        }
     }
 }
 
@@ -221,7 +207,10 @@ fn ast_value_to_json(
     variables: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     Ok(match value {
-        AstValue::Variable(name) => variables.get(name).cloned().unwrap_or(serde_json::Value::Null),
+        AstValue::Variable(name) => variables
+            .get(name)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
         AstValue::Int(n) => serde_json::Value::from(n.as_i64().unwrap_or(0)),
         AstValue::Float(f) => serde_json::json!(f),
         AstValue::String(s) => serde_json::Value::String(s.clone()),
@@ -352,7 +341,9 @@ pub fn error_only_body(message: &str) -> String {
 /// Parse the JSON variables blob (`request_json["variables"]`) into an object
 /// map, tolerating `null`/absent (→ empty). A non-object `variables` is a client
 /// error, but graphene tolerates it loosely; we treat it as empty.
-pub fn parse_variables(value: Option<&serde_json::Value>) -> serde_json::Map<String, serde_json::Value> {
+pub fn parse_variables(
+    value: Option<&serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
     match value {
         Some(serde_json::Value::Object(obj)) => obj.clone(),
         _ => serde_json::Map::new(),

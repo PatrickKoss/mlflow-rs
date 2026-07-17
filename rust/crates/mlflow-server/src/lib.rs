@@ -194,10 +194,7 @@ fn register_proto_routes(state: AppState) -> Router {
     // `_add_static_prefix("/graphql"), ["GET", "POST"]`). Both methods parse the
     // JSON body (content-type validated for POST only), so a single handler
     // covers both.
-    router = router.route(
-        "/graphql",
-        get(graphql::graphql).post(graphql::graphql),
-    );
+    router = router.route("/graphql", get(graphql::graphql).post(graphql::graphql));
     router.with_state(state)
 }
 

@@ -87,8 +87,5 @@ pub const IMPLEMENTED_QUERY_FIELDS: &[&str] = &[
 ];
 
 /// The root Mutation fields this server implements.
-pub const IMPLEMENTED_MUTATION_FIELDS: &[&str] = &[
-    "mlflowSearchDatasets",
-    "mlflowSearchRuns",
-    "testMutation",
-];
+pub const IMPLEMENTED_MUTATION_FIELDS: &[&str] =
+    &["mlflowSearchDatasets", "mlflowSearchRuns", "testMutation"];

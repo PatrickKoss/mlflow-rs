@@ -90,7 +90,10 @@ fn experiment(exp: Experiment) -> GqlVal {
                 GqlVal::str(exp.artifact_location.unwrap_or_default()),
             ),
             ("lifecycleStage", GqlVal::str(exp.lifecycle_stage)),
-            ("lastUpdateTime", GqlVal::Long(exp.last_update_time.unwrap_or(0))),
+            (
+                "lastUpdateTime",
+                GqlVal::Long(exp.last_update_time.unwrap_or(0)),
+            ),
             ("creationTime", GqlVal::Long(exp.creation_time.unwrap_or(0))),
             (
                 "tags",
@@ -141,11 +144,7 @@ pub async fn get_run(
 }
 
 /// Build a `MlflowRunExtension`: the base run fields plus the two derived fields.
-async fn run_extension(
-    state: &AppState,
-    ws: &Workspace,
-    run: Run,
-) -> Result<GqlVal, MlflowError> {
+async fn run_extension(state: &AppState, ws: &Workspace, run: Run) -> Result<GqlVal, MlflowError> {
     let experiment_id = run.info.experiment_id.clone();
     let run_id = run.info.run_id.clone();
 
@@ -239,20 +238,14 @@ fn metric_extension(m: Metric) -> GqlVal {
 fn param(p: Param) -> GqlVal {
     GqlVal::object(
         "Param",
-        vec![
-            ("key", GqlVal::str(p.key)),
-            ("value", GqlVal::str(p.value)),
-        ],
+        vec![("key", GqlVal::str(p.key)), ("value", GqlVal::str(p.value))],
     )
 }
 
 fn run_tag(t: RunTag) -> GqlVal {
     GqlVal::object(
         "RunTag",
-        vec![
-            ("key", GqlVal::str(t.key)),
-            ("value", GqlVal::str(t.value)),
-        ],
+        vec![("key", GqlVal::str(t.key)), ("value", GqlVal::str(t.value))],
     )
 }
 
@@ -262,7 +255,13 @@ fn run_inputs(inputs: RunInputs) -> GqlVal {
         vec![
             (
                 "datasetInputs",
-                GqlVal::List(inputs.dataset_inputs.into_iter().map(dataset_input).collect()),
+                GqlVal::List(
+                    inputs
+                        .dataset_inputs
+                        .into_iter()
+                        .map(dataset_input)
+                        .collect(),
+                ),
             ),
             (
                 "modelInputs",
@@ -271,7 +270,10 @@ fn run_inputs(inputs: RunInputs) -> GqlVal {
                         .model_inputs
                         .into_iter()
                         .map(|mi| {
-                            GqlVal::object("ModelInput", vec![("modelId", GqlVal::str(mi.model_id))])
+                            GqlVal::object(
+                                "ModelInput",
+                                vec![("modelId", GqlVal::str(mi.model_id))],
+                            )
                         })
                         .collect(),
                 ),
@@ -292,10 +294,7 @@ fn dataset_input(di: DatasetInput) -> GqlVal {
                         .map(|t| {
                             GqlVal::object(
                                 "InputTag",
-                                vec![
-                                    ("key", GqlVal::str(t.key)),
-                                    ("value", GqlVal::str(t.value)),
-                                ],
+                                vec![("key", GqlVal::str(t.key)), ("value", GqlVal::str(t.value))],
                             )
                         })
                         .collect(),
@@ -532,11 +531,7 @@ pub async fn search_model_versions(
         .search_model_versions(ws.name(), filter, max_results, &order_by, page_token)
         .await?;
 
-    let mvs = page
-        .model_versions
-        .into_iter()
-        .map(model_version)
-        .collect();
+    let mvs = page.model_versions.into_iter().map(model_version).collect();
     Ok(GqlVal::object(
         "SearchModelVersionsResponse",
         vec![
@@ -597,7 +592,10 @@ fn model_version(mv: mlflow_registry::ModelVersion) -> GqlVal {
                 "currentStage",
                 GqlVal::str(mv.current_stage.unwrap_or_default()),
             ),
-            ("description", GqlVal::str(mv.description.unwrap_or_default())),
+            (
+                "description",
+                GqlVal::str(mv.description.unwrap_or_default()),
+            ),
             ("source", GqlVal::str(mv.source.unwrap_or_default())),
             ("runId", GqlVal::str(mv.run_id.unwrap_or_default())),
             ("status", GqlVal::str(mv.status.unwrap_or_default())),

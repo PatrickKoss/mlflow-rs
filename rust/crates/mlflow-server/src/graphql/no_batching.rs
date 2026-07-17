@@ -165,8 +165,10 @@ mod tests {
 
     #[test]
     fn conforming_query_is_safe() {
-        assert!(check("query Q { mlflowGetRun(input: {runId: \"r\"}) { run { info { runId } } } }")
-            .is_ok());
+        assert!(check(
+            "query Q { mlflowGetRun(input: {runId: \"r\"}) { run { info { runId } } } }"
+        )
+        .is_ok());
     }
 
     #[test]
@@ -177,7 +179,9 @@ mod tests {
             .join(" ");
         let err = check(&format!("query Q {{ {fields} }}")).unwrap_err();
         assert!(
-            err.starts_with(&format!("GraphQL queries should have at most {MAX_ROOT_FIELDS}")),
+            err.starts_with(&format!(
+                "GraphQL queries should have at most {MAX_ROOT_FIELDS}"
+            )),
             "{err}"
         );
         assert!(err.contains("root fields"), "{err}");
@@ -189,7 +193,9 @@ mod tests {
             .map(|i| format!("e_{i}: experiment {{ name }}"))
             .collect::<Vec<_>>()
             .join(" ");
-        let q = format!("query Q {{ mlflowGetExperiment(input: {{experimentId: \"1\"}}) {{ {aliases} }} }}");
+        let q = format!(
+            "query Q {{ mlflowGetExperiment(input: {{experimentId: \"1\"}}) {{ {aliases} }} }}"
+        );
         let err = check(&q).unwrap_err();
         assert!(
             err.contains(&format!("at most {MAX_ALIASES} aliases")),

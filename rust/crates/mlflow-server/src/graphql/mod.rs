@@ -127,11 +127,7 @@ async fn resolve_root(
         "testMutation" => return Ok(resolvers::test_echo("TestMutation", &input)),
         // An unknown root field would be a validation error in graphene
         // ("Cannot query field ..."). Real UI/test queries never hit this.
-        other => {
-            return Err(format!(
-                "Cannot query field \"{other}\" on type \"Query\"."
-            ))
-        }
+        other => return Err(format!("Cannot query field \"{other}\" on type \"Query\".")),
     };
     result.map_err(|e| e.message)
 }
