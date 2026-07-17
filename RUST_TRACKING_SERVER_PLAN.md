@@ -1,31 +1,34 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
 Status: **in progress — Phases 2, 3, 4, 5, 6, 7, 8 complete; Phase 9 complete
-except T9.9 (admin UI validation); Phase 10 T10.1/T10.2 done; Phase 11
-T11.2/T11.3/T11.4/T11.5 done; Phase 12 T12.1/T12.2 done.** · Branch:
+except T9.9 (admin UI validation); Phase 10 T10.1/T10.2 done (T10.3 in flight);
+Phase 11 T11.2/T11.3/T11.4/T11.5 done (T11.1 in flight); Phase 12 T12.1/T12.2
+done, T12.4 harness landed (not yet green).** · Branch:
 `feature/rust-tracking-server` · Last updated: 2026-07-17
 
-**Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8 —
-DB layer, users/roles/permissions APIs, enforcement middleware, after-request
-hooks + search filtering, GraphQL auth, signup/CSRF, and ini config + caches.
-All merged and green (fmt/clippy/full workspace suite by exit code).
+**Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
+T12.4's differential harness was salvaged and landed as foundation, and the two
+real parity bugs it surfaced are fixed (experiment `workspace` proto field 9,
+and `searchExperiments` `view_type` proto2 default → ACTIVE_ONLY). All merged
+and green (fmt/clippy/full workspace suite by exit code).
 
-**Open (no work in flight — clean stopping point):**
-- **T12.4 (differential replay harness)** and **T12.6 (chaos test)** were in
-  flight when the two subagents hit the account spend limit and terminated.
-  Their partial work was checkpointed on the worktree branches (WIP commits,
-  NOT verified, NOT complete): `worktree-agent-a67a7f6d3a0f46a03` @ `95819ea0f`
-  (T12.4 — `rust/compliance/` corpus scaffold + an `experiments.rs` change) and
-  `worktree-agent-ad634b20ba0a07ff0` @ `cdd95e09f` (T12.6 — `chaos.rs` +
-  `rust.yml` CI job). Salvage or redo on resume. T12.4's last note flagged a
-  real parity lead: experiment `workspace` field (proto field 9, "always
-  `default` when workspaces disabled") — Python always emits it, Rust's
-  `to_proto_experiment` may omit it. Worth checking early.
+**In flight:** T10.3 (workspace request scoping), T11.1 (CLI/env parity).
+
+**Open:**
+- **T12.4 (differential replay harness)** — scaffolding + 133-case corpus +
+  engine landed under `rust/compliance/` (runs via `uv run python
+  rust/compliance/replay.py`; `--list` works). NOT yet green end-to-end: needs
+  a full dual-server run to triage the remaining reported diffs (tag ordering,
+  search pagination page-count, duplicate-experiment error message). Keep the
+  checkbox unticked until the run is zero-non-allowlisted-diffs.
+- **T12.6 (chaos test)** — partial WIP checkpointed on
+  `worktree-agent-ad634b20ba0a07ff0` @ `cdd95e09f` (`chaos.rs` + `rust.yml` CI
+  job), NOT verified/complete. Salvage or redo on resume.
 - Remaining pre-existing: **T9.9** (admin/account UI validation),
-  **T10.3/T10.4** (workspace request scoping + workspace-aware auth — several
-  T10.4 seams already marked in the auth code), **T11.1** (full CLI parity),
-  **T11.6** (UI smoke checklist), **T12.3/T12.5** (client-suite conformance +
-  CI matrix), and **Phases 13–14** (scale benchmarks, memory/soak validation).
+  **T10.4** (workspace-aware auth — several T10.4 seams already marked in the
+  auth code; needs T10.3 first), **T11.6** (UI smoke checklist),
+  **T12.3/T12.5** (client-suite conformance + CI matrix), and **Phases 13–14**
+  (scale benchmarks, memory/soak validation).
 - Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
   messages (serde text vs Python's "Invalid value … for parameter …"); #3
   HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
