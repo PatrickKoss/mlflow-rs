@@ -1073,6 +1073,16 @@ MLFLOW_CONVERT_MESSAGES_DICT_FOR_LANGCHAIN = _BooleanEnvironmentVariable(
 #: A boolean flag which enables additional functionality in Python tests for GO backend.
 _MLFLOW_GO_STORE_TESTING = _BooleanEnvironmentVariable("MLFLOW_GO_STORE_TESTING", False)
 
+#: A boolean flag which enables additional functionality in Python tests for the Rust
+#: backend (T12.2). Mirrors ``_MLFLOW_GO_STORE_TESTING``: it gates known, justified
+#: representational differences between the Rust server and the Python reference
+#: implementation (e.g. HTTP reason-phrase casing) at individual assertion sites. It is
+#: orthogonal to ``MLFLOW_SERVER_TYPE=rust`` (T12.1, in
+#: ``tests/tracking/integration_test_utils.py``), which only chooses which server binary
+#: a test launches; Go never had an equivalent launch switch, so this flag stays a pure
+#: deviation gate rather than being folded into the launcher switch.
+_MLFLOW_RUST_STORE_TESTING = _BooleanEnvironmentVariable("MLFLOW_RUST_STORE_TESTING", False)
+
 # Specifies whether the current environment is a serving environment.
 # This should only be used internally by MLflow to add some additional logic when running in a
 # serving environment.
