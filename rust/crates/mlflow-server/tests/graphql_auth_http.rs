@@ -14,8 +14,8 @@
 //! own binary (`graphql_auth_toggle_off_http.rs`) because the toggle is a
 //! process-global env var and would race the checks-on tests here.
 //!
-//! Every test in this binary runs with `MLFLOW_AUTH_DEFAULT_PERMISSION =
-//! NO_PERMISSIONS` (set once at binary scope, like
+//! Every test in this binary builds its `AuthStore` with `AuthConfig
+//! { default_permission: NO_PERMISSIONS, .. }` (T9.8; same pattern as
 //! `auth_middleware_no_default_http.rs`): the packaged default is `READ`, which
 //! would grant every non-admin read access to everything and make denial
 //! impossible. With `NO_PERMISSIONS` the floor, a non-admin sees only what an
@@ -44,9 +44,14 @@ const ALICE: (&str, &str) = ("alice_scrypt", "alice-password-123");
 // *not* a clean non-admin. Denial tests use freshly created users (via
 // `create_user`) with no grants and the NO_PERMISSIONS default floor.
 
-fn set_no_permission_default() {
-    // Safe: every test in this binary sets the identical value.
-    std::env::set_var("MLFLOW_AUTH_DEFAULT_PERMISSION", "NO_PERMISSIONS");
+/// T9.8: the permission floor comes from the parsed [`AuthConfig`] carried by
+/// the `AuthStore` (the env-var seam is retired), so each test server builds
+/// its store with `default_permission: NO_PERMISSIONS` directly.
+fn no_permission_config() -> mlflow_auth::AuthConfig {
+    mlflow_auth::AuthConfig {
+        default_permission: "NO_PERMISSIONS".to_string(),
+        ..mlflow_auth::AuthConfig::default()
+    }
 }
 
 fn auth_fixture_path() -> PathBuf {
@@ -109,8 +114,6 @@ struct TestServer {
 
 impl TestServer {
     async fn start(tag: &str) -> Self {
-        set_no_permission_default();
-
         let tracking_db = TempDb::new(&format!("{tag}_track"), &tracking_fixture_path());
         let db = Db::connect(&tracking_db.uri(), PoolConfig::default())
             .await
@@ -123,7 +126,7 @@ impl TestServer {
             AuthDb::connect_and_verify_with(&auth_db_file.uri(), None, PoolConfig::default())
                 .await
                 .expect("connect + verify auth fixture");
-        let auth = AuthStore::new(auth_db);
+        let auth = AuthStore::with_config(auth_db, no_permission_config());
 
         let state = AppState::with_registry(tracking.clone(), registry.clone(), true, None, None)
             .with_auth_store(auth.clone());

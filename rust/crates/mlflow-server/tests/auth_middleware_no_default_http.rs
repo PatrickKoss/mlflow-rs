@@ -3,12 +3,12 @@
 //! `fixtures/no_permission_auth.ini` config: the MV-create source-READ deny and
 //! the default-permission deny fallback.
 //!
-//! They live in their own test binary (separate process) so setting the
-//! process-global `MLFLOW_AUTH_DEFAULT_PERMISSION` env var can't race the
-//! default-`READ` tests in `auth_middleware_http.rs`. Within this binary every
-//! test wants the same value, so the concurrent `set_var` writes are idempotent.
-//! The `MLFLOW_AUTH_DEFAULT_PERMISSION` fallback itself is the T9.8 seam that
-//! the ini config layer will later replace.
+//! Since T9.8, `default_permission` is threaded through the parsed
+//! [`mlflow_auth::AuthConfig`] carried by the [`AuthStore`], so these tests
+//! build the store with `AuthConfig { default_permission: "NO_PERMISSIONS", .. }`
+//! instead of the retired `MLFLOW_AUTH_DEFAULT_PERMISSION` env var. That makes
+//! the config per-store rather than process-global, so no cross-test env race
+//! remains.
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ use hyper::{Method, Request, StatusCode};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use metrics_exporter_prometheus::PrometheusBuilder;
-use mlflow_auth::{AuthDb, AuthStore};
+use mlflow_auth::{AuthConfig, AuthDb, AuthStore};
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
 use serde_json::{json, Value};
@@ -28,9 +28,11 @@ use tokio::net::TcpListener;
 const ART_ROOT: &str = "s3://bucket/mlruns";
 const WS: &str = "default";
 
-fn set_no_permission_default() {
-    // Safe: every test in this binary sets the identical value.
-    std::env::set_var("MLFLOW_AUTH_DEFAULT_PERMISSION", "NO_PERMISSIONS");
+fn no_permission_config() -> AuthConfig {
+    AuthConfig {
+        default_permission: "NO_PERMISSIONS".to_string(),
+        ..AuthConfig::default()
+    }
 }
 
 fn auth_fixture_path() -> PathBuf {
@@ -92,7 +94,6 @@ struct TestServer {
 
 impl TestServer {
     async fn start(tag: &str) -> Self {
-        set_no_permission_default();
         let tracking_db = TempDb::new(&format!("{tag}_track"), &tracking_fixture_path());
         let db = Db::connect(&tracking_db.uri(), PoolConfig::default())
             .await
@@ -104,7 +105,7 @@ impl TestServer {
             AuthDb::connect_and_verify_with(&auth_db_file.uri(), None, PoolConfig::default())
                 .await
                 .expect("connect + verify auth fixture");
-        let auth = AuthStore::new(auth_db);
+        let auth = AuthStore::with_config(auth_db, no_permission_config());
 
         let state = AppState::new(tracking.clone()).with_auth_store(auth.clone());
         let config = ServerConfig {

@@ -22,11 +22,13 @@
 //! `NO_PERMISSIONS`). The request's `X-MLFLOW-WORKSPACE` header is carried
 //! through so the wiring is ready, but it always resolves to `"default"` here.
 //!
-//! ## default_permission (T9.8 seam)
+//! ## default_permission (T9.8)
 //!
-//! The ini-file config layer is T9.8. Until then, `default_permission` is read
-//! from the `MLFLOW_AUTH_DEFAULT_PERMISSION` env var, defaulting to `"READ"`
-//! (the packaged `basic_auth.ini` default). See [`default_permission`].
+//! `default_permission` comes from the parsed [`mlflow_auth::AuthConfig`] carried
+//! by the [`AuthStore`] (`AuthStore::config().default_permission`), which the
+//! same `basic_auth.ini` drives on both servers. The config validator rejects an
+//! unknown permission name at startup, so lookups here are infallible. See
+//! [`default_permission`].
 
 use mlflow_auth::permissions::{
     get_permission, max_permission, Permission, ALL_PERMISSIONS, NO_PERMISSIONS,
@@ -242,19 +244,18 @@ impl Validator {
 
 // ---- Permission resolution ----
 
-/// `default_permission` — T9.8 SEAM: reads `MLFLOW_AUTH_DEFAULT_PERMISSION`
-/// (default `"READ"`, the packaged `basic_auth.ini` value). The full ini-file
-/// config layer (`read_auth_config`) lands in T9.8.
-///
-/// Exposed `pub(crate)` so the GraphQL auth gate (T9.6) resolves the same
-/// default-permission floor without re-deriving it.
-pub(crate) fn default_permission() -> &'static Permission {
-    // T9.8 SEAM: replace this env fallback with `AuthConfig.default_permission`.
-    let name = std::env::var("MLFLOW_AUTH_DEFAULT_PERMISSION").unwrap_or_else(|_| "READ".into());
-    // An invalid value falls back to READ rather than panicking (defensive; the
-    // ini validator will reject bad values once T9.8 wires config).
+/// `default_permission` — the configured floor, read from the parsed
+/// [`mlflow_auth::AuthConfig`] on the given [`AuthStore`]
+/// (`AuthStore::config().default_permission`, T9.8). Store-based (not
+/// [`RequestCtx`]-based) so the GraphQL auth gate (T9.6) resolves the same
+/// floor through [`resolve_experiment_permission`] /
+/// [`resolve_registered_model_permission`]. The config validator guarantees
+/// the name is a known permission, so the lookup is defensively clamped to
+/// `READ` only in the never-taken invalid branch.
+fn default_permission(auth_store: &AuthStore) -> &'static Permission {
+    let name = auth_store.config().default_permission.as_str();
     if ALL_PERMISSIONS.iter().any(|p| p.name == name) {
-        get_permission(&name)
+        get_permission(name)
     } else {
         get_permission("READ")
     }
@@ -263,10 +264,11 @@ pub(crate) fn default_permission() -> &'static Permission {
 /// `_get_role_permission_or_default` (`__init__.py:556`): fold the role-derived
 /// permission against `default_permission`. `None` → default; `NO_PERMISSIONS`
 /// stays a deny; otherwise `max(role, default)`.
-///
-/// `pub(crate)` for reuse by the GraphQL auth gate (T9.6).
-pub(crate) fn fold_default(role_perm: Option<&'static Permission>) -> &'static Permission {
-    let default = default_permission();
+fn fold_default(
+    auth_store: &AuthStore,
+    role_perm: Option<&'static Permission>,
+) -> &'static Permission {
+    let default = default_permission(auth_store);
     match role_perm {
         None => default,
         Some(p) if p.name == NO_PERMISSIONS.name => p,
@@ -288,7 +290,7 @@ pub(crate) async fn resolve_experiment_permission(
     let role_perm = auth_store
         .get_role_permission_for_resource(user.id, "experiment", experiment_id, workspace)
         .await?;
-    Ok(fold_default(role_perm))
+    Ok(fold_default(auth_store, role_perm))
 }
 
 /// `_graphql_get_permission_for_model` (`__init__.py:4114`) on the
@@ -304,7 +306,7 @@ pub(crate) async fn resolve_registered_model_permission(
     let role_perm = auth_store
         .get_role_permission_for_resource(user.id, "registered_model", model_name, workspace)
         .await?;
-    Ok(fold_default(role_perm))
+    Ok(fold_default(auth_store, role_perm))
 }
 
 async fn experiment_permission(
@@ -614,7 +616,7 @@ async fn artifact_proxy_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permission
         }
     }
     // No experiment id resolved: workspaces-disabled → default_permission.
-    Ok(default_permission())
+    Ok(default_permission(ctx.auth_store))
 }
 
 async fn all_can_read_experiments(

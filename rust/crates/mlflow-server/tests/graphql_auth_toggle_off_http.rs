@@ -5,10 +5,10 @@
 //!
 //! This lives in its own binary (separate process) because the toggle is a
 //! process-global env var; keeping it here means it can't race the checks-on
-//! tests in `graphql_auth_http.rs`. We also set `MLFLOW_AUTH_DEFAULT_PERMISSION
-//! = NO_PERMISSIONS` to prove the toggle short-circuits *before* any
-//! permission lookup: even with the strictest default and no grant, the
-//! non-admin still sees the experiment.
+//! tests in `graphql_auth_http.rs`. The store is also built with `AuthConfig
+//! { default_permission: NO_PERMISSIONS, .. }` (T9.8) to prove the toggle
+//! short-circuits *before* any permission lookup: even with the strictest
+//! default and no grant, the non-admin still sees the experiment.
 
 use std::path::{Path, PathBuf};
 
@@ -29,9 +29,8 @@ const ART_ROOT: &str = "s3://bucket/mlruns";
 const WS: &str = "default";
 
 fn set_env() {
-    // Safe: every test in this binary sets the identical values.
+    // Safe: every test in this binary sets the identical value.
     std::env::set_var("MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH", "false");
-    std::env::set_var("MLFLOW_AUTH_DEFAULT_PERMISSION", "NO_PERMISSIONS");
 }
 
 fn auth_fixture_path() -> PathBuf {
@@ -106,7 +105,13 @@ impl TestServer {
             AuthDb::connect_and_verify_with(&auth_db_file.uri(), None, PoolConfig::default())
                 .await
                 .expect("connect + verify auth fixture");
-        let auth = AuthStore::new(auth_db);
+        let auth = AuthStore::with_config(
+            auth_db,
+            mlflow_auth::AuthConfig {
+                default_permission: "NO_PERMISSIONS".to_string(),
+                ..mlflow_auth::AuthConfig::default()
+            },
+        );
 
         let state = AppState::new(tracking.clone()).with_auth_store(auth.clone());
 

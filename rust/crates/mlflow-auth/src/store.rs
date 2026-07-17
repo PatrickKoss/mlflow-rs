@@ -21,24 +21,74 @@
 //! (`mlflow/utils/validation.py:824-833`): a non-empty username, and a password
 //! that is a string longer than 12 characters.
 
+use std::sync::Arc;
+
 use mlflow_error::MlflowError;
 
+use crate::config::AuthConfig;
+use crate::credential_cache::CredentialCache;
 use crate::db::AuthDb;
 use crate::dbutil::{DbExt, RowLike, Val};
 use crate::entities::{Role, RolePermission, User};
 use crate::hash::{check_password_hash, generate_password_hash};
 use crate::schema::{ROLES, ROLE_PERMISSIONS, USERS, USER_ROLE_ASSIGNMENTS};
+use crate::workspace_cache::ResourceWorkspaceCache;
 
-/// The auth store over a connected [`AuthDb`].
+/// The auth store over a connected [`AuthDb`], carrying the parsed
+/// [`AuthConfig`] (T9.8) plus the process-local credential and
+/// resource→workspace caches. The config + caches are `Arc`-shared so cloning
+/// `AuthStore` (once per request via `AppState`) stays cheap and every clone
+/// sees the same cache.
 #[derive(Debug, Clone)]
 pub struct AuthStore {
     db: AuthDb,
+    config: Arc<AuthConfig>,
+    /// Credential cache (`_USER_AUTH_CACHE`); disabled unless
+    /// `auth_cache_ttl_seconds > 0`.
+    credential_cache: Arc<CredentialCache>,
+    /// Resource→workspace cache (`_RESOURCE_WORKSPACE_CACHE`); consulted by the
+    /// T10.4 resolver (see [`AuthStore::workspace_cache`]).
+    workspace_cache: Arc<ResourceWorkspaceCache>,
 }
 
 impl AuthStore {
-    /// Build a store over an already-connected/verified [`AuthDb`].
+    /// Build a store over an already-connected/verified [`AuthDb`] with the
+    /// default (shipped `basic_auth.ini`) config — credential cache off, default
+    /// permission `READ`. Used by tests and callers that don't parse an ini.
     pub fn new(db: AuthDb) -> Self {
-        Self { db }
+        Self::with_config(db, AuthConfig::default())
+    }
+
+    /// Build a store with an explicit parsed [`AuthConfig`] (the production path
+    /// from `main.rs`). The credential cache is enabled iff
+    /// `auth_cache_ttl_seconds > 0`; the resource→workspace cache always exists
+    /// (its TTL/capacity come from the config) for the T10.4 resolver.
+    pub fn with_config(db: AuthDb, config: AuthConfig) -> Self {
+        let credential_cache =
+            CredentialCache::new(config.auth_cache_max_size, config.auth_cache_ttl_seconds);
+        let workspace_cache = ResourceWorkspaceCache::new(
+            config.workspace_cache_max_size,
+            config.workspace_cache_ttl_seconds,
+        );
+        Self {
+            db,
+            config: Arc::new(config),
+            credential_cache: Arc::new(credential_cache),
+            workspace_cache: Arc::new(workspace_cache),
+        }
+    }
+
+    /// The parsed auth config (`default_permission`, admin creds, cache config,
+    /// …). Threaded into the permission validators (T9.4) for `default_permission`.
+    pub fn config(&self) -> &AuthConfig {
+        &self.config
+    }
+
+    /// The resource→workspace TTL cache (`_RESOURCE_WORKSPACE_CACHE`). Nothing
+    /// consults it pre-T10.4 (the server resolves `"default"` directly); T10.4's
+    /// resolver plugs in here. See [`crate::workspace_cache`].
+    pub fn workspace_cache(&self) -> &ResourceWorkspaceCache {
+        &self.workspace_cache
     }
 
     /// The underlying auth database.
@@ -49,11 +99,48 @@ impl AuthStore {
     /// `authenticate_user` (`sqlalchemy_store.py:136-142`): `True` iff the user
     /// exists and the password verifies against its stored werkzeug hash. A
     /// missing user is `False`, not an error.
+    ///
+    /// This bypasses the credential cache (it does no hashing skip). The
+    /// middleware's hot path uses [`AuthStore::authenticate_and_get_user`],
+    /// which fronts the werkzeug comparison with the cache.
     pub async fn authenticate_user(&self, username: &str, password: &str) -> bool {
         match self.get_user(username).await {
             Ok(user) => check_password_hash(&user.password_hash, password),
             Err(_) => false,
         }
+    }
+
+    /// `_authenticate_cached` (`__init__.py:402-439`): verify the credential with
+    /// the credential cache in front of the werkzeug hash comparison, returning
+    /// the authenticated [`User`] (so the caller skips a second `get_user` query)
+    /// or `None` when the credential is invalid or the user vanished mid-check.
+    ///
+    /// On a cache hit the expensive scrypt/pbkdf2 comparison is skipped entirely;
+    /// on a miss (or when the cache is disabled) it runs the full check and, on
+    /// success, caches the resolved user.
+    pub async fn authenticate_and_get_user(&self, username: &str, password: &str) -> Option<User> {
+        if let Some(user) = self.credential_cache.get(username, password) {
+            return Some(user);
+        }
+        let user = self.get_user(username).await.ok()?;
+        if !check_password_hash(&user.password_hash, password) {
+            return None;
+        }
+        self.credential_cache
+            .insert(username, password, user.clone());
+        Some(user)
+    }
+
+    /// Whether the credential cache is enabled (`auth_cache_ttl_seconds > 0`).
+    /// Test/diagnostic helper.
+    pub fn credential_cache_enabled(&self) -> bool {
+        self.credential_cache.enabled()
+    }
+
+    /// Number of entries currently held in the credential cache
+    /// (test/diagnostic helper; `0` when disabled).
+    pub fn credential_cache_len(&self) -> usize {
+        self.credential_cache.len()
     }
 
     /// `create_user` (`sqlalchemy_store.py:144-158`): validate, hash the
@@ -184,6 +271,11 @@ impl AuthStore {
             self.db.writer().exec(&sql, &vals).await.map_err(internal)?;
         }
 
+        // `_invalidate_user_auth_cache` (`__init__.py:441`): a password or
+        // admin-flag change must take effect immediately on this worker rather
+        // than after the TTL.
+        self.credential_cache.invalidate_user(username);
+
         Ok(User {
             id: existing.id,
             username: existing.username,
@@ -239,6 +331,10 @@ impl AuthStore {
             .await
             .map_err(internal)?;
         tx.commit().await.map_err(internal)?;
+
+        // Drop any cached credential so the deletion is honoured immediately
+        // (`_invalidate_user_auth_cache`, `__init__.py:441`).
+        self.credential_cache.invalidate_user(username);
         Ok(())
     }
 

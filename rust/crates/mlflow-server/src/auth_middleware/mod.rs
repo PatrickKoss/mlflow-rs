@@ -178,29 +178,32 @@ pub async fn authorize(
         None => return next.run(req).await,
     };
 
-    // 2. Authenticate.
+    // 2. Authenticate. `authenticate_and_get_user` (`_authenticate_cached`,
+    //    `__init__.py:402`) fronts the werkzeug hash comparison with the
+    //    credential cache (off by default) and returns the resolved user, so the
+    //    admin-bypass check below reuses it instead of a second `get_user` query.
     let Some((username, password)) = basic_credentials(&req) else {
         return unauthenticated_response();
     };
-    if !auth_store.authenticate_user(&username, &password).await {
+    let Some(user) = auth_store
+        .authenticate_and_get_user(&username, &password)
+        .await
+    else {
         return unauthenticated_response();
-    }
-
-    // 3. Admin bypass (`sender_is_admin`). A store error here surfaces as the
-    //    matching HTTP status (`catch_mlflow_exception`). Whichever way it goes,
-    //    stamp the authenticated identity onto the request extensions first so a
-    //    downstream handler that runs its own in-band authorization (the
-    //    `/graphql` executor, T9.6) can read it — this mirrors Python, where the
-    //    graphene auth middleware re-derives username + `is_admin` per request.
-    let is_admin = match auth_store.get_user(&username).await {
-        Ok(user) => user.is_admin,
-        Err(e) => return error_response(&e),
     };
+
+    // 3. Admin bypass (`sender_is_admin`). Stamp the authenticated identity
+    //    onto the request extensions first so a downstream handler that runs
+    //    its own in-band authorization (the `/graphql` executor, T9.6) can read
+    //    it — this mirrors Python, where the graphene auth middleware
+    //    re-derives username + `is_admin` per request.
+    //    `authenticate_and_get_user` already resolved the user (T9.8's cached
+    //    `_authenticate_cached` path), so no second `get_user` query runs here.
     req.extensions_mut().insert(AuthContext {
         username: username.clone(),
-        is_admin,
+        is_admin: user.is_admin,
     });
-    if is_admin {
+    if user.is_admin {
         return next.run(req).await;
     }
 
