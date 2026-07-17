@@ -27,14 +27,24 @@
 //! `handlers.py:2829-2963`). [`source_validation`] ports these byte-for-byte —
 //! this is the path-traversal defense for the registry.
 //!
-//! ## Webhook seams (T8.4, owned by a parallel agent)
+//! ## Webhook event triggers (T8.4)
 //!
-//! Python fires webhook events from several registry mutations (registered
+//! Python fires webhook events from several registry mutations: registered
 //! model created; model version created; MV tag set/deleted; MV alias
-//! set/deleted; plus the `PROMPT_*` mirrors). Those trigger sites are marked
-//! with `// WEBHOOK SEAM:` comments below. This task deliberately does NOT wire
-//! webhook delivery — it is implemented independently — so no coupling is
-//! introduced here.
+//! set/deleted; plus the `PROMPT_*` mirrors selected by an `is_prompt`
+//! classification. Each mutation calls [`fire_event`] after the store call
+//! succeeds (post-commit, matching Python's ordering), building the exact
+//! `(entity, action, data)` payload in [`webhook_events`]. Delivery is
+//! fire-and-forget through [`WebhookDispatcher::fire`] and never errors, so no
+//! failure ever surfaces to the mutation response — mirroring Python's
+//! `deliver_webhook` top-level swallow. When the backend does not support
+//! webhooks ([`AppState::webhook_dispatcher`] is `None`) nothing is fired.
+//!
+//! Prompt classification is *instead of*, not in addition to (see
+//! [`webhook_events`]): RM/MV *create* classify from the request tags
+//! (`_is_prompt_request`), while the tag/alias mutations do a fresh
+//! post-mutation `get_registered_model` lookup (`_is_prompt(name)`) via
+//! [`is_prompt_model`].
 
 use axum::body::Bytes;
 use axum::extract::State;
@@ -51,8 +61,10 @@ use crate::state::AppState;
 use crate::workspace::Workspace;
 
 mod source_validation;
+mod webhook_events;
 
 use source_validation::validate_create_model_version_source;
+use webhook_events::Tag;
 
 /// Handler-level default for `search_registered_models` `max_results`
 /// (`SEARCH_REGISTERED_MODEL_MAX_RESULTS_DEFAULT`, applied via the proto
@@ -104,8 +116,20 @@ pub async fn create_registered_model(
         )
         .await?;
 
-    // WEBHOOK SEAM: Python fires REGISTERED_MODEL/CREATED (or PROMPT/CREATED
-    // when the request is a prompt) here (`handlers.py:2636-2661`). Wired by T8.4.
+    // Python fires REGISTERED_MODEL/CREATED (or PROMPT/CREATED when the request
+    // carries the `mlflow.prompt.is_prompt` tag) here (`handlers.py:2636-2661`).
+    // The payload uses the *request* tags/description (proto2 default `""`), not
+    // the stored entity.
+    let event_tags = request_tags(&req.tags);
+    fire_event(
+        &state,
+        webhook_events::registered_model_created(
+            name,
+            &event_tags,
+            req.description.as_deref().unwrap_or(""),
+        ),
+    )
+    .await;
 
     let resp = pb::create_registered_model::Response {
         registered_model: Some(to_proto_registered_model(model)),
@@ -294,7 +318,17 @@ pub async fn set_registered_model_tag(
         .set_registered_model_tag(workspace.name(), name, key, value)
         .await?;
 
-    // WEBHOOK SEAM: PROMPT_TAG/SET when the model is a prompt (`handlers.py:2787`).
+    // PROMPT_TAG/SET only when the model is a prompt (`handlers.py:2787`); a
+    // non-prompt RM tag set fires nothing. `_is_prompt(name)` re-reads the model
+    // post-mutation (same query, same timing as Python).
+    if let Some(pair) = webhook_events::registered_model_tag_set(
+        is_prompt_model(&state, &workspace, name).await,
+        name,
+        key,
+        value,
+    ) {
+        fire_event(&state, pair).await;
+    }
 
     proto_response(
         &pb::set_registered_model_tag::Response {},
@@ -319,7 +353,14 @@ pub async fn delete_registered_model_tag(
         .delete_registered_model_tag(workspace.name(), name, key)
         .await?;
 
-    // WEBHOOK SEAM: PROMPT_TAG/DELETED when the model is a prompt (`handlers.py:2815`).
+    // PROMPT_TAG/DELETED only when the model is a prompt (`handlers.py:2815`).
+    if let Some(pair) = webhook_events::registered_model_tag_deleted(
+        is_prompt_model(&state, &workspace, name).await,
+        name,
+        key,
+    ) {
+        fire_event(&state, pair).await;
+    }
 
     proto_response(
         &pb::delete_registered_model_tag::Response {},
@@ -393,8 +434,24 @@ pub async fn create_model_version(
     // `mlflow-registry` `store/model_versions.rs` module docs). The model
     // version is created identically; only the back-reference tag is not set.
 
-    // WEBHOOK SEAM: MODEL_VERSION/CREATED (or PROMPT_VERSION/CREATED for a
-    // prompt) here (`handlers.py:2984-3017`). Wired by T8.4.
+    // Python fires MODEL_VERSION/CREATED (or PROMPT_VERSION/CREATED when the
+    // request carries `mlflow.prompt.is_prompt`) here (`handlers.py:2984-3017`).
+    // The payload uses the request `source`/`run_id`/tags and the *stored*
+    // version number (`str(model_version.version)`); the prompt variant pops
+    // `mlflow.prompt.text` into `template`.
+    let event_tags = request_tags(&req.tags);
+    fire_event(
+        &state,
+        webhook_events::model_version_created(
+            name,
+            &version.version,
+            source,
+            run_id,
+            &event_tags,
+            req.description.as_deref(),
+        ),
+    )
+    .await;
 
     let resp = pb::create_model_version::Response {
         model_version: Some(to_proto_model_version(version)),
@@ -591,8 +648,20 @@ pub async fn set_model_version_tag(
         .set_model_version_tag(workspace.name(), name, version, key, value)
         .await?;
 
-    // WEBHOOK SEAM: MODEL_VERSION_TAG/SET (or PROMPT_VERSION_TAG/SET) here
-    // (`handlers.py:3193-3216`). Wired by T8.4.
+    // MODEL_VERSION_TAG/SET, or PROMPT_VERSION_TAG/SET when the model is a prompt
+    // (`handlers.py:3193-3216`). Always fires (unlike RM tags). Classification is
+    // a post-mutation `_is_prompt(name)` lookup.
+    fire_event(
+        &state,
+        webhook_events::model_version_tag_set(
+            is_prompt_model(&state, &workspace, name).await,
+            name,
+            version,
+            key,
+            value,
+        ),
+    )
+    .await;
 
     proto_response(
         &pb::set_model_version_tag::Response {},
@@ -618,8 +687,18 @@ pub async fn delete_model_version_tag(
         .delete_model_version_tag(workspace.name(), name, version, key)
         .await?;
 
-    // WEBHOOK SEAM: MODEL_VERSION_TAG/DELETED (or PROMPT_VERSION_TAG/DELETED)
-    // here (`handlers.py:3239-3260`). Wired by T8.4.
+    // MODEL_VERSION_TAG/DELETED, or PROMPT_VERSION_TAG/DELETED when the model is
+    // a prompt (`handlers.py:3239-3260`).
+    fire_event(
+        &state,
+        webhook_events::model_version_tag_deleted(
+            is_prompt_model(&state, &workspace, name).await,
+            name,
+            version,
+            key,
+        ),
+    )
+    .await;
 
     proto_response(
         &pb::delete_model_version_tag::Response {},
@@ -650,8 +729,18 @@ pub async fn set_registered_model_alias(
         .set_registered_model_alias(workspace.name(), name, alias, version)
         .await?;
 
-    // WEBHOOK SEAM: MODEL_VERSION_ALIAS/CREATED (or PROMPT_ALIAS/CREATED) here
-    // (`handlers.py:3283-3304`). Wired by T8.4.
+    // MODEL_VERSION_ALIAS/CREATED, or PROMPT_ALIAS/CREATED when the model is a
+    // prompt (`handlers.py:3283-3304`).
+    fire_event(
+        &state,
+        webhook_events::registered_model_alias_set(
+            is_prompt_model(&state, &workspace, name).await,
+            name,
+            alias,
+            version,
+        ),
+    )
+    .await;
 
     proto_response(
         &pb::set_registered_model_alias::Response {},
@@ -677,8 +766,17 @@ pub async fn delete_registered_model_alias(
         .delete_registered_model_alias(workspace.name(), name, alias)
         .await?;
 
-    // WEBHOOK SEAM: MODEL_VERSION_ALIAS/DELETED (or PROMPT_ALIAS/DELETED) here
-    // (`handlers.py:3322-3341`). Wired by T8.4.
+    // MODEL_VERSION_ALIAS/DELETED, or PROMPT_ALIAS/DELETED when the model is a
+    // prompt (`handlers.py:3322-3341`).
+    fire_event(
+        &state,
+        webhook_events::registered_model_alias_deleted(
+            is_prompt_model(&state, &workspace, name).await,
+            name,
+            alias,
+        ),
+    )
+    .await;
 
     proto_response(
         &pb::delete_registered_model_alias::Response {},
@@ -713,6 +811,86 @@ pub async fn get_model_version_by_alias(
 // ===========================================================================
 // Helpers
 // ===========================================================================
+
+/// Fire a webhook event through the dispatcher, if this server is configured
+/// with one. Fire-and-forget: [`WebhookDispatcher::fire`] returns immediately
+/// after enqueuing and never errors (delivery failures are logged + swallowed,
+/// matching Python's `deliver_webhook`). A `None` dispatcher (webhooks
+/// unsupported by the backend) is a silent no-op.
+async fn fire_event(
+    state: &AppState,
+    event_and_data: (mlflow_webhooks::WebhookEvent, serde_json::Value),
+) {
+    if let Some(dispatcher) = state.webhook_dispatcher() {
+        let (event, data) = event_and_data;
+        dispatcher.fire(event, data).await;
+    }
+}
+
+/// `_is_prompt(name)` (`handlers.py:3026`): re-read the registered model and
+/// check its stored `mlflow.prompt.is_prompt` tag (defaulting to `"false"`,
+/// case-insensitive `"true"`). Performed post-mutation, the same query and
+/// timing Python uses at each tag/alias trigger site.
+///
+/// A lookup failure is treated as "not a prompt" so classification never blocks
+/// the (already-committed) mutation response — Python would raise, but the
+/// mutation has succeeded and the webhook is a best-effort side effect; skipping
+/// it is strictly safer than surfacing a 500 after a successful write. This only
+/// arises if the model vanished between the mutation and the lookup.
+async fn is_prompt_model(state: &AppState, workspace: &Workspace, name: &str) -> bool {
+    let Ok(store) = state.registry_store() else {
+        return false;
+    };
+    match store.get_registered_model(workspace.name(), name).await {
+        Ok(model) => {
+            let value = model
+                .tags
+                .iter()
+                .find(|t| t.key == webhook_events::IS_PROMPT_TAG_KEY)
+                .and_then(|t| t.value.as_deref());
+            webhook_events::is_prompt_tag_true(value)
+        }
+        Err(_) => false,
+    }
+}
+
+/// A request tag proto carrying an optional key/value — implemented by both
+/// `RegisteredModelTag` (create-RM) and `ModelVersionTag` (create-MV), so
+/// [`request_tags`] serves both create handlers.
+trait RequestTag {
+    fn key_str(&self) -> &str;
+    fn value_str(&self) -> &str;
+}
+
+impl RequestTag for pb::RegisteredModelTag {
+    fn key_str(&self) -> &str {
+        self.key.as_deref().unwrap_or("")
+    }
+    fn value_str(&self) -> &str {
+        self.value.as_deref().unwrap_or("")
+    }
+}
+
+impl RequestTag for pb::ModelVersionTag {
+    fn key_str(&self) -> &str {
+        self.key.as_deref().unwrap_or("")
+    }
+    fn value_str(&self) -> &str {
+        self.value.as_deref().unwrap_or("")
+    }
+}
+
+/// Borrow the request's repeated tags as `(key, value)` pairs for the webhook
+/// payload builders, mirroring Python's `{t.key: t.value for t in tags}` (an
+/// absent proto value is the empty string, the proto2 scalar default).
+fn request_tags<T: RequestTag>(tags: &[T]) -> Vec<Tag<'_>> {
+    tags.iter()
+        .map(|t| Tag {
+            key: t.key_str(),
+            value: t.value_str(),
+        })
+        .collect()
+}
 
 /// Enforce a required, non-empty string field, matching `_assert_required`
 /// (absent OR empty string is "missing") and its verbatim error message.
