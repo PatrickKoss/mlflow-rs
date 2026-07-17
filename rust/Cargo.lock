@@ -1714,6 +1714,7 @@ dependencies = [
  "mlflow-error",
  "mlflow-search",
  "mlflow-store",
+ "mlflow-test-support",
  "serde",
  "serde_json",
  "sqlx",
@@ -1776,12 +1777,22 @@ dependencies = [
  "log",
  "mlflow-error",
  "mlflow-search",
+ "mlflow-test-support",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "mlflow-test-support"
+version = "0.1.0"
+dependencies = [
+ "mlflow-registry",
+ "mlflow-store",
+ "sqlx",
 ]
 
 [[package]]

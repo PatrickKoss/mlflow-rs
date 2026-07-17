@@ -1,60 +1,19 @@
 //! Behavioral integration tests for datasets / inputs / outputs and bulk metric
 //! history (plan T2.7 + T2.8), ported from the Python store suites.
 //!
-//! Each test copies the checked-in SQLite fixture into a temp file, so the
-//! committed fixture is never mutated (same pattern as `tracking_store.rs`).
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
-use std::path::{Path, PathBuf};
-
-use mlflow_store::{
-    DatasetInputSpec, Db, LoggedModelOutput, MetricInput, PoolConfig, TrackingStore,
-};
+use mlflow_store::{DatasetInputSpec, LoggedModelOutput, MetricInput, TrackingStore};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_datasets_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 fn uuid_like() -> String {
@@ -99,7 +58,7 @@ fn ds(name: &str, digest: &str) -> DatasetInputSpec {
 
 #[tokio::test]
 async fn log_inputs_and_get_run_assembly() {
-    let tmp = TempDb::new("inputs");
+    let tmp = TempDb::new("inputs").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -131,7 +90,7 @@ async fn log_inputs_and_get_run_assembly() {
 
 #[tokio::test]
 async fn log_inputs_dedup_within_call_by_name_digest() {
-    let tmp = TempDb::new("dedupcall");
+    let tmp = TempDb::new("dedupcall").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -156,7 +115,7 @@ async fn log_inputs_dedup_within_call_by_name_digest() {
 
 #[tokio::test]
 async fn dataset_dedup_across_runs_reuses_uuid() {
-    let tmp = TempDb::new("dedupruns");
+    let tmp = TempDb::new("dedupruns").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let r1 = new_run_in(&s, &exp).await;
@@ -201,7 +160,7 @@ async fn dataset_dedup_across_runs_reuses_uuid() {
 
 #[tokio::test]
 async fn log_inputs_idempotent_edge() {
-    let tmp = TempDb::new("idempotent");
+    let tmp = TempDb::new("idempotent").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -225,7 +184,7 @@ async fn log_inputs_idempotent_edge() {
 
 #[tokio::test]
 async fn model_inputs_and_outputs_roundtrip() {
-    let tmp = TempDb::new("modelio");
+    let tmp = TempDb::new("modelio").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -278,7 +237,7 @@ async fn model_inputs_and_outputs_roundtrip() {
 
 #[tokio::test]
 async fn model_input_upsert_is_idempotent() {
-    let tmp = TempDb::new("modelupsert");
+    let tmp = TempDb::new("modelupsert").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -297,7 +256,7 @@ async fn model_input_upsert_is_idempotent() {
 
 #[tokio::test]
 async fn search_datasets_context_and_distinct() {
-    let tmp = TempDb::new("searchds");
+    let tmp = TempDb::new("searchds").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -321,7 +280,7 @@ async fn search_datasets_context_and_distinct() {
 
 #[tokio::test]
 async fn search_datasets_scopes_to_workspace() {
-    let tmp = TempDb::new("searchws");
+    let tmp = TempDb::new("searchws").await;
     let s = store(&tmp).await;
     // Experiment lives in ws-a; searching from ws-b must return nothing.
     let exp = s
@@ -362,7 +321,7 @@ fn m(key: &str, value: f64, timestamp: i64, step: i64) -> MetricInput {
 
 #[tokio::test]
 async fn get_metric_history_bulk_ordering_and_cap() {
-    let tmp = TempDb::new("bulk");
+    let tmp = TempDb::new("bulk").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let r_a = new_run_in(&s, &exp).await;
@@ -413,7 +372,7 @@ async fn get_metric_history_bulk_ordering_and_cap() {
 
 #[tokio::test]
 async fn get_metric_history_bulk_filters_workspace() {
-    let tmp = TempDb::new("bulkws");
+    let tmp = TempDb::new("bulkws").await;
     let s = store(&tmp).await;
     let exp = s
         .create_experiment("ws-a", &format!("e{}", uuid_like()), None, &[])
@@ -445,7 +404,7 @@ async fn get_metric_history_bulk_filters_workspace() {
 
 #[tokio::test]
 async fn get_metric_history_bulk_interval_small_history_returns_all() {
-    let tmp = TempDb::new("intervalsmall");
+    let tmp = TempDb::new("intervalsmall").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;
@@ -466,7 +425,7 @@ async fn get_metric_history_bulk_interval_small_history_returns_all() {
 
 #[tokio::test]
 async fn get_metric_history_bulk_interval_empty_history() {
-    let tmp = TempDb::new("intervalempty");
+    let tmp = TempDb::new("intervalempty").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let rid = new_run_in(&s, &exp).await;

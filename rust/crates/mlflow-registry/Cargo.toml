@@ -34,6 +34,9 @@ base64 = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 mlflow-store = { workspace = true }
+# Shared `TempDb` fixture (plan T2.2): dialect-dispatches integration tests
+# between the checked-in SQLite fixture and a live Postgres/MySQL database.
+mlflow-test-support = { workspace = true }
 # The registry-search differential corpus (`tests/search_corpus.rs`) reads
 # `cases.json` produced by `rust/tools/gen_registry_search_corpus.py`.
 serde = { workspace = true }

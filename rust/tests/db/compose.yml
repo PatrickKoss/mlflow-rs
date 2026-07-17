@@ -1,0 +1,63 @@
+# Local Postgres/MySQL matrix for the Rust store/registry test suites (plan
+# T2.2). CI (`.github/workflows/rust.yml`, job `dialect-matrix`) runs the same
+# two images as native GitHub Actions service containers rather than this
+# compose file directly, but the images/credentials/ports below are kept in
+# sync with the CI job so `MLFLOW_RUST_TEST_PG_URI` / `MLFLOW_RUST_TEST_MYSQL_URI`
+# mean the same thing in both places.
+#
+# Usage (from the repo root):
+#
+#   docker compose -f rust/tests/db/compose.yml up -d --wait
+#
+#   # One-time schema provisioning: Rust never migrates (mlflow-store::db), so
+#   # point the real Python/Alembic migrator at each fresh database first.
+#   uv run --extra db mlflow db upgrade postgresql://mlflow:mlflow@localhost:55432/mlflow
+#   uv run --extra db mlflow db upgrade "mysql+pymysql://mlflow:mlflow@localhost:53306/mlflow?charset=utf8mb4"
+#
+#   export MLFLOW_RUST_TEST_PG_URI=postgresql://mlflow:mlflow@localhost:55432/mlflow
+#   export MLFLOW_RUST_TEST_MYSQL_URI="mysql://mlflow:mlflow@localhost:53306/mlflow?charset=utf8mb4"
+#
+#   MLFLOW_RUST_TEST_DIALECT=postgres cargo test --workspace -- --test-threads=1
+#   MLFLOW_RUST_TEST_DIALECT=mysql cargo test --workspace -- --test-threads=1
+#
+#   docker compose -f rust/tests/db/compose.yml down --volumes
+#
+# `--test-threads=1` is required on the live dialects: `mlflow-test-support`'s
+# `TempDb` truncates the whole shared schema on every call, so concurrent
+# tests would race each other's data (see its module docs). The SQLite path
+# (the default, no env vars set) has no such restriction and keeps running
+# fully parallel.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mlflow
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: mlflow
+      MYSQL_USER: mlflow
+      MYSQL_PASSWORD: mlflow
+      MYSQL_ROOT_PASSWORD: root
+    # Matches tests/db/compose.yml's existing mysql service: functions used by
+    # some MLflow migrations require binlog trust for function creators.
+    command: --log-bin-trust-function-creators=1
+    ports:
+      - "53306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u mlflow -pmlflow"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

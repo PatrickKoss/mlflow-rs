@@ -10,6 +10,7 @@ members = [
   "crates/mlflow-search",
   "crates/mlflow-artifacts",
   "crates/mlflow-webhooks",
+  "crates/mlflow-test-support",
 ]
 # `spikes/` is a standalone project (its own Cargo.toml, not a workspace member).
 exclude = ["spikes"]
@@ -37,6 +38,7 @@ mlflow-auth = { path = "crates/mlflow-auth" }
 mlflow-search = { path = "crates/mlflow-search" }
 mlflow-artifacts = { path = "crates/mlflow-artifacts" }
 mlflow-webhooks = { path = "crates/mlflow-webhooks" }
+mlflow-test-support = { path = "crates/mlflow-test-support" }
 
 # Async runtime / HTTP
 tokio = { version = "1.52", features = ["full"] }

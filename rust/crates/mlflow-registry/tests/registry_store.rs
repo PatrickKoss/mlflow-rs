@@ -3,69 +3,25 @@
 //! (`tests/store/model_registry/test_sqlalchemy_store.py` and
 //! `test_sqlalchemy_workspace_store.py`).
 //!
-//! Each test copies the checked-in SQLite fixture (a real Alembic-migrated DB
-//! at head `b7e4c1a90f23`, shared with `mlflow-store`) into a temp file, so the
-//! committed fixture is never mutated. The registry tables live in the same
-//! migrated DB as the tracking tables.
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2). The registry tables live in the same migrated DB as
+//! the tracking tables.
 //!
-//! Live Postgres/MySQL runs are gated behind `MLFLOW_RUST_TEST_PG_URI` /
-//! `MLFLOW_RUST_TEST_MYSQL_URI` (see `registry_store_live.rs`), mirroring how
-//! `mlflow-store` gates its dialect matrix (plan §6 item 8).
-
-use std::path::{Path, PathBuf};
+//! `registry_store_live.rs` additionally covers a couple of
+//! dialect-sensitive behaviors (rename cascade, `ROW_NUMBER` window) as a
+//! standalone smoke against `MLFLOW_RUST_TEST_PG_URI` /
+//! `MLFLOW_RUST_TEST_MYSQL_URI` directly.
 
 use mlflow_error::ErrorCode;
 use mlflow_registry::RegistryStore;
-use mlflow_store::{Db, PoolConfig};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 
-fn fixture_path() -> PathBuf {
-    // Reuse the tracking-store fixture (registry tables are in the same DB).
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("mlflow-store")
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-/// Copy the fixture to a unique temp file; the guard removes it on drop.
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_registrystore_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> RegistryStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    RegistryStore::new(db)
+    RegistryStore::new(temp.connect().await)
 }
 
 fn tags_map(tags: &[mlflow_registry::RegisteredModelTag]) -> Vec<(String, String)> {
@@ -83,7 +39,7 @@ fn tags_map(tags: &[mlflow_registry::RegisteredModelTag]) -> Vec<(String, String
 
 #[tokio::test]
 async fn create_registered_model_defaults_and_timestamps() {
-    let tmp = TempDb::new("create_rm");
+    let tmp = TempDb::new("create_rm").await;
     let s = store(&tmp).await;
     let rm = s
         .create_registered_model(WS, "model_1", &[], None)
@@ -99,7 +55,7 @@ async fn create_registered_model_defaults_and_timestamps() {
 
 #[tokio::test]
 async fn create_registered_model_with_tags_and_description() {
-    let tmp = TempDb::new("create_rm_tags");
+    let tmp = TempDb::new("create_rm_tags").await;
     let s = store(&tmp).await;
     let rm = s
         .create_registered_model(
@@ -125,7 +81,7 @@ async fn create_registered_model_with_tags_and_description() {
 
 #[tokio::test]
 async fn create_duplicate_name_conflicts() {
-    let tmp = TempDb::new("create_dup");
+    let tmp = TempDb::new("create_dup").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "dupe", &[], None)
         .await
@@ -140,7 +96,7 @@ async fn create_duplicate_name_conflicts() {
 
 #[tokio::test]
 async fn create_empty_name_is_missing_value() {
-    let tmp = TempDb::new("create_empty");
+    let tmp = TempDb::new("create_empty").await;
     let s = store(&tmp).await;
     let err = s
         .create_registered_model(WS, "", &[], None)
@@ -156,7 +112,7 @@ async fn create_empty_name_is_missing_value() {
 
 #[tokio::test]
 async fn get_missing_model_errors() {
-    let tmp = TempDb::new("get_missing");
+    let tmp = TempDb::new("get_missing").await;
     let s = store(&tmp).await;
     let err = s.get_registered_model(WS, "nope").await.unwrap_err();
     assert_eq!(err.error_code, ErrorCode::ResourceDoesNotExist);
@@ -165,7 +121,7 @@ async fn get_missing_model_errors() {
 
 #[tokio::test]
 async fn update_registered_model_description() {
-    let tmp = TempDb::new("update_rm");
+    let tmp = TempDb::new("update_rm").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "model_for_update_RM", &[], None)
         .await
@@ -184,7 +140,7 @@ async fn update_registered_model_description() {
 
 #[tokio::test]
 async fn delete_registered_model_cascades_and_errors_after() {
-    let tmp = TempDb::new("delete_rm");
+    let tmp = TempDb::new("delete_rm").await;
     let s = store(&tmp).await;
     let name = "model_for_delete_RM";
     s.create_registered_model(WS, name, &[], None)
@@ -224,7 +180,7 @@ async fn delete_registered_model_cascades_and_errors_after() {
 
 #[tokio::test]
 async fn rename_cascades_to_versions_tags_aliases() {
-    let tmp = TempDb::new("rename_rm");
+    let tmp = TempDb::new("rename_rm").await;
     let s = store(&tmp).await;
     let original = "original name";
     let new_name = "new name";
@@ -278,7 +234,7 @@ async fn rename_cascades_to_versions_tags_aliases() {
 
 #[tokio::test]
 async fn rename_to_existing_name_conflicts() {
-    let tmp = TempDb::new("rename_conflict");
+    let tmp = TempDb::new("rename_conflict").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "new name", &[], None)
         .await
@@ -301,7 +257,7 @@ async fn rename_to_existing_name_conflicts() {
 
 #[tokio::test]
 async fn rename_empty_new_name_is_missing_value() {
-    let tmp = TempDb::new("rename_empty");
+    let tmp = TempDb::new("rename_empty").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "m", &[], None).await.unwrap();
     let err = s.rename_registered_model(WS, "m", "").await.unwrap_err();
@@ -332,7 +288,7 @@ fn latest_by_stage(mvs: &[mlflow_registry::ModelVersion]) -> Vec<(String, String
 
 #[tokio::test]
 async fn get_latest_versions_default_stage_none() {
-    let tmp = TempDb::new("latest_none");
+    let tmp = TempDb::new("latest_none").await;
     let s = store(&tmp).await;
     let name = "test_for_latest_versions";
     s.create_registered_model(WS, name, &[], None)
@@ -368,7 +324,7 @@ async fn get_latest_versions_default_stage_none() {
 
 #[tokio::test]
 async fn get_latest_versions_highest_per_stage() {
-    let tmp = TempDb::new("latest_multi");
+    let tmp = TempDb::new("latest_multi").await;
     let s = store(&tmp).await;
     let name = "multi";
     s.create_registered_model(WS, name, &[], None)
@@ -415,7 +371,7 @@ async fn get_latest_versions_highest_per_stage() {
 
 #[tokio::test]
 async fn set_and_overwrite_registered_model_tag() {
-    let tmp = TempDb::new("set_rm_tag");
+    let tmp = TempDb::new("set_rm_tag").await;
     let s = store(&tmp).await;
     let name = "SetRegisteredModelTag_TestMod";
     s.create_registered_model(WS, name, &[("key", "value")], None)
@@ -447,7 +403,7 @@ async fn set_and_overwrite_registered_model_tag() {
 
 #[tokio::test]
 async fn set_registered_model_tag_value_too_long() {
-    let tmp = TempDb::new("set_rm_tag_long");
+    let tmp = TempDb::new("set_rm_tag_long").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "m", &[], None).await.unwrap();
     let long = "a".repeat(100_001);
@@ -469,7 +425,7 @@ async fn set_registered_model_tag_value_too_long() {
 
 #[tokio::test]
 async fn delete_registered_model_tag_and_missing_noop() {
-    let tmp = TempDb::new("del_rm_tag");
+    let tmp = TempDb::new("del_rm_tag").await;
     let s = store(&tmp).await;
     let name = "DeleteRegisteredModelTag_TestMod";
     s.create_registered_model(
@@ -530,7 +486,7 @@ async fn setup_aliases(s: &RegistryStore) -> &'static str {
 
 #[tokio::test]
 async fn set_and_read_alias() {
-    let tmp = TempDb::new("set_alias");
+    let tmp = TempDb::new("set_alias").await;
     let s = store(&tmp).await;
     let name = setup_aliases(&s).await;
     let rm = s.get_registered_model(WS, name).await.unwrap();
@@ -550,7 +506,7 @@ async fn set_and_read_alias() {
 
 #[tokio::test]
 async fn alias_overwrite_repoints_version() {
-    let tmp = TempDb::new("alias_overwrite");
+    let tmp = TempDb::new("alias_overwrite").await;
     let s = store(&tmp).await;
     let name = setup_aliases(&s).await;
     // Repoint the existing alias to version 1.
@@ -564,7 +520,7 @@ async fn alias_overwrite_repoints_version() {
 
 #[tokio::test]
 async fn set_alias_on_missing_version_errors() {
-    let tmp = TempDb::new("alias_missing_ver");
+    let tmp = TempDb::new("alias_missing_ver").await;
     let s = store(&tmp).await;
     let name = "am";
     s.create_registered_model(WS, name, &[], None)
@@ -583,7 +539,7 @@ async fn set_alias_on_missing_version_errors() {
 
 #[tokio::test]
 async fn reserved_alias_names_rejected() {
-    let tmp = TempDb::new("alias_reserved");
+    let tmp = TempDb::new("alias_reserved").await;
     let s = store(&tmp).await;
     let name = setup_aliases(&s).await;
     for (alias, frag) in [
@@ -604,7 +560,7 @@ async fn reserved_alias_names_rejected() {
 
 #[tokio::test]
 async fn delete_alias_and_missing_noop() {
-    let tmp = TempDb::new("del_alias");
+    let tmp = TempDb::new("del_alias").await;
     let s = store(&tmp).await;
     let name = setup_aliases(&s).await;
     s.delete_registered_model_alias(WS, name, "test_alias")
@@ -626,7 +582,7 @@ async fn delete_alias_and_missing_noop() {
 
 #[tokio::test]
 async fn get_model_version_by_alias_and_not_found() {
-    let tmp = TempDb::new("get_by_alias");
+    let tmp = TempDb::new("get_by_alias").await;
     let s = store(&tmp).await;
     let name = setup_aliases(&s).await;
     let mv = s
@@ -646,7 +602,7 @@ async fn get_model_version_by_alias_and_not_found() {
 
 #[tokio::test]
 async fn get_model_version_by_latest_alias() {
-    let tmp = TempDb::new("get_latest_alias");
+    let tmp = TempDb::new("get_latest_alias").await;
     let s = store(&tmp).await;
     let name = "latest_model";
     s.create_registered_model(WS, name, &[], None)
@@ -669,7 +625,7 @@ async fn get_model_version_by_latest_alias() {
 
 #[tokio::test]
 async fn download_uri_returns_source() {
-    let tmp = TempDb::new("dl_uri");
+    let tmp = TempDb::new("dl_uri").await;
     let s = store(&tmp).await;
     let name = "dl";
     s.create_registered_model(WS, name, &[], None)
@@ -691,7 +647,7 @@ async fn download_uri_returns_source() {
 
 #[tokio::test]
 async fn create_model_version_fields_and_autoincrement() {
-    let tmp = TempDb::new("create_mv");
+    let tmp = TempDb::new("create_mv").await;
     let s = store(&tmp).await;
     let name = "test_for_update_MV";
     s.create_registered_model(WS, name, &[], None)
@@ -772,7 +728,7 @@ async fn create_model_version_fields_and_autoincrement() {
 async fn create_model_version_resolves_models_source() {
     // A `models:/name/version` source resolves storage_location to the
     // referenced version's download URI, while `source` stays verbatim.
-    let tmp = TempDb::new("create_mv_models_src");
+    let tmp = TempDb::new("create_mv_models_src").await;
     let s = store(&tmp).await;
     let src_name = "src_model";
     s.create_registered_model(WS, src_name, &[], None)
@@ -804,7 +760,7 @@ async fn create_model_version_resolves_models_source() {
 
 #[tokio::test]
 async fn create_model_version_runs_source_stored_verbatim() {
-    let tmp = TempDb::new("create_mv_runs_src");
+    let tmp = TempDb::new("create_mv_runs_src").await;
     let s = store(&tmp).await;
     let name = "runs_model";
     s.create_registered_model(WS, name, &[], None)
@@ -829,7 +785,7 @@ async fn create_model_version_runs_source_stored_verbatim() {
 
 #[tokio::test]
 async fn update_model_version_description() {
-    let tmp = TempDb::new("update_mv");
+    let tmp = TempDb::new("update_mv").await;
     let s = store(&tmp).await;
     let name = "test_for_update_MV";
     s.create_registered_model(WS, name, &[], None)
@@ -863,7 +819,7 @@ fn stage_of(s_mv: &mlflow_registry::ModelVersion) -> String {
 
 #[tokio::test]
 async fn transition_stage_case_insensitive_and_invalid() {
-    let tmp = TempDb::new("transition_basic");
+    let tmp = TempDb::new("transition_basic").await;
     let s = store(&tmp).await;
     let name = "model";
     s.create_registered_model(WS, name, &[], None)
@@ -906,7 +862,7 @@ async fn transition_stage_case_insensitive_and_invalid() {
 
 #[tokio::test]
 async fn transition_stage_archive_existing_false() {
-    let tmp = TempDb::new("transition_no_archive");
+    let tmp = TempDb::new("transition_no_archive").await;
     let s = store(&tmp).await;
     let name = "model";
     s.create_registered_model(WS, name, &[], None)
@@ -960,7 +916,7 @@ async fn transition_stage_archive_existing_false() {
 
 #[tokio::test]
 async fn transition_stage_archive_existing_true() {
-    let tmp = TempDb::new("transition_archive");
+    let tmp = TempDb::new("transition_archive").await;
     let s = store(&tmp).await;
     let name = "model";
     s.create_registered_model(WS, name, &[], None)
@@ -1023,7 +979,7 @@ async fn transition_stage_archive_existing_true() {
 
 #[tokio::test]
 async fn delete_model_version_soft_delete_and_errors() {
-    let tmp = TempDb::new("delete_mv");
+    let tmp = TempDb::new("delete_mv").await;
     let s = store(&tmp).await;
     let name = "test_for_delete_MV";
     s.create_registered_model(WS, name, &[], None)
@@ -1055,7 +1011,7 @@ async fn delete_model_version_soft_delete_and_errors() {
 
 #[tokio::test]
 async fn delete_model_version_redaction() {
-    let tmp = TempDb::new("delete_mv_redact");
+    let tmp = TempDb::new("delete_mv_redact").await;
     let s = store(&tmp).await;
     let name = "test_for_delete_MV_redaction";
     s.create_registered_model(WS, name, &[], None)
@@ -1089,7 +1045,7 @@ async fn delete_model_version_redaction() {
 
 #[tokio::test]
 async fn delete_model_version_removes_alias() {
-    let tmp = TempDb::new("delete_mv_alias");
+    let tmp = TempDb::new("delete_mv_alias").await;
     let s = store(&tmp).await;
     let name = "alias_del_model";
     s.create_registered_model(WS, name, &[], None)
@@ -1120,7 +1076,7 @@ async fn delete_model_version_removes_alias() {
 
 #[tokio::test]
 async fn deleted_version_excluded_from_latest() {
-    let tmp = TempDb::new("deleted_excl_latest");
+    let tmp = TempDb::new("deleted_excl_latest").await;
     let s = store(&tmp).await;
     let name = "excl_model";
     s.create_registered_model(WS, name, &[], None)
@@ -1146,7 +1102,7 @@ async fn deleted_version_excluded_from_latest() {
 
 #[tokio::test]
 async fn download_uri_unchanged_after_update_and_transition() {
-    let tmp = TempDb::new("dl_uri_stable");
+    let tmp = TempDb::new("dl_uri_stable").await;
     let s = store(&tmp).await;
     let name = "test_for_update_MV";
     let src = "path/to/source";

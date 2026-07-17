@@ -2,62 +2,23 @@
 //! finalize state machine, tags/params, `search_logged_models` (filters,
 //! dataset-scoped ordering, pagination), and workspace isolation.
 //!
-//! Same fixture pattern as `tracking_store.rs`/`datasets_store.rs`: each test
-//! copies the checked-in, alembic-migrated SQLite fixture into a temp file.
-
-use std::path::{Path, PathBuf};
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 use mlflow_store::{
-    DatasetFilter, Db, LoggedModelKv, LoggedModelMetricInput, LoggedModelOrderByInput,
-    LoggedModelStatus, MetricInput, PoolConfig, TrackingStore,
+    DatasetFilter, LoggedModelKv, LoggedModelMetricInput, LoggedModelOrderByInput,
+    LoggedModelStatus, MetricInput, TrackingStore,
 };
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const WS2: &str = "team-b";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_logged_models_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 fn uuid_like() -> String {
@@ -134,7 +95,7 @@ fn metric_ds(
 
 #[tokio::test]
 async fn create_get_logged_model_defaults() {
-    let tmp = TempDb::new("create");
+    let tmp = TempDb::new("create").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -165,7 +126,7 @@ async fn create_get_logged_model_defaults() {
 
 #[tokio::test]
 async fn create_logged_model_explicit_name_source_run_params_tags() {
-    let tmp = TempDb::new("create2");
+    let tmp = TempDb::new("create2").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -196,7 +157,7 @@ async fn create_logged_model_explicit_name_source_run_params_tags() {
 
 #[tokio::test]
 async fn create_logged_model_invalid_name_rejected() {
-    let tmp = TempDb::new("badname");
+    let tmp = TempDb::new("badname").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -211,7 +172,7 @@ async fn create_logged_model_invalid_name_rejected() {
 
 #[tokio::test]
 async fn create_logged_model_requires_active_experiment() {
-    let tmp = TempDb::new("inactive_exp");
+    let tmp = TempDb::new("inactive_exp").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     s.delete_experiment(WS, &exp).await.unwrap();
@@ -225,7 +186,7 @@ async fn create_logged_model_requires_active_experiment() {
 
 #[tokio::test]
 async fn create_logged_model_missing_experiment() {
-    let tmp = TempDb::new("missing_exp");
+    let tmp = TempDb::new("missing_exp").await;
     let s = store(&tmp).await;
 
     let err = s
@@ -237,7 +198,7 @@ async fn create_logged_model_missing_experiment() {
 
 #[tokio::test]
 async fn get_logged_model_not_found() {
-    let tmp = TempDb::new("get_missing");
+    let tmp = TempDb::new("get_missing").await;
     let s = store(&tmp).await;
     let err = s
         .get_logged_model(WS, "m-doesnotexist", false)
@@ -251,7 +212,7 @@ async fn get_logged_model_not_found() {
 
 #[tokio::test]
 async fn delete_logged_model_then_get_excludes_by_default() {
-    let tmp = TempDb::new("delete");
+    let tmp = TempDb::new("delete").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -274,7 +235,7 @@ async fn delete_logged_model_then_get_excludes_by_default() {
 
 #[tokio::test]
 async fn delete_logged_model_missing() {
-    let tmp = TempDb::new("delete_missing");
+    let tmp = TempDb::new("delete_missing").await;
     let s = store(&tmp).await;
     let err = s.delete_logged_model(WS, "m-nope").await.unwrap_err();
     assert!(err.message.contains("not found"));
@@ -286,7 +247,7 @@ async fn delete_logged_model_missing() {
 
 #[tokio::test]
 async fn finalize_sets_status_and_updates_timestamp_no_state_guard() {
-    let tmp = TempDb::new("finalize");
+    let tmp = TempDb::new("finalize").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -319,7 +280,7 @@ async fn finalize_sets_status_and_updates_timestamp_no_state_guard() {
 
 #[tokio::test]
 async fn finalize_unknown_model_not_found() {
-    let tmp = TempDb::new("finalize_missing");
+    let tmp = TempDb::new("finalize_missing").await;
     let s = store(&tmp).await;
     let err = s
         .finalize_logged_model(WS, "m-nope", LoggedModelStatus::Ready)
@@ -334,7 +295,7 @@ async fn finalize_unknown_model_not_found() {
 
 #[tokio::test]
 async fn set_and_delete_logged_model_tags() {
-    let tmp = TempDb::new("tags");
+    let tmp = TempDb::new("tags").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -378,7 +339,7 @@ async fn set_and_delete_logged_model_tags() {
 
 #[tokio::test]
 async fn delete_logged_model_tag_missing_key_errors() {
-    let tmp = TempDb::new("tag_missing");
+    let tmp = TempDb::new("tag_missing").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -401,7 +362,7 @@ async fn delete_logged_model_tag_missing_key_errors() {
 
 #[tokio::test]
 async fn log_logged_model_params_appends() {
-    let tmp = TempDb::new("params");
+    let tmp = TempDb::new("params").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -424,7 +385,7 @@ async fn log_logged_model_params_appends() {
 
 #[tokio::test]
 async fn log_logged_model_params_missing_model() {
-    let tmp = TempDb::new("params_missing");
+    let tmp = TempDb::new("params_missing").await;
     let s = store(&tmp).await;
     let err = s
         .log_logged_model_params(WS, "m-nope", &[kv("a", "1")])
@@ -435,7 +396,7 @@ async fn log_logged_model_params_missing_model() {
 
 #[tokio::test]
 async fn invalid_param_and_tag_are_rejected() {
-    let tmp = TempDb::new("invalid_kv");
+    let tmp = TempDb::new("invalid_kv").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let model = s
@@ -477,7 +438,7 @@ async fn search_ids(
 
 #[tokio::test]
 async fn search_by_attribute_filter() {
-    let tmp = TempDb::new("search_attr");
+    let tmp = TempDb::new("search_attr").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -496,7 +457,7 @@ async fn search_by_attribute_filter() {
 
 #[tokio::test]
 async fn search_by_param_and_tag_filter() {
-    let tmp = TempDb::new("search_param_tag");
+    let tmp = TempDb::new("search_param_tag").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -540,7 +501,7 @@ async fn search_by_param_and_tag_filter() {
 
 #[tokio::test]
 async fn search_by_metric_filter() {
-    let tmp = TempDb::new("search_metric");
+    let tmp = TempDb::new("search_metric").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -586,7 +547,7 @@ async fn search_by_metric_filter() {
 
 #[tokio::test]
 async fn search_filter_error_messages_match_python() {
-    let tmp = TempDb::new("search_errors");
+    let tmp = TempDb::new("search_errors").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -625,7 +586,7 @@ async fn search_filter_error_messages_match_python() {
 
 #[tokio::test]
 async fn search_datasets_clause_requires_dataset_name() {
-    let tmp = TempDb::new("search_dataset_required");
+    let tmp = TempDb::new("search_dataset_required").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -652,7 +613,7 @@ async fn search_datasets_clause_requires_dataset_name() {
 
 #[tokio::test]
 async fn search_datasets_clause_without_metric_filter_requires_any_metric_on_dataset() {
-    let tmp = TempDb::new("search_dataset_any_metric");
+    let tmp = TempDb::new("search_dataset_any_metric").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -711,7 +672,7 @@ async fn search_datasets_clause_without_metric_filter_requires_any_metric_on_dat
 
 #[tokio::test]
 async fn dataset_scoped_metric_ordering() {
-    let tmp = TempDb::new("order_dataset_scoped");
+    let tmp = TempDb::new("order_dataset_scoped").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -799,7 +760,7 @@ async fn dataset_scoped_metric_ordering() {
 
 #[tokio::test]
 async fn order_by_creation_timestamp_default_desc() {
-    let tmp = TempDb::new("order_default");
+    let tmp = TempDb::new("order_default").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -827,7 +788,7 @@ async fn order_by_creation_timestamp_default_desc() {
 
 #[tokio::test]
 async fn pagination_full_walk_no_duplicates_no_gaps() {
-    let tmp = TempDb::new("pagination");
+    let tmp = TempDb::new("pagination").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
 
@@ -871,7 +832,7 @@ async fn pagination_full_walk_no_duplicates_no_gaps() {
 
 #[tokio::test]
 async fn pagination_token_validates_matching_request() {
-    let tmp = TempDb::new("pagination_token_validate");
+    let tmp = TempDb::new("pagination_token_validate").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     for _ in 0..3 {
@@ -939,7 +900,7 @@ async fn pagination_token_validates_matching_request() {
 
 #[tokio::test]
 async fn search_default_max_results_is_100() {
-    let tmp = TempDb::new("default_max_results");
+    let tmp = TempDb::new("default_max_results").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     for _ in 0..5 {
@@ -961,7 +922,7 @@ async fn search_default_max_results_is_100() {
 
 #[tokio::test]
 async fn logged_model_operations_are_workspace_scoped() {
-    let tmp = TempDb::new("workspace");
+    let tmp = TempDb::new("workspace").await;
     let s = store(&tmp).await;
 
     let exp_a = new_experiment_ws(&s, WS).await;
@@ -1000,7 +961,7 @@ async fn logged_model_operations_are_workspace_scoped() {
 
 #[tokio::test]
 async fn search_logged_models_no_leakage_across_workspaces() {
-    let tmp = TempDb::new("workspace_search");
+    let tmp = TempDb::new("workspace_search").await;
     let s = store(&tmp).await;
 
     let exp_a = new_experiment_ws(&s, WS).await;
@@ -1079,7 +1040,7 @@ fn model_metrics_of<'a>(
 
 #[tokio::test]
 async fn log_logged_model_metrics_single_and_batch() {
-    let tmp = TempDb::new("model_metrics_single_batch");
+    let tmp = TempDb::new("model_metrics_single_batch").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1125,7 +1086,7 @@ async fn log_logged_model_metrics_single_and_batch() {
 
 #[tokio::test]
 async fn log_logged_model_metrics_duplicates_within_batch_are_deduped() {
-    let tmp = TempDb::new("model_metrics_batch_dedup");
+    let tmp = TempDb::new("model_metrics_batch_dedup").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1161,7 +1122,7 @@ async fn log_logged_model_metrics_duplicates_within_batch_are_deduped() {
 
 #[tokio::test]
 async fn log_logged_model_metrics_conflict_with_existing_row_is_idempotent() {
-    let tmp = TempDb::new("model_metrics_conflict_existing");
+    let tmp = TempDb::new("model_metrics_conflict_existing").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1203,7 +1164,7 @@ async fn log_logged_model_metrics_conflict_with_existing_row_is_idempotent() {
 
 #[tokio::test]
 async fn log_logged_model_metrics_nan_and_inf_are_sanitized() {
-    let tmp = TempDb::new("model_metrics_nan_inf");
+    let tmp = TempDb::new("model_metrics_nan_inf").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1245,7 +1206,7 @@ async fn log_logged_model_metrics_nan_and_inf_are_sanitized() {
 
 #[tokio::test]
 async fn log_logged_model_metrics_missing_model_errors() {
-    let tmp = TempDb::new("model_metrics_missing_model");
+    let tmp = TempDb::new("model_metrics_missing_model").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1269,7 +1230,7 @@ async fn log_logged_model_metrics_missing_model_errors() {
 
 #[tokio::test]
 async fn log_logged_model_metrics_workspace_scoped_model_lookup() {
-    let tmp = TempDb::new("model_metrics_workspace");
+    let tmp = TempDb::new("model_metrics_workspace").await;
     let s = store(&tmp).await;
     let exp_a = new_experiment_ws(&s, WS).await;
     let run_a = new_run_in_ws(&s, WS, &exp_a).await;
@@ -1318,7 +1279,7 @@ async fn log_logged_model_metrics_workspace_scoped_model_lookup() {
 
 #[tokio::test]
 async fn log_batch_with_mixed_run_and_model_metrics() {
-    let tmp = TempDb::new("log_batch_mixed");
+    let tmp = TempDb::new("log_batch_mixed").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1374,7 +1335,7 @@ async fn log_batch_with_metrics_for_two_different_models_in_one_call() {
     // model_id must both be written — model_id is part of the dedup identity
     // (mirrors Python's `Metric.__eq__`, which includes model_id), so this
     // must not collapse to a single row.
-    let tmp = TempDb::new("log_batch_two_models_same_point");
+    let tmp = TempDb::new("log_batch_two_models_same_point").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1408,7 +1369,7 @@ async fn log_batch_with_metrics_for_two_different_models_in_one_call() {
 
 #[tokio::test]
 async fn log_batch_model_metrics_dataset_scoped_visible_in_search_ordering() {
-    let tmp = TempDb::new("log_batch_model_metrics_search");
+    let tmp = TempDb::new("log_batch_model_metrics_search").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1452,7 +1413,7 @@ async fn log_batch_model_metrics_dataset_scoped_visible_in_search_ordering() {
 
 #[tokio::test]
 async fn log_metric_single_with_model_id_writes_both_tables() {
-    let tmp = TempDb::new("log_metric_model_id");
+    let tmp = TempDb::new("log_metric_model_id").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;
@@ -1486,7 +1447,7 @@ async fn log_metric_single_with_model_id_writes_both_tables() {
 
 #[tokio::test]
 async fn log_metric_missing_model_id_errors_and_writes_nothing() {
-    let tmp = TempDb::new("log_metric_missing_model");
+    let tmp = TempDb::new("log_metric_missing_model").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let run_id = new_run_in(&s, &exp).await;

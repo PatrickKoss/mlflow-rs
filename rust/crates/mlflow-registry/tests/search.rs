@@ -5,62 +5,23 @@
 //! max_results-threshold validation, the `_is_querying_prompt` bypass edge
 //! cases, the N+1 pagination boundary + token round-trip, deleted-MV
 //! invisibility, MV-search-omits-aliases, order-by tiebreaks, and empty `IN`.
-
-use std::path::{Path, PathBuf};
+//!
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 use mlflow_error::ErrorCode;
 use mlflow_registry::RegistryStore;
-use mlflow_store::{Db, PoolConfig};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const WS_A: &str = "team-a";
 const WS_B: &str = "team-b";
 const IS_PROMPT: &str = "mlflow.prompt.is_prompt";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("mlflow-store")
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_registrysearch_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> RegistryStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    RegistryStore::new(db)
+    RegistryStore::new(temp.connect().await)
 }
 
 async fn rm_names(
@@ -100,7 +61,7 @@ async fn mv_ids(
 
 #[tokio::test]
 async fn search_is_workspace_scoped() {
-    let tmp = TempDb::new("ws_scope");
+    let tmp = TempDb::new("ws_scope").await;
     let s = store(&tmp).await;
 
     s.create_registered_model(WS_A, "alpha", &[("t", "a")], None)
@@ -142,7 +103,7 @@ async fn search_is_workspace_scoped() {
 
 #[tokio::test]
 async fn rm_max_results_threshold_enforced() {
-    let tmp = TempDb::new("rm_thresh");
+    let tmp = TempDb::new("rm_thresh").await;
     let s = store(&tmp).await;
     let err = s
         .search_registered_models(WS, None, 1001, &[], None)
@@ -158,7 +119,7 @@ async fn rm_max_results_threshold_enforced() {
 
 #[tokio::test]
 async fn mv_max_results_validation() {
-    let tmp = TempDb::new("mv_thresh");
+    let tmp = TempDb::new("mv_thresh").await;
     let s = store(&tmp).await;
     // Non-positive rejected.
     let err = s
@@ -185,7 +146,7 @@ async fn mv_max_results_validation() {
 
 #[tokio::test]
 async fn prompt_exclusion_and_bypass_semantics() {
-    let tmp = TempDb::new("prompt");
+    let tmp = TempDb::new("prompt").await;
     let s = store(&tmp).await;
 
     // Two normal models (no prompt tag) + two prompts (is_prompt='true').
@@ -260,7 +221,7 @@ async fn prompt_exclusion_and_bypass_semantics() {
 
 #[tokio::test]
 async fn mv_prompt_tag_is_on_version_table_not_model() {
-    let tmp = TempDb::new("mv_prompt");
+    let tmp = TempDb::new("mv_prompt").await;
     let s = store(&tmp).await;
 
     // A registered model tagged as a prompt, whose VERSION has no prompt tag.
@@ -300,7 +261,7 @@ async fn mv_prompt_tag_is_on_version_table_not_model() {
 
 #[tokio::test]
 async fn and_of_tags_requires_every_key() {
-    let tmp = TempDb::new("and_tags");
+    let tmp = TempDb::new("and_tags").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "a", &[("x", "1"), ("y", "2")], None)
         .await
@@ -330,7 +291,7 @@ async fn and_of_tags_requires_every_key() {
 
 #[tokio::test]
 async fn mv_run_id_in_and_source_alias() {
-    let tmp = TempDb::new("mv_attr");
+    let tmp = TempDb::new("mv_attr").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "m", &[], None).await.unwrap();
     s.create_model_version(WS, "m", "s3://a/1", Some("run_a"), &[], None, None)
@@ -374,7 +335,7 @@ async fn mv_run_id_in_and_source_alias() {
 
 #[tokio::test]
 async fn deleted_versions_invisible() {
-    let tmp = TempDb::new("mv_deleted");
+    let tmp = TempDb::new("mv_deleted").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "m", &[], None).await.unwrap();
     s.create_model_version(WS, "m", "src1", None, &[], None, None)
@@ -395,7 +356,7 @@ async fn deleted_versions_invisible() {
 
 #[tokio::test]
 async fn mv_search_does_not_populate_aliases() {
-    let tmp = TempDb::new("mv_alias");
+    let tmp = TempDb::new("mv_alias").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "m", &[], None).await.unwrap();
     s.create_model_version(WS, "m", "src", None, &[], None, None)
@@ -428,7 +389,7 @@ async fn mv_search_does_not_populate_aliases() {
 
 #[tokio::test]
 async fn rm_order_by_name_and_tiebreak() {
-    let tmp = TempDb::new("rm_order");
+    let tmp = TempDb::new("rm_order").await;
     let s = store(&tmp).await;
     for n in ["c", "a", "b"] {
         s.create_registered_model(WS, n, &[], None).await.unwrap();
@@ -450,7 +411,7 @@ async fn rm_order_by_name_and_tiebreak() {
 
 #[tokio::test]
 async fn mv_order_by_name_then_version_tiebreak() {
-    let tmp = TempDb::new("mv_order");
+    let tmp = TempDb::new("mv_order").await;
     let s = store(&tmp).await;
     s.create_registered_model(WS, "a", &[], None).await.unwrap();
     s.create_registered_model(WS, "b", &[], None).await.unwrap();
@@ -491,7 +452,7 @@ async fn mv_order_by_name_then_version_tiebreak() {
 
 #[tokio::test]
 async fn pagination_boundary_and_token_round_trip() {
-    let tmp = TempDb::new("paging");
+    let tmp = TempDb::new("paging").await;
     let s = store(&tmp).await;
     for n in ["a", "b", "c", "d", "e"] {
         s.create_registered_model(WS, n, &[], None).await.unwrap();
@@ -557,7 +518,7 @@ async fn pagination_boundary_and_token_round_trip() {
 
 #[tokio::test]
 async fn invalid_attribute_and_comparator_rejected() {
-    let tmp = TempDb::new("invalid");
+    let tmp = TempDb::new("invalid").await;
     let s = store(&tmp).await;
 
     // RM: only `name` is a valid attribute — an unknown one is rejected by the

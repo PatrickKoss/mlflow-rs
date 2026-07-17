@@ -532,7 +532,10 @@ impl TrackingStore {
                     Val::Text(model_id.to_string()),
                     Val::Text(workspace.to_string()),
                 ],
-                |r| r.get_i64("one"),
+                // `SELECT 1 AS one` is a bare integer literal, which Postgres
+                // types as `INT4`; `get_int` widens, `get_i64` does not (plan
+                // T2.2 dialect bug).
+                |r| r.get_int("one"),
             )
             .await
             .map_err(internal)?;
@@ -1023,7 +1026,10 @@ impl LoggedModelRow {
             artifact_location: r.get_string("artifact_location")?,
             creation_timestamp_ms: r.get_i64("creation_timestamp_ms")?,
             last_updated_timestamp_ms: r.get_i64("last_updated_timestamp_ms")?,
-            status: r.get_i64("status")?,
+            // `status` is an SQLAlchemy `Integer` column (`Integer`, not
+            // `BigInteger`) -> `INT4` on Postgres, so it needs `get_int`'s
+            // widening rather than `get_i64` (plan T2.2 dialect bug).
+            status: r.get_int("status")?,
             model_type: r.get_opt_string("model_type")?,
             source_run_id: r.get_opt_string("source_run_id")?,
             status_message: r.get_opt_string("status_message")?,

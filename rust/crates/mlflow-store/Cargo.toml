@@ -43,6 +43,9 @@ base64 = { workspace = true }
 tokio = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 mlflow-error = { workspace = true }
+# Shared `TempDb` fixture (plan T2.2): dialect-dispatches integration tests
+# between the checked-in SQLite fixture and a live Postgres/MySQL database.
+mlflow-test-support = { workspace = true }
 # Used by tests/sampling_corpus.rs to read the Python-generated differential
 # corpus (query cases + expected sampled outputs).
 serde = { workspace = true }
