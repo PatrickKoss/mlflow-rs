@@ -119,6 +119,12 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # T11.4: the React build, served directly by nginx (see nginx.conf's
+      # `/` and `/static-files/*` locations). Populate this with `yarn build`
+      # (see README.md "Building the UI"); if the dir doesn't exist yet, the
+      # bind mount comes up as an empty directory and nginx's `try_files`
+      # fallback proxies to Python instead, so the stack still comes up.
+      - ../../mlflow/server/js/build:/usr/share/mlflow-ui:ro
 
 volumes:
   artifacts:
