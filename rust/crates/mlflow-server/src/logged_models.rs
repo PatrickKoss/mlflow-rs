@@ -67,7 +67,12 @@ pub async fn create_logged_model(
             workspace.name(),
             experiment_id,
             req.name.as_deref().filter(|s| !s.is_empty()),
-            req.source_run_id.as_deref().filter(|s| !s.is_empty()),
+            // Python passes `request_message.source_run_id` verbatim
+            // (`handlers.py:5257`) — proto2 defaults an absent field to `""`,
+            // which the store persists and every read emits back as
+            // `source_run_id: ""` (found by the T12.4 harness). Filtering it
+            // to NULL diverged both the wire shape and the DB bytes.
+            Some(req.source_run_id.as_deref().unwrap_or("")),
             &tags,
             &params,
             req.model_type.as_deref().filter(|s| !s.is_empty()),

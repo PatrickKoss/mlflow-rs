@@ -71,8 +71,15 @@ pub async fn create_run(
         )
         .await?;
 
+    // Python's `create_run` returns `Run(run.info, run.data,
+    // RunInputs(dataset_inputs=...))` with NO outputs argument
+    // (`sqlalchemy_store.py:979`), so `Run.to_proto`'s `if self.outputs:`
+    // omits the field on the create response — unlike `get_run`, which always
+    // attaches a (possibly empty) `RunOutputs`. Found by the T12.4 harness.
+    let mut run_proto = to_proto_run(run);
+    run_proto.outputs = None;
     let resp = pb::create_run::Response {
-        run: Some(to_proto_run(run)),
+        run: Some(run_proto),
     };
     proto_response(&resp, "mlflow.CreateRun.Response")
 }

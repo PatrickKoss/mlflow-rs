@@ -72,7 +72,7 @@ pub async fn get_metric_history(
     }
     let page_token = req.page_token.as_deref().filter(|s| !s.is_empty());
 
-    let (metrics, next_page_token) = state
+    let result = state
         .tracking_store()
         .get_metric_history(
             workspace.name(),
@@ -81,7 +81,26 @@ pub async fn get_metric_history(
             max_results.map(|v| v as usize),
             page_token,
         )
-        .await?;
+        .await;
+
+    // Python's `_validate_run_accessible` is a NO-OP on the single-tenant
+    // store (`sqlalchemy_store.py:787` — "the database will raise appropriate
+    // errors ... or empty query results"), so a nonexistent run yields 200
+    // with an empty history; only the workspace-aware subclass raises 404
+    // (`sqlalchemy_workspace_store.py:349`). The Rust store always validates
+    // (its run lookup doubles as workspace isolation — the metrics table has
+    // no workspace column), so mirror the single-tenant no-op here by
+    // degrading the run-not-found error to the empty page when workspaces are
+    // disabled. Found by the T12.4 harness.
+    let (metrics, next_page_token) = match result {
+        Err(e)
+            if state.workspace_store().is_none()
+                && e.error_code == ErrorCode::ResourceDoesNotExist =>
+        {
+            (Vec::new(), None)
+        }
+        other => other?,
+    };
 
     let resp = pb::get_metric_history::Response {
         metrics: metrics.into_iter().map(to_proto_metric).collect(),

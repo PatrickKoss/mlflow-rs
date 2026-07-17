@@ -958,7 +958,11 @@ pub(crate) fn to_proto_registered_model(model: RegisteredModel) -> pb::Registere
         creation_timestamp: model.creation_timestamp,
         last_updated_timestamp: model.last_updated_timestamp,
         user_id: None,
-        description: Some(model.description.unwrap_or_default()),
+        // Python's `RegisteredModel.to_proto` sets description only when
+        // truthy (`registered_model.py:166`), so both NULL and `""` are
+        // omitted from the wire (found by the T12.4 harness). ModelVersion
+        // deliberately differs — its `to_proto` emits unconditionally.
+        description: model.description.filter(|d| !d.is_empty()),
         latest_versions: model
             .latest_versions
             .into_iter()
