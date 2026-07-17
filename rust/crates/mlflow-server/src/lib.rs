@@ -28,6 +28,7 @@ pub mod proto_http;
 pub mod registry;
 pub mod routes;
 pub mod runs;
+pub mod security;
 pub mod server_info;
 pub mod state;
 pub mod trace_artifact;
@@ -127,7 +128,7 @@ pub fn build_app_with_recorder(
         None => api,
     };
 
-    match signup_state {
+    let app = match signup_state {
         // Registered via `.route()` (not `.merge()` of a fresh router): merging
         // would replace the app's fallback with the new router's default one,
         // dropping the T9.4 auth layer that wraps the fallback and provides the
@@ -146,7 +147,26 @@ pub fn build_app_with_recorder(
                 .with_state(state),
         ),
         None => app,
-    }
+    };
+
+    // Security middleware (plan T11.2) is applied *last* so it is the outermost
+    // tower layer — it runs before every other layer (auth included) and
+    // covers every route, including the `/signup` route above and the
+    // fail-closed 404/403 fallbacks. This mirrors Python, where
+    // `security.init_security_middleware(app)` registers its `before_request`
+    // hooks on the base tracking app *before* the auth app's `_before_request`:
+    // a disallowed Host is rejected with a 403 before authentication runs (no
+    // 401 challenge). Uses `.layer()` on the composed router (not `.merge()`),
+    // preserving the T9.4 fallback-wrapping lesson.
+    let security_config = security::SecurityConfig::from_parts(
+        config.allowed_hosts.clone(),
+        config.cors_allowed_origins.clone(),
+        &config.x_frame_options,
+    );
+    app.layer(middleware::from_fn_with_state(
+        security_config,
+        security::security_middleware,
+    ))
 }
 
 /// Build a `Router` of the implemented proto-backed endpoints, registered on
@@ -515,6 +535,14 @@ mod tests {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            // These ops/routing unit tests issue raw axum requests without a
+            // `Host` header (real HTTP clients always send one). Disable host
+            // validation with a `*` allowlist so they exercise routing, not the
+            // security layer — the security behavior itself is covered by the
+            // `security` unit tests and `tests/security_http.rs`.
+            allowed_hosts: Some(vec!["*".to_string()]),
+            cors_allowed_origins: None,
+            x_frame_options: security::DEFAULT_X_FRAME_OPTIONS.to_string(),
         }
     }
 

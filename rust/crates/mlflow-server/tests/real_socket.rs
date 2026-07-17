@@ -24,6 +24,9 @@ async fn serves_health_over_real_socket_and_shuts_down_gracefully() {
         default_artifact_root: None,
         serve_artifacts: true,
         artifacts_destination: None,
+        allowed_hosts: None,
+        cors_allowed_origins: None,
+        x_frame_options: "SAMEORIGIN".to_string(),
     };
     let app = build_app(&config);
 

@@ -113,6 +113,9 @@ impl TestServer {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_destination: None,
+            allowed_hosts: None,
+            cors_allowed_origins: None,
+            x_frame_options: "SAMEORIGIN".to_string(),
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
         let app = build_app_with_recorder(&config, recorder, Some(state));
