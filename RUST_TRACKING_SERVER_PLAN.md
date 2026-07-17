@@ -1,9 +1,9 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
 Status: **in progress — Phases 2, 3, 4, 5, 6, 7, 8 complete; Phase 9 complete
-except T9.9 (admin UI validation); Phase 10 T10.1/T10.2 done (T10.3 in flight);
-Phase 11 T11.2/T11.3/T11.4/T11.5 done (T11.1 in flight); Phase 12 T12.1/T12.2
-done, T12.4 harness landed (not yet green).** · Branch:
+except T9.9 (admin UI validation); Phase 10 T10.1/T10.2/T10.3 done (T10.4
+next); Phase 11 T11.1/T11.2/T11.3/T11.4/T11.5 done; Phase 12 T12.1/T12.2 done,
+T12.4 harness landed (not yet green).** · Branch:
 `feature/rust-tracking-server` · Last updated: 2026-07-17
 
 **Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
