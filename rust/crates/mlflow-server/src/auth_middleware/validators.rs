@@ -22,11 +22,13 @@
 //! `NO_PERMISSIONS`). The request's `X-MLFLOW-WORKSPACE` header is carried
 //! through so the wiring is ready, but it always resolves to `"default"` here.
 //!
-//! ## default_permission (T9.8 seam)
+//! ## default_permission (T9.8)
 //!
-//! The ini-file config layer is T9.8. Until then, `default_permission` is read
-//! from the `MLFLOW_AUTH_DEFAULT_PERMISSION` env var, defaulting to `"READ"`
-//! (the packaged `basic_auth.ini` default). See [`default_permission`].
+//! `default_permission` comes from the parsed [`mlflow_auth::AuthConfig`] carried
+//! by the [`AuthStore`] (`AuthStore::config().default_permission`), which the
+//! same `basic_auth.ini` drives on both servers. The config validator rejects an
+//! unknown permission name at startup, so lookups here are infallible. See
+//! [`default_permission`].
 
 use mlflow_auth::permissions::{
     get_permission, max_permission, Permission, ALL_PERMISSIONS, NO_PERMISSIONS,
@@ -242,16 +244,15 @@ impl Validator {
 
 // ---- Permission resolution ----
 
-/// `default_permission` — T9.8 SEAM: reads `MLFLOW_AUTH_DEFAULT_PERMISSION`
-/// (default `"READ"`, the packaged `basic_auth.ini` value). The full ini-file
-/// config layer (`read_auth_config`) lands in T9.8.
-fn default_permission() -> &'static Permission {
-    // T9.8 SEAM: replace this env fallback with `AuthConfig.default_permission`.
-    let name = std::env::var("MLFLOW_AUTH_DEFAULT_PERMISSION").unwrap_or_else(|_| "READ".into());
-    // An invalid value falls back to READ rather than panicking (defensive; the
-    // ini validator will reject bad values once T9.8 wires config).
+/// `default_permission` — the configured floor, read from the parsed
+/// [`mlflow_auth::AuthConfig`] on the request's [`AuthStore`]
+/// (`AuthStore::config().default_permission`). The config validator guarantees
+/// the name is a known permission, so the lookup is defensively clamped to
+/// `READ` only in the never-taken invalid branch.
+fn default_permission(ctx: &RequestCtx<'_>) -> &'static Permission {
+    let name = ctx.auth_store.config().default_permission.as_str();
     if ALL_PERMISSIONS.iter().any(|p| p.name == name) {
-        get_permission(&name)
+        get_permission(name)
     } else {
         get_permission("READ")
     }
@@ -260,8 +261,11 @@ fn default_permission() -> &'static Permission {
 /// `_get_role_permission_or_default` (`__init__.py:556`): fold the role-derived
 /// permission against `default_permission`. `None` → default; `NO_PERMISSIONS`
 /// stays a deny; otherwise `max(role, default)`.
-fn fold_default(role_perm: Option<&'static Permission>) -> &'static Permission {
-    let default = default_permission();
+fn fold_default(
+    ctx: &RequestCtx<'_>,
+    role_perm: Option<&'static Permission>,
+) -> &'static Permission {
+    let default = default_permission(ctx);
     match role_perm {
         None => default,
         Some(p) if p.name == NO_PERMISSIONS.name => p,
@@ -280,7 +284,7 @@ async fn experiment_permission(
         .auth_store
         .get_role_permission_for_resource(user.id, "experiment", experiment_id, ctx.workspace)
         .await?;
-    Ok(fold_default(role_perm))
+    Ok(fold_default(ctx, role_perm))
 }
 
 async fn experiment_perm_from_id_param(
@@ -340,7 +344,7 @@ async fn registered_model_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permissi
         .auth_store
         .get_role_permission_for_resource(user.id, "registered_model", &name, ctx.workspace)
         .await?;
-    Ok(fold_default(role_perm))
+    Ok(fold_default(ctx, role_perm))
 }
 
 /// `validate_can_create_model_version` (`__init__.py:1188`): require UPDATE on
@@ -588,7 +592,7 @@ async fn artifact_proxy_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permission
         }
     }
     // No experiment id resolved: workspaces-disabled → default_permission.
-    Ok(default_permission())
+    Ok(default_permission(ctx))
 }
 
 async fn all_can_read_experiments(

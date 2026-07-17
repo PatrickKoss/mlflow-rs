@@ -32,6 +32,10 @@ sha2 = { workspace = true }
 hmac = { workspace = true }
 subtle = { workspace = true }
 tracing = { workspace = true }
+# Per-process random HMAC key for the credential cache (`secrets.token_bytes`
+# parity), drawn from the OS CSPRNG via UUIDv4 — the same source `/signup`'s
+# `CsrfSecret` uses, so no extra RNG dependency.
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

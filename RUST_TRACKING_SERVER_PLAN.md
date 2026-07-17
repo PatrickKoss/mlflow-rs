@@ -1410,12 +1410,44 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       nesting (Python's one raw add_url_rule exception). Deferred: the
       is_secure referrer branch (unreachable over plain HTTP). 6 unit + 9
       HTTP tests; 2 T9.2 tests updated for CSRF.)*
-- [ ] **T9.8 Auth config + caches**: `basic_auth.ini` parsing (all fields incl.
+- [x] **T9.8 Auth config + caches**: `basic_auth.ini` parsing (all fields incl.
       `default_permission`, `grant_default_workspace_access`, cache TTLs),
       `MLFLOW_AUTH_CONFIG_PATH`, optional credential cache (HMAC-keyed, default off),
       resource→workspace TTL cache.
       **AC:** same config file drives both servers; defaults identical.
       **VER:** config-parity unit tests.
+      *(Done 2026-07-17: `mlflow-auth/src/{config,credential_cache,workspace_cache}.rs`.
+      `AuthConfig` ports `config.py`'s NamedTuple field-for-field with a minimal
+      INI reader (single `[mlflow]` section, `#`/`;` comments, `=`/`:`
+      delimiter, no interpolation — the exact shape configparser reads for the
+      shipped file). Defaults = the packaged `basic_auth.ini` verbatim
+      (default_permission READ, database_uri sqlite:///basic_auth.db, admin
+      admin/password1234, grant_default_workspace_access false, workspace cache
+      10000/3600, auth cache 10000/0=off). `AuthConfig::default()` equals parsing
+      the shipped file (asserted). Only `MLFLOW_AUTH_CONFIG_PATH` is honoured —
+      the pre-T9.8 Rust-invented `MLFLOW_AUTH_DATABASE_URI` /
+      `MLFLOW_AUTH_READ_DATABASE_URI` / `MLFLOW_AUTH_DEFAULT_PERMISSION` env
+      overrides are dropped so both servers read the identical surface (Python
+      honours no per-field env override). `authorization_function` != the shipped
+      default → loud startup error (pluggable backends unsupported); bad
+      permission / bad int / bad bool / missing required key / missing file all
+      error loudly. Credential cache: HMAC-SHA256(random per-process key,
+      password) → TTL'd `Mutex<HashMap>` (workspaces.rs pattern), off unless
+      auth_cache_ttl_seconds>0; wired into `AuthStore::authenticate_and_get_user`
+      (`_authenticate_cached`) which the middleware now calls (one query, admin
+      check reuses the user); update_user/delete_user invalidate. Resource→
+      workspace TTL cache implemented + unit-tested in `workspace_cache.rs` as
+      the T10.4 seam (nothing consults it pre-T10.4 — the resolver still uses
+      "default"; plug point documented at `validators.rs::experiment_permission`).
+      `AuthStore` carries `Arc<AuthConfig>` + both caches; `AuthStore::new` uses
+      defaults, `with_config` the production path. `main.rs::build_auth_store`
+      parses the ini → connect+verify → create_admin_user +
+      _warn_if_default_admin_password (Python create_app order). D12: Rust keeps
+      its own per-process signup-CSRF secret; `MLFLOW_FLASK_SERVER_SECRET_KEY`
+      stays Python-side and is intentionally NOT required at startup. Tests: 10
+      config-parity + 4 credential-cache-store + 6 cache unit (5 workspace + …) +
+      6 credential-cache unit; no_default_http switched from the retired env var
+      to `AuthConfig{default_permission:NO_PERMISSIONS}`.)*
 - [ ] **T9.9 Admin/account UI validation**: React admin console (`src/admin/`) and
       account page (`src/account/`) fully functional against Rust (user CRUD, role CRUD,
       grants via EditAccessModal, current-user permissions list, `is_basic_auth` logout

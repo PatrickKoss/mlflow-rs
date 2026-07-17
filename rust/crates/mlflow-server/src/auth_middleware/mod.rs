@@ -160,20 +160,23 @@ pub async fn authorize(State(state): State<AppState>, req: Request<Body>, next: 
         None => return next.run(req).await,
     };
 
-    // 2. Authenticate.
+    // 2. Authenticate. `authenticate_and_get_user` (`_authenticate_cached`,
+    //    `__init__.py:402`) fronts the werkzeug hash comparison with the
+    //    credential cache (off by default) and returns the resolved user, so the
+    //    admin-bypass check below reuses it instead of a second `get_user` query.
     let Some((username, password)) = basic_credentials(&req) else {
         return unauthenticated_response();
     };
-    if !auth_store.authenticate_user(&username, &password).await {
+    let Some(user) = auth_store
+        .authenticate_and_get_user(&username, &password)
+        .await
+    else {
         return unauthenticated_response();
-    }
+    };
 
-    // 3. Admin bypass (`sender_is_admin`). A store error here surfaces as the
-    //    matching HTTP status (`catch_mlflow_exception`).
-    match auth_store.get_user(&username).await {
-        Ok(user) if user.is_admin => return next.run(req).await,
-        Ok(_) => {}
-        Err(e) => return error_response(&e),
+    // 3. Admin bypass (`sender_is_admin`).
+    if user.is_admin {
+        return next.run(req).await;
     }
 
     // 4. Dispatch to the validator.

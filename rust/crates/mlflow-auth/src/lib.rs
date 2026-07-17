@@ -48,6 +48,8 @@
 mod dbutil;
 
 pub mod bootstrap;
+pub mod config;
+pub mod credential_cache;
 pub mod db;
 pub mod entities;
 pub mod hash;
@@ -56,11 +58,14 @@ pub mod roles;
 pub mod schema;
 pub mod store;
 pub mod user_grants;
+pub mod workspace_cache;
 
 pub use bootstrap::{
     create_admin_user, warn_if_default_admin_password, DEFAULT_ADMIN_PASSWORD,
     DEFAULT_ADMIN_USERNAME,
 };
+pub use config::{AuthConfig, MLFLOW_AUTH_CONFIG_PATH_ENV};
+pub use credential_cache::CredentialCache;
 pub use db::{
     AuthDb, AuthDbError, AuthSchemaError, ALEMBIC_VERSION_AUTH_TABLE, EXPECTED_AUTH_ALEMBIC_HEAD,
 };
@@ -69,3 +74,4 @@ pub use hash::{check_password_hash, generate_password_hash, HashError};
 pub use permissions::{Permission, EDIT, MANAGE, NO_PERMISSIONS, READ, USE, VALID_RESOURCE_TYPES};
 pub use store::AuthStore;
 pub use user_grants::DEFAULT_WORKSPACE_NAME;
+pub use workspace_cache::ResourceWorkspaceCache;
