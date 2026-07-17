@@ -23,6 +23,7 @@ Three mechanics, per the task design:
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -79,9 +80,11 @@ def substitute(value: Any, bindings: dict[str, Any]) -> Any:
 TIMESTAMP_FIELDS = frozenset({
     "creation_time",
     "creation_timestamp",
+    "creation_timestamp_ms",
     "last_update_time",
     "last_update_timestamp",
     "last_updated_timestamp",
+    "last_updated_timestamp_ms",
     "start_time",
     "start_time_unix_nano",
     "start_time_ms",
@@ -133,6 +136,15 @@ PATH_FIELDS = frozenset({
 TS_SENTINEL = "<TS>"
 TOKEN_PRESENT = "<TOKEN:present>"
 TOKEN_ABSENT = "<TOKEN:absent>"
+
+# Dict keys whose list values are compared order-insensitively (sorted
+# canonically before diffing). MLflow never documents tag ordering — Python
+# derives tag lists from dicts / un-ordered ORM relationships (e.g.
+# ``experiment_tags={tag.key: ... for tag in sql_experiment.tags}``), while the
+# Rust store orders by key, so byte-order comparison is meaningless. Scoped to
+# ``tags`` only: ordering IS contractual elsewhere (metric history, search
+# results).
+SORTED_ARRAY_FIELDS = {"tags"}
 
 
 @dataclass
@@ -193,7 +205,10 @@ def normalize(body: Any, opts: NormalizeOptions) -> Any:
                 elif opts.normalize_paths and k in PATH_FIELDS:
                     out[k] = _path_marker(v)
                 else:
-                    out[k] = _walk(v)
+                    walked = _walk(v)
+                    if k in SORTED_ARRAY_FIELDS and isinstance(walked, list):
+                        walked = sorted(walked, key=lambda e: json.dumps(e, sort_keys=True))
+                    out[k] = walked
             return out
         if isinstance(node, list):
             return [_walk(v) for v in node]

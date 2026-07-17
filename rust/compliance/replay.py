@@ -464,6 +464,24 @@ def run_case(
     status_match = py_status == rust_status
     real_diffs: list[dict[str, Any]] = []
     allowed: list[dict[str, Any]] = []
+
+    # A status mismatch is allowlistable only via an explicit `/__status__`
+    # pointer (or `*`) on a matching entry — used for DELIBERATE deviations
+    # (e.g. Python 500s on an unhandled exception where Rust returns a clean
+    # 4xx). The mismatch is then reported under `allowlisted`, not as a
+    # failure.
+    if not status_match:
+        status_diff = Diff(
+            json_pointer="/__status__",
+            python_value=py_status,
+            rust_value=rust_status,
+            kind="status",
+        )
+        entry = _is_allowlisted(case, status_diff, allow)
+        if entry is not None:
+            allowed.append({**asdict(status_diff), "reason": entry.reason})
+            status_match = True
+
     for d in diffs:
         entry = _is_allowlisted(case, d, allow)
         rec = {**asdict(d)}

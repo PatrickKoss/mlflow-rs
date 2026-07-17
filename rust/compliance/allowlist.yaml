@@ -23,6 +23,51 @@ entries:
       from the T12.1 parity backlog.
     link: RUST_TRACKING_SERVER_PLAN.md#T12.1
 
+  # ---- Framework-default error pages on route misses ---------------------
+  # Flask serves its default HTML 404/405 page for a path/method that matches
+  # no route; axum serves an empty body. Status codes match; the body is
+  # framework furniture, not API contract (and nginx fronts both in the
+  # reference deployment). One entry per corpus case that deliberately probes
+  # a nonexistent route/method.
+  - case_or_path: trace_get_info_v3
+    json_pointer: /__raw_text__
+    reason: Flask default HTML 404 page vs empty axum body on an unmatched route; status matches.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+  - case_or_path: trace_get_info_missing
+    json_pointer: /__raw_text__
+    reason: Flask default HTML 404 page vs empty axum body on an unmatched route; status matches.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+  - case_or_path: trace_set_tag_v3
+    json_pointer: /__raw_text__
+    reason: Flask default HTML 405 page vs empty axum body; status matches.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+  - case_or_path: dataset_search
+    json_pointer: /__raw_text__
+    reason: Flask default HTML 404 page vs empty axum body on an unmatched route; status matches.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+
+  # ---- Irreproducible Python error text -----------------------------------
+  - case_or_path: experiment_create_duplicate
+    json_pointer: /message
+    reason: >-
+      Python leaks the raw SQLAlchemy IntegrityError into the message, including
+      the INSERT statement and its bound parameters (which contain the request's
+      creation_time) — the text differs even between two Python runs, so
+      byte-parity is impossible by construction. Rust returns the same leading
+      "Experiment(name=...) already exists." sentence with a stable tail. Error
+      code and status match.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+
+  # ---- Deliberate deviation ------------------------------------------------
+  - case_or_path: webhook_create_bad_event
+    json_pointer: "*"
+    reason: >-
+      DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown
+      webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a
+      clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the
+      Phase 12 Python-suite run asserts the 500.
+    link: RUST_TRACKING_SERVER_PLAN.md#T8.2
+
   # HTTP reason-phrase casing ("Bad Request" vs Python's "BAD REQUEST"): the
   # harness compares STATUS CODES only, never reason phrases, so backlog item #2
   # is moot by construction. No entry is required; documented here so the choice
