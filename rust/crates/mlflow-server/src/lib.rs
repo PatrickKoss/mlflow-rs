@@ -14,6 +14,7 @@
 
 pub mod artifacts;
 pub mod assessments;
+pub mod auth_api;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
@@ -195,7 +196,55 @@ fn register_proto_routes(state: AppState) -> Router {
     // JSON body (content-type validated for POST only), so a single handler
     // covers both.
     router = router.route("/graphql", get(graphql::graphql).post(graphql::graphql));
+
+    // ---- auth API routes (T9.2) ----
+    // Hand-rolled JSON endpoints from the `mlflow.server.auth` app
+    // (`mlflow/server/auth/__init__.py`), NOT proto ROUTE_TABLE routes. Mounted
+    // only when the basic-auth app is enabled (`state.auth_enabled()`), mirroring
+    // Python: these endpoints exist solely in the auth app, so a plain tracking
+    // server 404s on them. Each is served at both `/api/2.0/...` and
+    // `/ajax-api/2.0/...` (`auth/routes.py` `_get_rest_path` + `_get_ajax_path`).
+    // T9.3 (roles/permissions) and T9.4 (auth middleware) extend this block
+    // additively.
+    if state.auth_enabled() {
+        router = register_auth_user_routes(router);
+    }
+    // ---- end auth API routes ----
+
     router.with_state(state)
+}
+
+/// Register the T9.2 user-management routes (`/mlflow/users/*`) on both the
+/// `/api/2.0` and `/ajax-api/2.0` prefixes. Split out so the conditional block
+/// in [`register_proto_routes`] stays a single call and T9.3 can add a sibling
+/// `register_auth_role_routes` without touching this one.
+fn register_auth_user_routes(mut router: Router<AppState>) -> Router<AppState> {
+    use auth_api::users;
+    use axum::routing::{delete, get, patch, post};
+
+    // (tail path, MethodRouter) for each of the 8 endpoints; registered under
+    // both prefixes below.
+    let routes: [(&str, MethodRouter<AppState>); 8] = [
+        ("/mlflow/users/create", post(users::create_user)),
+        ("/mlflow/users/create-ui", post(users::create_user_ui)),
+        ("/mlflow/users/get", get(users::get_user)),
+        ("/mlflow/users/current", get(users::get_current_user)),
+        ("/mlflow/users/list", get(users::list_users)),
+        (
+            "/mlflow/users/update-password",
+            patch(users::update_user_password),
+        ),
+        (
+            "/mlflow/users/update-admin",
+            patch(users::update_user_admin),
+        ),
+        ("/mlflow/users/delete", delete(users::delete_user)),
+    ];
+    for (tail, handler) in routes {
+        router = router.route(&format!("/api/2.0{tail}"), handler.clone());
+        router = router.route(&format!("/ajax-api/2.0{tail}"), handler);
+    }
+    router
 }
 
 /// Convert a Flask-style path to axum/matchit syntax:

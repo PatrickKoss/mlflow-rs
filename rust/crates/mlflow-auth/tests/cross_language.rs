@@ -285,6 +285,31 @@ async fn rust_generated_hash_round_trips_and_python_accepts_it() {
     run_python_reverse_check(&rust_hash, plaintext);
 }
 
+#[tokio::test]
+async fn delete_user_removes_the_user() {
+    // `AuthStore::delete_user` (T9.2 store addition): create a user, delete it,
+    // and confirm it's gone and can't authenticate.
+    let db = TempDb::new("delete_user");
+    let store = open_store(&db).await;
+    store
+        .create_user("dave_rust", "dave-password-xyz", false)
+        .await
+        .expect("create_user");
+    assert!(store.has_user("dave_rust").await.unwrap());
+
+    store.delete_user("dave_rust").await.expect("delete_user");
+    assert!(!store.has_user("dave_rust").await.unwrap());
+    assert!(
+        !store
+            .authenticate_user("dave_rust", "dave-password-xyz")
+            .await
+    );
+    // get_user now errors RESOURCE_DOES_NOT_EXIST.
+    assert!(store.get_user("dave_rust").await.is_err());
+    // Deleting a missing user errors (matches `_get_user`'s NoResultFound).
+    assert!(store.delete_user("dave_rust").await.is_err());
+}
+
 /// Write the Rust-generated hash into a temp JSON alongside the plaintext and
 /// run `verify_auth_fixture.py` against it via `uv`. A missing `uv` (offline
 /// CI) is reported as skipped, not a failure.
