@@ -14,6 +14,7 @@
 
 pub mod artifacts;
 pub mod assessments;
+pub mod auth_api;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
