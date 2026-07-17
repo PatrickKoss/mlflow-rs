@@ -296,7 +296,7 @@ mod tests {
     fn salt_is_default_length_and_alphabet() {
         let h = generate_password_hash("passwordpassword").unwrap();
         // scrypt:32768:8:1$<16-char-salt>$<hex>
-        let salt = h.splitn(3, '$').nth(1).unwrap();
+        let salt = h.split('$').nth(1).unwrap();
         assert_eq!(salt.len(), 16);
         assert!(salt.bytes().all(|b| SALT_CHARS.contains(&b)));
     }
