@@ -90,5 +90,14 @@ futures = "0.3"
 # gzip/deflate decompression for OTLP `Content-Encoding` (T4.3, `/v1/traces`).
 flate2 = "1.1"
 
+# Password hashing (werkzeug-compatible pbkdf2/scrypt verify+generate, T9.1).
+# RustCrypto crates; `hmac.compare_digest`-equivalent constant-time compare is
+# via `subtle`. Versions match the vendored cargo cache.
+pbkdf2 = { version = "0.12", default-features = false }
+scrypt = { version = "0.11", default-features = false }
+sha2 = "0.10"
+hmac = "0.12"
+subtle = "2.6"
+
 [workspace.lints.clippy]
 all = "warn"

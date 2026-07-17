@@ -8,6 +8,9 @@ mlflow.db
 *-shm
 *-wal
 **/basic_auth.db
+# Exception: the Rust auth crate's checked-in cross-language test fixture (a
+# genuine Alembic-migrated auth DB; see rust/tools/make_auth_test_db.py).
+!rust/crates/mlflow-auth/tests/fixtures/basic_auth.db
 mlflow/protos/protos.json
 
 # Mac
