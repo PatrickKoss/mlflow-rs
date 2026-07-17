@@ -193,22 +193,15 @@ jobs:
   # (rust/compliance/replay.py) — dual-boots the Python and Rust
   # `mlflow-server`, replays the request corpus against both, and diffs.
   #
-  # GATING: ADVISORY ONLY (continue-on-error), not a required check. As of
-  # T12.5 the harness reports 67 non-allowlisted diffs and 18 status
-  # mismatches across the 133-case corpus (artifacts/auth sections fail
-  # almost entirely because the harness's Python-side boot never sets
-  # SERVE_ARTIFACTS_ENV_VAR — a harness gap, not solely a Rust regression;
-  # logged_models/traces/runs have genuine unreviewed diffs). Only
-  # `server_info` (3 cases) and `workspaces` (9 cases) are fully clean today.
-  # Forcing this job to be required would either block all Rust PRs on
-  # unrelated/unreviewed diffs or (worse) tempt someone into disabling
-  # sections to fake green. Instead this job always runs, always uploads its
-  # report, and is visible in the PR checks list so regressions are seen
-  # early - but it cannot block merges until T12.4 actually drives the
-  # corpus to zero non-allowlisted diffs.
-  # TODO(T12.5): flip `continue-on-error` to `false` (and add this job to
-  # required-checks branch protection) once T12.4 gets the full corpus to
-  # zero non-allowlisted diffs on sqlite.
+  # GATING: REQUIRED. T12.4 drove the full 133-case corpus to zero
+  # non-allowlisted diffs / zero status mismatches on sqlite (2026-07-17: the
+  # harness boot gaps were fixed — auth app factory + artifact-proxy env —
+  # and the remaining genuine divergences were fixed on the Rust side,
+  # chiefly the lenient ParseDict-parity request parsing; the 11 tolerated
+  # diffs are documented in rust/compliance/allowlist.yaml). A non-zero exit
+  # here now means a real wire-parity regression: read the uploaded report
+  # artifact, fix the divergence (or, for a consciously accepted one, add a
+  # reasoned allowlist entry) — never disable sections to fake green.
   #
   # DIALECT COVERAGE: `rust/compliance/replay.py` only seeds/boots SQLite
   # today (`_seed_tracking_db`, `DualServers.__enter__` both hardcode
@@ -274,12 +267,12 @@ jobs:
         # kept available for when replay.py gains dialect support (see
         # TODO above); unused by the sqlite-only run today.
         run: uv sync --extra auth --extra db
-      - name: Run differential replay harness (sqlite, advisory)
+      - name: Run differential replay harness (sqlite)
         working-directory: .
         env:
           MLFLOW_RUST_SERVER_BIN: ${{ github.workspace }}/rust/target/debug/mlflow-server
-        # Not gated on exit code: see the job-level GATING comment above.
-        continue-on-error: true
+        # Gated: a non-zero exit is a wire-parity regression (see the
+        # job-level GATING comment above).
         run: uv run --no-sync python rust/compliance/replay.py
       - name: Upload compliance report
         if: always()

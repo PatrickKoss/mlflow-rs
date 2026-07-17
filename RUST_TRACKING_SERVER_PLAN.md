@@ -2,10 +2,10 @@
 
 Status: **in progress — Phases 2–8 and 10 complete; Phase 9 complete except
 T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
-Phase 12 T12.1/T12.2/T12.5/T12.6 done, T12.4 harness at 23 non-allowlisted
-diffs (9/12 sections clean; the rest hinge on the lenient proto-parse port in
-flight), T12.3 held until that lands (it changes the error texts T12.3 would
-assert).** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-17
+Phase 12 complete except T12.3 (client-suite conformance, now unblocked) —
+the T12.4 differential corpus is GREEN (133 cases, 0 non-allowlisted diffs)
+and the compliance CI job is a required gate.** · Branch:
+`feature/rust-tracking-server` · Last updated: 2026-07-17
 
 **Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
 T12.4's differential harness was salvaged and landed as foundation, and the two
@@ -1797,12 +1797,31 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       with `MLFLOW_TRACKING_URI=http://rust`; DB reset between tests.
       **AC:** suites green (modulo flag-gated diffs).
       **VER:** CI logs.
-- [ ] **T12.4 Differential replay harness** (`rust/compliance/`): request corpus covering
+- [x] **T12.4 Differential replay harness** (`rust/compliance/`): request corpus covering
       every §3 endpoint (success + error + pagination walks + multi-user auth scenarios +
       workspace headers), replayed against Python and Rust, normalized diff; token
       fields checked for opacity only.
       **AC:** zero non-allowlisted diffs on sqlite + postgres.
       **VER:** CI artifact.
+      *(Done 2026-07-17 on sqlite: 133 cases / 12 sections, **0 non-allowlisted
+      diffs, 0 status mismatches, 0 errors** (11 allowlisted, all documented:
+      Flask default HTML error pages on route misses, the duplicate-experiment
+      IntegrityError leak with per-run bind params, the webhook
+      unknown-entity 500-vs-400 deliberate deviation). Engine: bind/normalize/
+      token-opacity diffing with order-insensitive `tags`, `_ms`-timestamp
+      normalization, and `/__status__`-pointer allowlisting for deliberate
+      status deviations. Driving it green fixed EIGHT real Rust parity bugs:
+      experiment workspace field, view_type proto2 default, create_run
+      outputs omission, logged-model source_run_id '', RM description
+      omission, metric-history 200-empty on missing runs (single-tenant),
+      plus the big one — Python's lenient ParseDict request parsing
+      (swallowed parse errors + raw-JSON schema fallback + partial-parse
+      semantics, `mlflow-proto/src/lenient.rs` +
+      `mlflow-server/src/schema_validation.rs`) which closed parity-backlog
+      #1, log-batch, logged-model finalize/params, and startTraceV3. The
+      compliance CI job is now a REQUIRED gate. Deferred: postgres corpus run
+      (replay.py is sqlite-only; TODO(T12.5) markers) and the coverage-notes
+      extensibility backlog in the report.)*
 - [x] **T12.5 CI matrix** modeled on the `database` job (`master.yml`): `mlflow-rust`
       service in `tests/db/compose.yml`, runs tracking + registry + auth + workspace
       compliance subsets on postgres/mysql/sqlite (+ mssql per T0.3); tracing job modeled
