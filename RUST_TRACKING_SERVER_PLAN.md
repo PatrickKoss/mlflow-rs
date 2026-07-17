@@ -1341,13 +1341,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 10 — Workspaces
 
-- [ ] **T10.1 Workspace store + table**: `workspaces` table, name validation (k8s regex,
+- [x] **T10.1 Workspace store + table**: `workspaces` table, name validation (k8s regex,
       reserved names, `default` undeletable), delete modes RESTRICT/CASCADE/SET_DEFAULT
       walking all workspace-root models, artifact-root + trace-archival config
       resolution with TTL caches.
       **AC:** parity with `tests/store/workspace/test_sqlalchemy_store.py` +
       `test_workspace_validator.py`.
       **VER:** Phase 12 workspace runner.
+      *(Done 2026-07-17: `mlflow-store/src/store/workspaces{,_cascade}.rs`.
+      Schema matched to dbmodels/models.py:18-24 (name 63 PK, description,
+      default_artifact_root, trace_archival_location/retention). Validator
+      byte-matched (abstract_store.py:146-181; pattern without a regex dep).
+      Delete modes per sqlalchemy_store.py:195-266 over the 10
+      `_WORKSPACE_ROOT_MODELS`; Python's ORM `cascade="all"` reproduced as
+      explicit FK-ordered DELETEs; RESTRICT counts + message parity;
+      SET_DEFAULT preflight name-conflict check with `{name!r}` repr,
+      transactional rollback. Quirks: inputs/input_tags/entity_associations
+      left for `mlflow gc` like Python; `mlflow gc` hint logged on CASCADE.
+      TTL caches 128 cap/60s matching env-var defaults, primed post-commit,
+      evicted on delete. Trace-archival validation ported except the
+      Databricks get_artifact_repository branch (doc-commented, needs the
+      Python repo registry). 9 unit + 31 integration tests.)*
 - [ ] **T10.2 Workspace REST endpoints** (§3.17) incl. 201/204 status codes, `?mode=`,
       503-when-disabled.
       **AC:** `tests/server/test_workspace_endpoints.py` passes against Rust.
