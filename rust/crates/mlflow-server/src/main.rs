@@ -9,7 +9,7 @@ use clap::Parser;
 use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore};
-use mlflow_webhooks::WebhookStore;
+use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -39,6 +39,13 @@ async fn main() -> anyhow::Result<()> {
             // Arc-backed clone). Its Fernet cipher is resolved from
             // `MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY` (ephemeral key when unset).
             let webhook_store = WebhookStore::new(db.clone())?;
+            // The async delivery engine (T8.3) over the same store. Scoped to the
+            // default workspace (single-tenant server); T8.4's registry event
+            // triggers call `dispatcher.fire(event, payload)`.
+            let webhook_dispatcher = WebhookDispatcher::new(
+                webhook_store.clone(),
+                mlflow_server::workspace::DEFAULT_WORKSPACE_NAME,
+            );
             let store = TrackingStore::new(db, artifact_root);
             // The registry tables live in the same Alembic-migrated database as
             // the tracking tables, so the registry store shares the same `Db`
@@ -59,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
                 proxied_repo,
                 config.artifacts_destination.clone(),
             )
-            .with_webhook_store(webhook_store);
+            .with_webhook_store(webhook_store, webhook_dispatcher);
             build_app_with_state(&config, app_state)
         }
         None => build_app(&config),

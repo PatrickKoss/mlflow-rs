@@ -137,7 +137,7 @@ pub fn resolve_public_ips(hostname: &str) -> Result<Vec<IpAddr>, MlflowError> {
     let mut ips = Vec::new();
     for addr in addrs {
         let ip = addr.ip();
-        if !is_global(ip) {
+        if !is_global_ip(ip) {
             return Err(MlflowError::invalid_parameter_value(format!(
                 "Webhook URL must not resolve to a non-public IP address. \
                  {} resolves to {ip}.",
@@ -153,7 +153,11 @@ pub fn resolve_public_ips(hostname: &str) -> Result<Vec<IpAddr>, MlflowError> {
 /// Conservative: anything not clearly global (loopback, private, link-local,
 /// multicast, unspecified, documentation/benchmark ranges, IPv6 ULA, etc.) is
 /// treated as non-global.
-fn is_global(ip: IpAddr) -> bool {
+///
+/// Public so the connect-time SSRF gate in [`crate::http_send`] applies the
+/// exact same globality test the resolve-time `_validate_webhook_url` gate uses,
+/// mirroring how `ssrf.py` reuses `ipaddress`'s `is_global`.
+pub fn is_global_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             if v4.is_loopback()
@@ -196,7 +200,7 @@ fn is_global(ip: IpAddr) -> bool {
             }
             // Map IPv4-mapped addresses to their v4 global check.
             if let Some(v4) = v6.to_ipv4_mapped() {
-                return is_global(IpAddr::V4(v4));
+                return is_global_ip(IpAddr::V4(v4));
             }
             true
         }
