@@ -318,14 +318,23 @@ fn to_proto_tag(tag: ExperimentTag) -> pb::ExperimentTag {
 
 /// Interpret the proto `view_type` (`Option<i32>`) as a store [`ViewType`].
 ///
-/// Python passes the raw proto value to the store, and
-/// `LifecycleStage.view_type_to_stages` recognizes only `ACTIVE_ONLY=1`,
-/// `DELETED_ONLY=2`, `ALL=3`. An unset field (proto default `0`) or any other
-/// value maps to `None` here, which the store treats as an empty stage set (no
-/// results) — byte-for-byte with Python's `IN ()`. Real clients always send
-/// `ACTIVE_ONLY`, so this only affects raw requests that omit `view_type`.
+/// `ViewType` is a proto2 enum whose first value is `ACTIVE_ONLY = 1` (there is
+/// no zero value). Per proto2 semantics an *absent* `optional ViewType` field
+/// reads back as that first value, so Python's `request_message.view_type`
+/// yields `ACTIVE_ONLY` for a request that omits it — which is why an
+/// unfiltered search returns the active experiments rather than nothing. We
+/// mirror that: `None` (field absent) → `ACTIVE_ONLY`.
+///
+/// A field that is *present but unrecognized* (e.g. an explicit `0`) matches
+/// none of the store stages and maps to `None`, which the store treats as an
+/// empty stage set (no rows) — byte-for-byte with Python's
+/// `LifecycleStage.view_type_to_stages(0) == []`.
+///
+/// (Found by the T12.4 differential harness: an unfiltered `searchExperiments`
+/// returned every active experiment on Python but nothing on Rust.)
 fn view_type_from_proto(view_type: Option<i32>) -> Option<ViewType> {
     match view_type {
+        None => Some(ViewType::ActiveOnly),
         Some(v) if v == pb::ViewType::ActiveOnly as i32 => Some(ViewType::ActiveOnly),
         Some(v) if v == pb::ViewType::DeletedOnly as i32 => Some(ViewType::DeletedOnly),
         Some(v) if v == pb::ViewType::All as i32 => Some(ViewType::All),

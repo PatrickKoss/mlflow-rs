@@ -437,6 +437,41 @@ async fn search_experiments_filter() {
 }
 
 #[tokio::test]
+async fn search_experiments_without_view_type_defaults_to_active() {
+    // `ViewType` is a proto2 enum with no zero value (`ACTIVE_ONLY = 1` first),
+    // so an omitted `view_type` reads back as `ACTIVE_ONLY` in Python — an
+    // unfiltered search returns the active experiments, not an empty set.
+    // Regression guard for the earlier `None -> empty` mapping (found by T12.4).
+    let server = TestServer::start("search_no_view_type").await;
+    post(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/create",
+        r#"{"name": "active-one"}"#,
+    )
+    .await;
+
+    let res = post(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/search",
+        r#"{"max_results": 100}"#,
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let names: Vec<String> = res.json()["experiments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        names.iter().any(|n| n == "active-one"),
+        "omitted view_type must return active experiments, got {names:?}"
+    );
+}
+
+#[tokio::test]
 async fn delete_and_restore_experiment() {
     let server = TestServer::start("del_restore").await;
     let id = post(
