@@ -390,7 +390,7 @@ async fn filter_search_experiments(
     let filter = req.filter.as_deref().filter(|s| !s.is_empty());
 
     while (resp.experiments.len() as i64) < max_results
-        && resp.next_page_token.as_deref().unwrap_or("") != ""
+        && !resp.next_page_token.as_deref().unwrap_or("").is_empty()
     {
         let token = resp.next_page_token.clone().unwrap_or_default();
         let ExperimentsPage {
@@ -467,7 +467,7 @@ async fn filter_search_registered_models(
     let filter = req.filter.as_deref().filter(|s| !s.is_empty());
 
     while (resp.registered_models.len() as i64) < max_results
-        && resp.next_page_token.as_deref().unwrap_or("") != ""
+        && !resp.next_page_token.as_deref().unwrap_or("").is_empty()
     {
         let token = resp.next_page_token.clone().unwrap_or_default();
         let RegisteredModelsPage {
