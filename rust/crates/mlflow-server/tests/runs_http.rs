@@ -471,6 +471,47 @@ async fn log_batch_happy_path() {
 }
 
 #[tokio::test]
+async fn log_batch_bool_tag_value_partial_parses_to_200() {
+    // T12.5 lenient-parse parity: a `bool` tag value fails `parse_dict` on the
+    // `tags` field (swallowed), but run_id/metrics/params — which precede `tags`
+    // — are applied, and the schema's per-element `key`-presence check passes
+    // (the tag's `key` is present). Python returns 200 with those fields
+    // applied; Rust must match (previously it 400'd on the strict codec error).
+    let server = TestServer::start("log_batch_bool_tag").await;
+    let run_id = create_run(&server, "/api/2.0", "batch_bool").await;
+
+    let res = post(
+        &server,
+        "/api/2.0",
+        "/mlflow/runs/log-batch",
+        &format!(
+            r#"{{"run_id": "{run_id}",
+                 "metrics": [{{"key": "m1", "value": 1.0, "timestamp": 1, "step": 0}}],
+                 "params": [{{"key": "p1", "value": "v1"}}],
+                 "tags": [{{"key": "batch_tag", "value": true}}]}}"#
+        ),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    assert_eq!(res.json(), json!({}));
+
+    let got = get(
+        &server,
+        "/api/2.0",
+        &format!("/mlflow/runs/get?run_id={run_id}"),
+    )
+    .await;
+    let data = &got.json()["run"]["data"];
+    // The metric/param that preceded the failing tag were applied.
+    assert_eq!(data["metrics"][0]["key"], "m1");
+    assert!(data["params"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["key"] == "p1"));
+}
+
+#[tokio::test]
 async fn log_inputs_and_outputs() {
     let server = TestServer::start("io").await;
     let run_id = create_run(&server, "/api/2.0", "io").await;

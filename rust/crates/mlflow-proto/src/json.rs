@@ -66,7 +66,7 @@ pub enum JsonCodecError {
 
 /// The runtime descriptor pool, rebuilt from the extension-preserving
 /// `FileDescriptorSet` embedded at build time. Lazily initialized once.
-fn descriptor_pool() -> &'static DescriptorPool {
+pub(crate) fn descriptor_pool() -> &'static DescriptorPool {
     static POOL: OnceLock<DescriptorPool> = OnceLock::new();
     POOL.get_or_init(|| {
         static FDS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/file_descriptor_set.bin"));

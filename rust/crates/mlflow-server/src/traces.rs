@@ -33,9 +33,18 @@ use mlflow_store::{
     TraceWithSpans, MAX_RESULTS_QUERY_TRACE_METRICS,
 };
 
-use crate::proto_http::{parse_request, parse_request_with_path_params, proto_response};
+use crate::proto_http::{
+    parse_request, parse_request_lenient, parse_request_with_path_params, proto_response,
+};
+use crate::schema_validation::{SchemaEntry, Validator};
 use crate::state::AppState;
 use crate::workspace::Workspace;
+
+/// `_start_trace_v3`'s schema (`handlers.py:3877`): `{"trace": [_assert_required]}`.
+const START_TRACE_V3_SCHEMA: &[SchemaEntry] = &[SchemaEntry {
+    param: "trace",
+    validators: &[Validator::Required],
+}];
 
 /// `SEARCH_TRACES_V3_MAX_RESULTS` handler-level threshold (`handlers.py:3961`,
 /// `_assert_less_than_or_equal(int(x), 500)`).
@@ -54,7 +63,8 @@ pub async fn start_trace_v3(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::StartTraceV3 = parse_request(&parts, &body, "mlflow.StartTraceV3")?;
+    let req: pb::StartTraceV3 =
+        parse_request_lenient(&parts, &body, "mlflow.StartTraceV3", START_TRACE_V3_SCHEMA)?;
     let trace = req.trace.ok_or_else(|| missing_param("trace"))?;
     let info = trace
         .trace_info
@@ -527,10 +537,14 @@ fn start_trace_input_from_proto(
         })
         .ok_or_else(|| missing_param("trace.trace_info.trace_location.mlflow_experiment"))?;
 
-    let request_time = info
-        .request_time
-        .map(timestamp_to_millis)
-        .ok_or_else(|| missing_param("trace.trace_info.request_time"))?;
+    // Python's `TraceInfo.from_proto` reads `request_time` off the proto with no
+    // presence check — an unset Timestamp yields `0` (verified live:
+    // `TraceInfo.from_proto(TraceInfoV3()).request_time == 0`), never an error.
+    // This matters for the lenient-parse path: `startTraceV3` with a
+    // non-RFC3339 `request_time` string (e.g. `"1000"`) fails `parse_dict` on
+    // that field, which is swallowed, leaving `request_time` at its default; the
+    // handler must then proceed with `0` and return 200, not 400.
+    let request_time = info.request_time.map(timestamp_to_millis).unwrap_or(0);
     let execution_duration = info.execution_duration.map(duration_to_millis);
     let state = state_from_proto(info.state);
 

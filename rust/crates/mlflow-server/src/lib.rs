@@ -28,6 +28,7 @@ pub mod proto_http;
 pub mod registry;
 pub mod routes;
 pub mod runs;
+pub mod schema_validation;
 pub mod security;
 pub mod server_info;
 pub mod state;

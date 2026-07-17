@@ -11,17 +11,11 @@
 # that could not be safely fixed inside this task; they are backlog items. Keep
 # them prominently enumerated in the run report.
 
-entries:
-  # ---- Seeded from the T12.1 parity backlog ------------------------------
-  - case_or_path: experiment_create_int_name_error
-    json_pointer: /message
-    reason: >-
-      PARITY BUG - needs fix. serde type-mismatch validation surfaces
-      "failed to parse JSON: invalid type: integer ... expected a string" instead
-      of Python's "Invalid value 123 for parameter 'name' supplied ...". Error
-      code + HTTP status match; only the human message text differs. Backlog #1
-      from the T12.1 parity backlog.
-    link: RUST_TRACKING_SERVER_PLAN.md#T12.1
+# (T12.1 parity backlog #1, experiment_create_int_name_error, FIXED in T12.5:
+# the lenient ParseDict-parity parse + schema validation now emits Python's
+# exact "Invalid value 123 for parameter 'name' supplied:  Hint: ..." message.
+# Its allowlist entry was removed, leaving no tolerated diffs.)
+entries: []
 
   # HTTP reason-phrase casing ("Bad Request" vs Python's "BAD REQUEST"): the
   # harness compares STATUS CODES only, never reason phrases, so backlog item #2

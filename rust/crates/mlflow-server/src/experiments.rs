@@ -24,9 +24,28 @@ use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_proto::mlflow as pb;
 use mlflow_store::{Experiment, ExperimentTag, ExperimentsPage, ViewType, WorkspaceArtifactRoot};
 
-use crate::proto_http::{parse_request, proto_response};
+use crate::proto_http::{parse_request, parse_request_lenient, proto_response};
+use crate::schema_validation::{SchemaEntry, Validator};
 use crate::state::AppState;
 use crate::workspace::Workspace;
+
+/// `_create_experiment`'s schema (`handlers.py:1553-1557`):
+/// `{"name": [_assert_required, _assert_string], "artifact_location":
+/// [_assert_string], "tags": [_assert_array]}`.
+const CREATE_EXPERIMENT_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "name",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "artifact_location",
+        validators: &[Validator::String],
+    },
+    SchemaEntry {
+        param: "tags",
+        validators: &[Validator::Array],
+    },
+];
 
 /// `_create_experiment` (`handlers.py:1550`).
 pub async fn create_experiment(
@@ -35,7 +54,12 @@ pub async fn create_experiment(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::CreateExperiment = parse_request(&parts, &body, "mlflow.CreateExperiment")?;
+    let req: pb::CreateExperiment = parse_request_lenient(
+        &parts,
+        &body,
+        "mlflow.CreateExperiment",
+        CREATE_EXPERIMENT_SCHEMA,
+    )?;
     let name = require_non_empty(req.name.as_deref(), "name")?;
 
     let tags: Vec<(&str, &str)> = req
