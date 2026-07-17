@@ -1200,13 +1200,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       signature. Deferred to T8.3 as scoped: async delivery engine, retries,
       TTL cache, connect-time SSRF adapter. Python-suite parity runs ride
       Phase 12.)*
-- [ ] **T8.3 Delivery engine**: async task pool, HMAC `v1` signing + `X-MLflow-*`
+- [x] **T8.3 Delivery engine**: async task pool, HMAC `v1` signing + `X-MLflow-*`
       headers, HTTP retries on [429,5xx] with backoff, **SSRF guard** (public-IP
       validation at connect, no proxy env), TTL cache by event, fire-and-forget error
       logging.
       **AC:** a local receiver verifies signatures Python receivers accept; SSRF suite
       (RFC1918/link-local/redirect tricks) blocked identically to Python.
       **VER:** `rust/tests/webhook_delivery.rs` incl. SSRF matrix.
+      *(Done 2026-07-17: `mlflow-webhooks/src/{dispatcher,http_send}.rs`.
+      Retry/backoff byte-matched to `mlflow/webhooks/delivery.py` defaults:
+      statuses [429,500,502,503,504], total=3, factor=1.0 max=60 jitter=1.0,
+      Retry-After honored, 30s per-attempt timeout. SSRF: own resolver →
+      all resolved IPs must be global → TCP connect to the validated IP
+      (closes TOCTOU) → `getpeername` re-check, gate re-run per redirect hop
+      (cap 30), `trust_env=False` equivalent, `MLFLOW_WEBHOOK_ALLOW_PRIVATE_IPS`
+      escape hatch. `WebhookDispatcher::fire(event, data)` fire-and-forget
+      (TTL cache maxsize=1000, Semaphore(10), tokio::spawn per send) exposed
+      via `AppState::webhook_dispatcher()` for T8.4's 12 seam sites. Quirks:
+      TTL-only cache invalidation; ISO8601 `+00:00` not `Z`; `/test` has
+      timeout but no retries. Deferred (doc-commented): HTTPS delivery fails
+      closed pending TLS stack; at-most-once per D11. 21 unit + 11
+      integration tests incl. 11-target SSRF matrix.)*
 - [ ] **T8.4 Event triggers** wired into registry mutations (RM created; MV created; MV
       tag set/deleted; MV alias set/deleted; PROMPT_* mirrors by is_prompt
       classification).
