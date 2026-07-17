@@ -684,6 +684,53 @@ fn not_found(name: &str) -> MlflowError {
     )
 }
 
+/// The single-tenant startup guard (plan T10.3). When the server boots with
+/// workspaces **disabled**, refuse to start if any workspace-scoped root entity
+/// lives outside the `default` workspace — otherwise those rows would become
+/// silently unreachable (every single-tenant query filters `workspace =
+/// 'default'`). Mirrors the store-construction guard exercised by
+/// `test_single_tenant_startup_rejects_non_default_workspace_experiments`
+/// (tracking) and `..._models` (registry) — the messages and `INVALID_STATE`
+/// code are byte-matched to Python.
+///
+/// Each `(table, entity_label)` pair names a root table carrying a `workspace`
+/// column and the plural noun for its error message ("experiments",
+/// "registered models", "webhooks"). Tables that don't exist on the configured
+/// backend are skipped (the count query errors → treated as "no such table" →
+/// no rows). All three share the single Alembic-migrated DB pool.
+pub async fn verify_single_tenant_data(
+    db: &Db,
+    checks: &[(&str, &str)],
+) -> Result<(), MlflowError> {
+    for (table, label) in checks {
+        let sql = format!(
+            "SELECT COUNT(*) AS n FROM {table} WHERE workspace <> {}",
+            db.dialect().placeholder(1)
+        );
+        let count = db
+            .fetch_optional(
+                &sql,
+                &[Val::Text(DEFAULT_WORKSPACE_NAME.to_string())],
+                |r| r.get_i64("n"),
+            )
+            .await;
+        // A missing table (backend without that feature) is not a guard
+        // violation — skip it.
+        if let Ok(Some(n)) = count {
+            if n > 0 {
+                return Err(MlflowError::new(
+                    format!(
+                        "Cannot disable workspaces because {label} exist outside the \
+                         default workspace"
+                    ),
+                    ErrorCode::InvalidState,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Whether an sqlx error is a UNIQUE/PK constraint violation (SQLite code 1555 /
 /// 2067, Postgres SQLSTATE 23505, MySQL 1062). Mirrors Python's `IntegrityError`
 /// handling for the `workspaces_pk` primary key.

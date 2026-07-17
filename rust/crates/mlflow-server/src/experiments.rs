@@ -22,7 +22,7 @@ use axum::http::request::Parts;
 use axum::response::Response;
 use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_proto::mlflow as pb;
-use mlflow_store::{Experiment, ExperimentTag, ExperimentsPage, ViewType};
+use mlflow_store::{Experiment, ExperimentTag, ExperimentsPage, ViewType, WorkspaceArtifactRoot};
 
 use crate::proto_http::{parse_request, proto_response};
 use crate::state::AppState;
@@ -49,15 +49,42 @@ pub async fn create_experiment(
         })
         .collect();
 
-    let experiment_id = state
-        .tracking_store()
-        .create_experiment(
-            workspace.name(),
-            name,
-            req.artifact_location.as_deref().filter(|s| !s.is_empty()),
-            &tags,
-        )
-        .await?;
+    let artifact_location = req.artifact_location.as_deref().filter(|s| !s.is_empty());
+
+    let experiment_id = match state.workspace_store() {
+        // Workspaces enabled: forbid an explicit artifact_location and derive a
+        // workspace-scoped location from the resolved artifact root
+        // (`WorkspaceAwareSqlAlchemyStore.create_experiment` +
+        // `_get_artifact_location`, `sqlalchemy_workspace_store.py:535-561`).
+        Some(ws_store) => {
+            if artifact_location.is_some() {
+                return Err(MlflowError::new(
+                    "artifact_location cannot be specified when workspaces are enabled".to_string(),
+                    ErrorCode::InvalidParameterValue,
+                ));
+            }
+            let server_root = state.tracking_store().artifact_root_uri();
+            let (resolved_root, should_append) = ws_store
+                .resolve_artifact_root(Some(server_root), workspace.name())
+                .await?;
+            let root = WorkspaceArtifactRoot::Scoped {
+                root: resolved_root.unwrap_or_default(),
+                workspace: workspace.name().to_string(),
+                should_append,
+            };
+            state
+                .tracking_store()
+                .create_experiment_workspace_scoped(workspace.name(), name, &tags, &root)
+                .await?
+        }
+        // Single-tenant: unchanged behavior.
+        None => {
+            state
+                .tracking_store()
+                .create_experiment(workspace.name(), name, artifact_location, &tags)
+                .await?
+        }
+    };
 
     let resp = pb::create_experiment::Response {
         experiment_id: Some(experiment_id),

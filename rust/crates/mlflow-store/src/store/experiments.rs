@@ -34,14 +34,77 @@ impl ViewType {
     }
 }
 
+/// How to derive an experiment's `artifact_location` when the caller did not
+/// supply one explicitly (plan T10.3). The single-tenant default appends the
+/// experiment id to the server artifact root; the workspace-scoped variant
+/// mirrors `WorkspaceAwareSqlAlchemyStore._get_artifact_location`
+/// (`sqlalchemy_workspace_store.py:535-554`).
+pub enum WorkspaceArtifactRoot {
+    /// `<server_artifact_root>/<experiment_id>` — the single-tenant default
+    /// (`SqlAlchemyStore._get_artifact_location`).
+    ServerDefault,
+    /// Workspace-scoped: a pre-resolved root plus whether to append
+    /// `workspaces/<workspace>` before the experiment id. `should_append` is the
+    /// second element of `WorkspaceStore::resolve_artifact_root`:
+    ///
+    /// * `should_append = true` → `<root>/workspaces/<workspace>/<experiment_id>`
+    ///   (the server default root has no per-workspace override; applies to the
+    ///   `default` workspace too);
+    /// * `should_append = false` → `<root>/<experiment_id>` (the workspace's own
+    ///   `default_artifact_root` override, or an already-`workspaces/`-scoped
+    ///   root, is used verbatim).
+    Scoped {
+        root: String,
+        workspace: String,
+        should_append: bool,
+    },
+}
+
 impl TrackingStore {
-    /// `create_experiment`. Returns the new experiment id (stringified).
+    /// `create_experiment` (single-tenant). Returns the new experiment id
+    /// (stringified). The default artifact location is `<root>/<experiment_id>`.
     pub async fn create_experiment(
         &self,
         workspace: &str,
         name: &str,
         artifact_location: Option<&str>,
         tags: &[(&str, &str)],
+    ) -> Result<String, MlflowError> {
+        self.create_experiment_inner(
+            workspace,
+            name,
+            artifact_location,
+            tags,
+            &WorkspaceArtifactRoot::ServerDefault,
+        )
+        .await
+    }
+
+    /// `WorkspaceAwareSqlAlchemyStore.create_experiment`
+    /// (`sqlalchemy_workspace_store.py:556-561`): the workspaces-enabled create.
+    /// The explicit-`artifact_location` forbid is enforced by the handler (it
+    /// owns the byte-matched message); here the caller supplies the resolved
+    /// `root` context so the derived location is workspace-scoped
+    /// (`workspaces/<workspace>/<experiment_id>` unless the workspace overrides
+    /// the root).
+    pub async fn create_experiment_workspace_scoped(
+        &self,
+        workspace: &str,
+        name: &str,
+        tags: &[(&str, &str)],
+        root: &WorkspaceArtifactRoot,
+    ) -> Result<String, MlflowError> {
+        self.create_experiment_inner(workspace, name, None, tags, root)
+            .await
+    }
+
+    async fn create_experiment_inner(
+        &self,
+        workspace: &str,
+        name: &str,
+        artifact_location: Option<&str>,
+        tags: &[(&str, &str)],
+        root: &WorkspaceArtifactRoot,
     ) -> Result<String, MlflowError> {
         validation::validate_experiment_name(name)?;
         for (k, v) in tags {
@@ -85,7 +148,7 @@ impl TrackingStore {
             .ok_or_else(|| internal_msg("experiment insert did not produce a row"))?;
 
         if artifact_location.is_none() {
-            let loc = self.default_experiment_artifact_location(id);
+            let loc = self.derive_experiment_artifact_location(id, root)?;
             let sql = format!(
                 "UPDATE {EXPERIMENTS} SET artifact_location = {} WHERE experiment_id = {}",
                 ph(1),
@@ -350,6 +413,46 @@ impl TrackingStore {
 
     fn default_experiment_artifact_location(&self, experiment_id: i64) -> String {
         append_to_uri_path(self.artifact_root_uri(), &[&experiment_id.to_string()])
+    }
+
+    /// Derive the default artifact location per the [`WorkspaceArtifactRoot`]
+    /// context. Mirrors `SqlAlchemyStore._get_artifact_location` (single-tenant)
+    /// and `WorkspaceAwareSqlAlchemyStore._get_artifact_location`
+    /// (`sqlalchemy_workspace_store.py:535-554`): a `None`/empty resolved root is
+    /// the `"Cannot determine an artifact root"` misconfiguration
+    /// (`INVALID_PARAMETER_VALUE`).
+    fn derive_experiment_artifact_location(
+        &self,
+        experiment_id: i64,
+        root: &WorkspaceArtifactRoot,
+    ) -> Result<String, MlflowError> {
+        match root {
+            WorkspaceArtifactRoot::ServerDefault => {
+                Ok(self.default_experiment_artifact_location(experiment_id))
+            }
+            WorkspaceArtifactRoot::Scoped {
+                root,
+                workspace,
+                should_append,
+            } => {
+                if root.is_empty() {
+                    return Err(MlflowError::new(
+                        format!(
+                            "Cannot determine an artifact root for workspace '{workspace}'. \
+                             Set --default-artifact-root when starting the server or configure \
+                             the workspace's default_artifact_root."
+                        ),
+                        ErrorCode::InvalidParameterValue,
+                    ));
+                }
+                let base = if *should_append {
+                    append_to_uri_path(root, &["workspaces", workspace])
+                } else {
+                    root.clone()
+                };
+                Ok(append_to_uri_path(&base, &[&experiment_id.to_string()]))
+            }
+        }
     }
 
     /// Fetch the experiment (with tags) if it exists in the workspace and its

@@ -94,6 +94,22 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|| uri.clone());
                 let workspace_store = WorkspaceStore::new(db.clone(), workspace_uri);
                 app_state = app_state.with_workspace_store(workspace_store);
+            } else {
+                // Single-tenant startup guard (T10.3): if a previous
+                // workspaces-enabled run left root entities outside the `default`
+                // workspace, refuse to boot single-tenant (they'd be unreachable).
+                // Mirrors Python's store-construction guard
+                // (`INVALID_STATE`); byte-matched messages live in
+                // `verify_single_tenant_data`.
+                mlflow_store::verify_single_tenant_data(
+                    &db,
+                    &[
+                        ("experiments", "experiments"),
+                        ("registered_models", "registered models"),
+                        ("webhooks", "webhooks"),
+                    ],
+                )
+                .await?;
             }
             build_app_with_state(&config, app_state)
         }
