@@ -104,6 +104,7 @@ impl TestServer {
             allowed_hosts: None,
             cors_allowed_origins: None,
             x_frame_options: "SAMEORIGIN".to_string(),
+            ..Default::default()
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
         let mut state = AppState::with_registry(tracking, registry, true, None, None);
