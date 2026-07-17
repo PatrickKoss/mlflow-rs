@@ -8,7 +8,7 @@
 use clap::Parser;
 use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
-use mlflow_store::{Db, PoolConfig, TrackingStore};
+use mlflow_store::{Db, PoolConfig, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
                 webhook_store.clone(),
                 mlflow_server::workspace::DEFAULT_WORKSPACE_NAME,
             );
-            let store = TrackingStore::new(db, artifact_root);
+            let store = TrackingStore::new(db.clone(), artifact_root);
             // The registry tables live in the same Alembic-migrated database as
             // the tracking tables, so the registry store shares the same `Db`
             // pool (`_get_model_registry_store()`, `handlers.py:674`).
@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
                 Some(dest) => Some(mlflow_artifacts::factory::repo_from_uri(dest)?),
                 None => None,
             };
-            let app_state = AppState::with_registry(
+            let mut app_state = AppState::with_registry(
                 store,
                 registry_store,
                 config.serve_artifacts,
@@ -67,6 +67,19 @@ async fn main() -> anyhow::Result<()> {
                 config.artifacts_destination.clone(),
             )
             .with_webhook_store(webhook_store, webhook_dispatcher);
+
+            // Workspace REST endpoints (T10.2) are enabled iff
+            // `MLFLOW_ENABLE_WORKSPACES` is truthy (`MLFLOW_ENABLE_WORKSPACES.get()`,
+            // default False). When on, the workspace store shares the tracking DB
+            // pool; `MLFLOW_WORKSPACE_STORE_URI` (unset → tracking URI) only names
+            // the `mlflow gc` hint. When off, the endpoints return a 503.
+            if workspaces_enabled() {
+                let workspace_uri = std::env::var("MLFLOW_WORKSPACE_STORE_URI")
+                    .ok()
+                    .unwrap_or_else(|| uri.clone());
+                let workspace_store = WorkspaceStore::new(db.clone(), workspace_uri);
+                app_state = app_state.with_workspace_store(workspace_store);
+            }
             build_app_with_state(&config, app_state)
         }
         None => build_app(&config),
@@ -82,6 +95,15 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("mlflow-server shut down");
     Ok(())
+}
+
+/// `MLFLOW_ENABLE_WORKSPACES.get()` (`mlflow/environment_variables.py:116`,
+/// default `False`): truthy iff the env var is `"true"`/`"1"` (case-insensitive).
+fn workspaces_enabled() -> bool {
+    std::env::var("MLFLOW_ENABLE_WORKSPACES")
+        .ok()
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1"))
+        .unwrap_or(false)
 }
 
 /// Resolves once SIGINT (Ctrl-C) or SIGTERM is received, so

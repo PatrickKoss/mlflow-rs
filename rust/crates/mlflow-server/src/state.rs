@@ -26,7 +26,7 @@ use std::sync::Arc;
 use mlflow_artifacts::ArtifactRepo;
 use mlflow_error::MlflowError;
 use mlflow_registry::RegistryStore;
-use mlflow_store::TrackingStore;
+use mlflow_store::{TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
 /// A resolved artifact repository plus the repo-relative path to operate on —
@@ -61,6 +61,12 @@ struct AppStateInner {
     /// [`WebhookDispatcher::fire`] through [`AppState::webhook_dispatcher`].
     /// `None` when webhooks are unsupported (mirrors `webhook_store`).
     webhook_dispatcher: Option<WebhookDispatcher>,
+    /// The workspace store (T10.1/T10.2), `Arc`-shared so `AppState` stays cheap
+    /// to clone. `None` when `MLFLOW_ENABLE_WORKSPACES` is off — every workspace
+    /// endpoint then returns Python's plain-text 503
+    /// (`_disable_if_workspaces_disabled`). Present iff the server was started
+    /// with workspaces enabled.
+    workspace_store: Option<Arc<WorkspaceStore>>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -98,6 +104,27 @@ impl AppState {
                 registry_store: inner.registry_store.clone(),
                 webhook_store: Some(webhook_store),
                 webhook_dispatcher: Some(webhook_dispatcher),
+                workspace_store: inner.workspace_store.clone(),
+                serve_artifacts: inner.serve_artifacts,
+                proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
+                artifacts_destination: inner.artifacts_destination.clone(),
+            }),
+        }
+    }
+
+    /// Attach a [`WorkspaceStore`] to this state (T10.2). Additive builder — the
+    /// store is present iff the server was started with `MLFLOW_ENABLE_WORKSPACES`
+    /// on; its absence is how [`AppState::workspace_store`] reports the
+    /// disabled state that drives the 503 on every workspace endpoint.
+    pub fn with_workspace_store(self, workspace_store: WorkspaceStore) -> Self {
+        let inner = &self.inner;
+        Self {
+            inner: Arc::new(AppStateInner {
+                tracking_store: inner.tracking_store.clone(),
+                registry_store: inner.registry_store.clone(),
+                webhook_store: inner.webhook_store.clone(),
+                webhook_dispatcher: inner.webhook_dispatcher.clone(),
+                workspace_store: Some(Arc::new(workspace_store)),
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
@@ -159,11 +186,19 @@ impl AppState {
                 registry_store,
                 webhook_store,
                 webhook_dispatcher: None,
+                workspace_store: None,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
             }),
         }
+    }
+
+    /// The workspace store, or `None` when workspaces are disabled
+    /// (`MLFLOW_ENABLE_WORKSPACES` off). Callers translate `None` into the
+    /// plain-text 503 of `_disable_if_workspaces_disabled`.
+    pub fn workspace_store(&self) -> Option<&WorkspaceStore> {
+        self.inner.workspace_store.as_deref()
     }
 
     /// The tracking store (experiments, runs, metrics, traces, …).

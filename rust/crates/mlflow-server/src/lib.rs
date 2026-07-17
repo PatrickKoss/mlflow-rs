@@ -32,6 +32,7 @@ pub mod traces;
 pub mod traces_v2;
 pub mod webhooks;
 pub mod workspace;
+pub mod workspaces_api;
 
 use axum::extract::MatchedPath;
 use axum::http::Request;
@@ -365,6 +366,16 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("deleteTraces", "POST") => post(traces_v2::delete_traces),
         ("setTraceTag", "PATCH") => patch(traces_v2::set_trace_tag),
         ("deleteTraceTag", "DELETE") => delete(traces_v2::delete_trace_tag),
+        // ---- workspace routes (T10.2, §3.17) ----
+        // The 5 workspace RPCs are part of `MlflowService`, registered at
+        // `/api/3.0/mlflow/workspaces[/{workspace_name}]` (since.major = 3).
+        // Create returns 201, delete returns 204 (`?mode=` on the query string);
+        // when workspaces are disabled each returns a plain-text 503.
+        ("listWorkspaces", "GET") => get(workspaces_api::list_workspaces),
+        ("createWorkspace", "POST") => post(workspaces_api::create_workspace),
+        ("getWorkspace", "GET") => get(workspaces_api::get_workspace),
+        ("updateWorkspace", "PATCH") => patch(workspaces_api::update_workspace),
+        ("deleteWorkspace", "DELETE") => delete(workspaces_api::delete_workspace),
         _ => return None,
     })
 }

@@ -77,3 +77,6 @@ flate2 = { workspace = true }
 serde_json = { workspace = true }
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 tempfile = "3.27.0"
+# Used by the workspace HTTP tests to seed/count root-table rows directly in the
+# SQLite fixture (the store's `Val`/`exec` helpers are crate-private).
+sqlx = { workspace = true }
