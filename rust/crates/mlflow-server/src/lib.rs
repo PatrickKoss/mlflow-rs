@@ -15,6 +15,7 @@
 pub mod artifacts;
 pub mod assessments;
 pub mod auth_api;
+pub mod auth_middleware;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
@@ -216,10 +217,26 @@ fn register_proto_routes(state: AppState) -> Router {
     // (see `auth_api/roles.rs`), so it merges after `with_state` rather than
     // joining the `Router<AppState>` block above.
     let auth_store = state.auth_store().cloned();
+    let auth_enabled = state.auth_enabled();
+    let layer_state = state.clone();
     let mut app = router.with_state(state);
     if let Some(store) = auth_store {
         app = app.merge(auth_api::register_role_routes(store));
     }
+    // ---- auth middleware (T9.4) ----
+    // The tower authorization layer (authenticate -> admin bypass -> validator
+    // dispatch -> enforcement) wraps the *entire* app so it covers every route:
+    // proto ROUTE_TABLE routes, hand-registered routes, and the merged role
+    // router. Applied only when the basic-auth app is enabled, mirroring
+    // Python's `before_request`/FastAPI middleware being installed solely by
+    // `mlflow.server.auth:create_app`.
+    if auth_enabled {
+        app = app.layer(middleware::from_fn_with_state(
+            layer_state,
+            auth_middleware::authorize,
+        ));
+    }
+    // ---- end auth middleware ----
     app
 }
 

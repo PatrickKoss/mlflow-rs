@@ -1350,7 +1350,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       Router<AuthStore> (orchestrator wired into build; caller-scope
       filtering of list_user_roles rides T9.4). 37 store + 17 HTTP + 8 unit
       tests.)*
-- [ ] **T9.4 Permission resolution + enforcement middleware**: tower layer implementing
+- [x] **T9.4 Permission resolution + enforcement middleware**: tower layer implementing
       authenticate → admin bypass → validator dispatch (exact-path map + regex matchers
       for trace/logged-model/webhook paths + artifact-proxy path inspection with
       experiment-id extraction incl. `workspaces/<ws>/` prefixes); fail-closed on unknown
@@ -1360,6 +1360,20 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       **AC:** `tests/server/auth/test_auth.py` + `test_permissions.py` pass against Rust
       (server launched with `MLFLOW_AUTH_CONFIG_PATH`).
       **VER:** Phase 12 auth runner; fail-closed paths covered by explicit tests.
+      *(Done: `mlflow-server/src/auth_middleware/{mod,validators,path_matchers}.rs` — the
+      tower layer applied at the top of the app router when auth is enabled. Dispatch is
+      driven from the proto `ROUTE_TABLE` keyed on `(service, method)` [mirroring Python's
+      `BEFORE_REQUEST_HANDLERS`] plus the hand-registered auth/artifact/OTLP routes; four
+      groups [logged-model / webhook / exact / trace-parameterized] consulted in Python's
+      `_find_validator` order with fail-closed on unknown `/mlflow/traces/` subpaths.
+      Permission resolution reuses T9.3's `get_role_permission_for_resource` folded against
+      `default_permission` (env `MLFLOW_AUTH_DEFAULT_PERMISSION`, default READ — `// T9.8
+      SEAM:`); workspace resolved to `"default"` pre-T10.4. Body-buffering for JSON-reading
+      validators [MV create, start/search/batch traces, search datasets]. `// T9.5 SEAM:`
+      left for after-request hooks. 25 HTTP tests [`auth_middleware_http.rs` +
+      `auth_middleware_no_default_http.rs`] + 10 unit tests; the lattice-only cases of
+      `test_permissions.py` are covered by `mlflow-auth`'s `permissions` unit tests.
+      Python-suite runs ride Phase 12.)*
 - [ ] **T9.5 After-request hooks**: creator-MANAGE grants on create; search/list response
       filtering for experiments/registered-models/model-versions/logged-models — prefer
       the query-integrated form (Q10) with a flag-gated fallback to Python-identical

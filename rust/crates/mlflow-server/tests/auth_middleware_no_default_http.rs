@@ -1,0 +1,303 @@
+//! Auth-middleware HTTP tests that require `default_permission = NO_PERMISSIONS`
+//! (plan T9.4). These mirror the Python cases that use the
+//! `fixtures/no_permission_auth.ini` config: the MV-create source-READ deny and
+//! the default-permission deny fallback.
+//!
+//! They live in their own test binary (separate process) so setting the
+//! process-global `MLFLOW_AUTH_DEFAULT_PERMISSION` env var can't race the
+//! default-`READ` tests in `auth_middleware_http.rs`. Within this binary every
+//! test wants the same value, so the concurrent `set_var` writes are idempotent.
+//! The `MLFLOW_AUTH_DEFAULT_PERMISSION` fallback itself is the T9.8 seam that
+//! the ini config layer will later replace.
+
+use std::path::{Path, PathBuf};
+
+use base64::Engine;
+use http_body_util::{BodyExt, Full};
+use hyper::body::Bytes;
+use hyper::{Method, Request, StatusCode};
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
+use metrics_exporter_prometheus::PrometheusBuilder;
+use mlflow_auth::{AuthDb, AuthStore};
+use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
+use mlflow_store::{Db, PoolConfig, TrackingStore};
+use serde_json::{json, Value};
+use tokio::net::TcpListener;
+
+const ART_ROOT: &str = "s3://bucket/mlruns";
+const WS: &str = "default";
+
+fn set_no_permission_default() {
+    // Safe: every test in this binary sets the identical value.
+    std::env::set_var("MLFLOW_AUTH_DEFAULT_PERMISSION", "NO_PERMISSIONS");
+}
+
+fn auth_fixture_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("mlflow-auth")
+        .join("tests")
+        .join("fixtures")
+        .join("basic_auth.db")
+}
+
+fn tracking_fixture_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("tracking.db")
+}
+
+struct TempDb {
+    path: PathBuf,
+}
+
+impl TempDb {
+    fn new(tag: &str, source: &Path) -> Self {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "mlflow_rust_authmw_nd_{}_{}_{}.db",
+            tag,
+            std::process::id(),
+            n
+        ));
+        let _ = std::fs::remove_file(&path);
+        std::fs::copy(source, &path).expect("copy fixture");
+        TempDb { path }
+    }
+
+    fn uri(&self) -> String {
+        format!("sqlite:///{}", self.path.display())
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+struct TestServer {
+    base: String,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    handle: Option<tokio::task::JoinHandle<()>>,
+    tracking: TrackingStore,
+    auth: AuthStore,
+    _tracking_db: TempDb,
+    _auth_db: TempDb,
+}
+
+impl TestServer {
+    async fn start(tag: &str) -> Self {
+        set_no_permission_default();
+        let tracking_db = TempDb::new(&format!("{tag}_track"), &tracking_fixture_path());
+        let db = Db::connect(&tracking_db.uri(), PoolConfig::default())
+            .await
+            .expect("connect tracking fixture");
+        let tracking = TrackingStore::new(db, ART_ROOT);
+
+        let auth_db_file = TempDb::new(&format!("{tag}_auth"), &auth_fixture_path());
+        let auth_db =
+            AuthDb::connect_and_verify_with(&auth_db_file.uri(), None, PoolConfig::default())
+                .await
+                .expect("connect + verify auth fixture");
+        let auth = AuthStore::new(auth_db);
+
+        let state = AppState::new(tracking.clone()).with_auth_store(auth.clone());
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            static_prefix: None,
+            backend_store_uri: None,
+            default_artifact_root: None,
+            serve_artifacts: true,
+            artifacts_destination: None,
+        };
+        let recorder = PrometheusBuilder::new().build_recorder().handle();
+        let app = build_app_with_recorder(&config, recorder, Some(state));
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .expect("server error");
+        });
+
+        TestServer {
+            base: format!("http://{addr}"),
+            shutdown: Some(shutdown_tx),
+            handle: Some(handle),
+            tracking,
+            auth,
+            _tracking_db: tracking_db,
+            _auth_db: auth_db_file,
+        }
+    }
+
+    async fn create_user(&self, username: &str) -> (String, String) {
+        let password = format!("{username}-password-1");
+        self.auth
+            .create_user(username, &password, false)
+            .await
+            .expect("create user");
+        (username.to_string(), password)
+    }
+
+    async fn grant(
+        &self,
+        username: &str,
+        resource_type: &str,
+        resource_id: &str,
+        permission: &str,
+    ) {
+        self.auth
+            .grant_user_permission(username, resource_type, resource_id, permission, WS)
+            .await
+            .expect("grant");
+    }
+
+    async fn create_experiment(&self, name: &str) -> String {
+        self.tracking
+            .create_experiment(WS, name, None, &[])
+            .await
+            .expect("create experiment")
+    }
+
+    async fn create_run(&self, experiment_id: &str) -> String {
+        self.tracking
+            .create_run(WS, experiment_id, None, Some(1), Some("r"), &[])
+            .await
+            .expect("create run")
+            .info
+            .run_id
+    }
+}
+
+impl Drop for TestServer {
+    fn drop(&mut self) {
+        if let Some(tx) = self.shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(h) = self.handle.take() {
+            h.abort();
+        }
+    }
+}
+
+fn basic_header(user: &str, pass: &str) -> String {
+    let raw = format!("{user}:{pass}");
+    let encoded = base64::engine::general_purpose::STANDARD.encode(raw);
+    format!("Basic {encoded}")
+}
+
+struct HttpResponse {
+    status: StatusCode,
+    body: String,
+}
+
+async fn send(
+    base: &str,
+    method: Method,
+    path: &str,
+    auth: Option<(&str, &str)>,
+    body: Option<Value>,
+) -> HttpResponse {
+    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    let uri = format!("{base}{path}");
+    let mut builder = Request::builder().method(method).uri(uri);
+    if let Some((u, p)) = auth {
+        builder = builder.header("Authorization", basic_header(u, p));
+    }
+    let body_bytes = match body {
+        Some(v) => {
+            builder = builder.header("Content-Type", "application/json");
+            Bytes::from(v.to_string())
+        }
+        None => Bytes::new(),
+    };
+    let req = builder.body(Full::new(body_bytes)).unwrap();
+    let resp = client.request(req).await.expect("request");
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let body = String::from_utf8_lossy(&bytes).into_owned();
+    HttpResponse { status, body }
+}
+
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn default_no_permission_denies_read_without_grant() {
+    // With `default_permission = NO_PERMISSIONS`, an ungranted user cannot even
+    // read an experiment → 403 (the resolver folds `None` → NO_PERMISSIONS is
+    // wrong; `None` folds to the *default*, which here is NO_PERMISSIONS).
+    let srv = TestServer::start("nd_read").await;
+    let exp = srv.create_experiment("nd-read-exp").await;
+    let (u, pw) = srv.create_user("nate_nd").await;
+    let resp = send(
+        &srv.base,
+        Method::GET,
+        &format!("/api/2.0/mlflow/experiments/get?experiment_id={exp}"),
+        Some((&u, &pw)),
+        None,
+    )
+    .await;
+    assert_eq!(resp.status, StatusCode::FORBIDDEN, "{}", resp.body);
+    assert_eq!(resp.body, "Permission denied");
+
+    // A READ grant lifts the deny.
+    srv.grant(&u, "experiment", &exp, "READ").await;
+    let ok = send(
+        &srv.base,
+        Method::GET,
+        &format!("/api/2.0/mlflow/experiments/get?experiment_id={exp}"),
+        Some((&u, &pw)),
+        None,
+    )
+    .await;
+    assert_ne!(ok.status, StatusCode::FORBIDDEN, "{}", ok.body);
+}
+
+#[tokio::test]
+async fn model_version_create_source_read_denied_with_no_default() {
+    // The MV-create dual requirement's source-READ half: user has MANAGE on the
+    // target model but no READ on the source run's experiment (and the default
+    // is NO_PERMISSIONS), so anchoring a model version at that run is denied.
+    let srv = TestServer::start("nd_mv").await;
+    let exp = srv.create_experiment("nd-mv-exp").await;
+    let run = srv.create_run(&exp).await;
+    let (u, pw) = srv.create_user("olga_nd").await;
+    srv.grant(&u, "registered_model", "nd-model", "MANAGE")
+        .await;
+
+    let denied = send(
+        &srv.base,
+        Method::POST,
+        "/api/2.0/mlflow/model-versions/create",
+        Some((&u, &pw)),
+        Some(json!({"name": "nd-model", "source": "s3://x", "run_id": run})),
+    )
+    .await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN, "{}", denied.body);
+    assert_eq!(denied.body, "Permission denied");
+
+    // Grant READ on the source experiment → the source-read half now passes
+    // (gate reaches the handler, which may 400 on the source URI but not 403).
+    srv.grant(&u, "experiment", &exp, "READ").await;
+    let allowed = send(
+        &srv.base,
+        Method::POST,
+        "/api/2.0/mlflow/model-versions/create",
+        Some((&u, &pw)),
+        Some(json!({"name": "nd-model", "source": "s3://x", "run_id": run})),
+    )
+    .await;
+    assert_ne!(allowed.status, StatusCode::FORBIDDEN, "{}", allowed.body);
+}
