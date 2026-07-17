@@ -27,6 +27,7 @@ pub mod proto_http;
 pub mod registry;
 pub mod routes;
 pub mod runs;
+pub mod server_info;
 pub mod state;
 pub mod trace_artifact;
 pub mod traces;
@@ -197,6 +198,18 @@ fn register_proto_routes(state: AppState) -> Router {
     // JSON body (content-type validated for POST only), so a single handler
     // covers both.
     router = router.route("/graphql", get(graphql::graphql).post(graphql::graphql));
+
+    // ---- server-info (T11.5) ----
+    // `GET /(api|ajax-api)/3.0/mlflow/server-info` — hand-registered like
+    // `/graphql` above, mirroring Python's `_get_paths("/mlflow/server-info",
+    // version=3)` (`handlers.py:6797-6802`), `["GET"]` only. See
+    // `server_info.rs` for the response-shape rationale.
+    router = router.route("/api/3.0/mlflow/server-info", get(server_info::server_info));
+    router = router.route(
+        "/ajax-api/3.0/mlflow/server-info",
+        get(server_info::server_info),
+    );
+    // ---- end server-info (T11.5) ----
 
     // ---- auth API routes (T9.2) ----
     // Hand-rolled JSON endpoints from the `mlflow.server.auth` app
