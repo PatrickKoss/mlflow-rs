@@ -44,9 +44,47 @@ use mlflow_store::{
     DatasetFilter, LoggedModel, LoggedModelKv, LoggedModelOrderByInput, LoggedModelStatus,
 };
 
-use crate::proto_http::{parse_request, parse_request_with_path_params, proto_response};
+use crate::proto_http::{
+    parse_request, parse_request_lenient, parse_request_with_path_params, proto_response,
+};
+use crate::schema_validation::{SchemaEntry, Validator};
 use crate::state::AppState;
 use crate::workspace::Workspace;
+
+/// `_finalize_logged_model`'s schema (`handlers.py:5306-5309`):
+/// `{"model_id": [_assert_string, _assert_required], "status": [_assert_intlike,
+/// _assert_required]}`. `model_id` is required in the BODY (the real client sends
+/// it in both the URL and the JSON); Python uses `request_message.model_id` — the
+/// body value — for the store call, so this endpoint does NOT overlay the path
+/// segment (a deliberate reversal of the T3.4 overlay, for exact parity: a body
+/// omitting `model_id` must 400, which the T12.4 harness gates on).
+const FINALIZE_LOGGED_MODEL_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "model_id",
+        validators: &[Validator::String, Validator::Required],
+    },
+    SchemaEntry {
+        param: "status",
+        validators: &[Validator::IntLike, Validator::Required],
+    },
+];
+
+/// `_log_logged_model_params`'s schema (`handlers.py:5278-5281`):
+/// `{"model_id": [_assert_string, _assert_required], "params": [_assert_array]}`.
+/// `model_id` is required in the BODY, but Python's store call uses the URL path
+/// arg (`log_logged_model_params(model_id, params)` — the function argument),
+/// not the body value. So: validate body `model_id` (no path overlay), then use
+/// the path segment for the store.
+const LOG_LOGGED_MODEL_PARAMS_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "model_id",
+        validators: &[Validator::String, Validator::Required],
+    },
+    SchemaEntry {
+        param: "params",
+        validators: &[Validator::Array],
+    },
+];
 
 /// `_create_logged_model` (`handlers.py:5240`).
 pub async fn create_logged_model(
@@ -94,18 +132,21 @@ pub async fn log_logged_model_params(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::LogLoggedModelParamsRequest = parse_request_with_path_params(
+    // Python requires `model_id` in the body (schema) but uses the URL path arg
+    // for the store call, so we validate the raw body (no overlay) then read the
+    // path segment for the store.
+    let req: pb::LogLoggedModelParamsRequest = parse_request_lenient(
         &parts,
         &body,
         "mlflow.LogLoggedModelParamsRequest",
-        &path_param_pairs(&path_params, &["model_id"]),
+        LOG_LOGGED_MODEL_PARAMS_SCHEMA,
     )?;
-    let model_id = require_non_empty(req.model_id.as_deref(), "model_id")?;
+    let model_id = path_params.get("model_id").cloned().unwrap_or_default();
     let params: Vec<LoggedModelKv> = req.params.iter().map(to_store_kv_param).collect();
 
     state
         .tracking_store()
-        .log_logged_model_params(workspace.name(), model_id, &params)
+        .log_logged_model_params(workspace.name(), &model_id, &params)
         .await?;
 
     proto_response(
@@ -158,11 +199,15 @@ pub async fn finalize_logged_model(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::FinalizeLoggedModel = parse_request_with_path_params(
+    // No path overlay: Python requires `model_id` in the request body and uses
+    // that body value for the store call, so the schema below must see the raw
+    // body (a body omitting `model_id` must 400, matching Python).
+    let _ = &path_params;
+    let req: pb::FinalizeLoggedModel = parse_request_lenient(
         &parts,
         &body,
         "mlflow.FinalizeLoggedModel",
-        &path_param_pairs(&path_params, &["model_id"]),
+        FINALIZE_LOGGED_MODEL_SCHEMA,
     )?;
     let model_id = require_non_empty(req.model_id.as_deref(), "model_id")?;
     let status_i32 = req.status.ok_or_else(|| missing_param("status"))?;

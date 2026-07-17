@@ -93,5 +93,8 @@ pub use json::{
     python_float_repr, quote_json_string, to_mlflow_json, JsonCodecError,
 };
 
+mod lenient;
+pub use lenient::{lenient_from_mlflow_json, lenient_message_from_mlflow_json, LenientParse};
+
 mod routes;
 pub use routes::{ExpandedRoute, RouteSpec, ROUTE_TABLE};

@@ -29,6 +29,8 @@ use axum::response::Response;
 use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_proto::JsonCodecError;
 
+use crate::schema_validation::{validate_request_json_with_schema, SchemaEntry};
+
 /// Parse a request into the proto message `M`.
 ///
 /// `parts` carries the method, headers, and (for GET) the query string; `body`
@@ -108,6 +110,110 @@ where
     let json = if text.trim().is_empty() { "{}" } else { text };
     let merged = merge_path_params(json, path_params)?;
     mlflow_proto::from_mlflow_json::<M>(&merged, type_name).map_err(codec_err)
+}
+
+/// The lenient, schema-validating request parser — a faithful port of Python's
+/// `_get_request_message(request_message, schema=...)` (`handlers.py:1008-1049`).
+///
+/// This is the entry point endpoints use once their divergence from Python is
+/// traced to the lenient-parse mechanism (T12.5). Unlike [`parse_request`] (which
+/// treats *any* codec error as a fatal 400), this:
+///
+/// 1. Parses the request JSON with [`mlflow_proto::lenient_message_from_mlflow_json`]:
+///    a strict attempt first, then — on a codec failure — a ParseDict-parity
+///    partial parse, recording `proto_parsing_succeeded = false`.
+/// 2. Runs [`validate_request_json_with_schema`] on the **raw** JSON, gated by
+///    `proto_parsing_succeeded` exactly as Python does. A schema failure here is
+///    what surfaces the Python error message (e.g. the int-`name` "Invalid value"
+///    text) instead of the swallowed codec error.
+/// 3. Returns the (possibly partial) message; the handler proceeds with it,
+///    reproducing Python's partial-parse-then-200 cases (e.g. log-batch with a
+///    bool tag value).
+///
+/// For GET requests the raw JSON is the query-derived object (Python's GET branch
+/// builds `request_json` from `flask_request.args` before `parse_dict`); the
+/// bool-query validation still applies there.
+pub fn parse_request_lenient<M>(
+    parts: &Parts,
+    body: &Bytes,
+    type_name: &str,
+    schema: &[SchemaEntry],
+) -> Result<M, MlflowError>
+where
+    M: prost::Message + Default,
+{
+    parse_request_lenient_with_path_params(parts, body, type_name, schema, &[])
+}
+
+/// [`parse_request_lenient`] with `path_params` overlaid onto the request JSON
+/// before parsing (see [`parse_request_with_path_params`] for the merge rationale).
+///
+/// NB: path params are merged into the message-parse input but the schema
+/// validation runs on the JSON *without* them when the endpoint requires the
+/// field in the body itself — see the per-endpoint decision in `logged_models.rs`.
+/// For the common overlay case the merged JSON is used for both.
+pub fn parse_request_lenient_with_path_params<M>(
+    parts: &Parts,
+    body: &Bytes,
+    type_name: &str,
+    schema: &[SchemaEntry],
+    path_params: &[(&str, String)],
+) -> Result<M, MlflowError>
+where
+    M: prost::Message + Default,
+{
+    // Build the raw request JSON exactly as `_get_request_message` does: the
+    // query-derived object for GET-with-query, else the (path-param-merged) body.
+    let request_json = build_request_json(parts, body, type_name, path_params)?;
+
+    let (message, proto_parsing_succeeded) =
+        mlflow_proto::lenient_message_from_mlflow_json::<M>(&request_json, type_name)
+            .map_err(codec_err)?;
+
+    let value: serde_json::Value = serde_json::from_str(&request_json)
+        .map_err(|e| MlflowError::invalid_parameter_value(format!("failed to parse JSON: {e}")))?;
+    validate_request_json_with_schema(&value, schema, proto_parsing_succeeded)?;
+
+    Ok(message)
+}
+
+/// Produce the raw request JSON string that `parse_dict` + the schema validator
+/// operate on: for a GET with a non-empty query, the object built from the query
+/// pairs (mirroring `_get_request_message`'s GET branch, incl. bool-query
+/// validation and repeated-field listing); otherwise the request body (empty →
+/// `{}`), with `path_params` overlaid.
+fn build_request_json(
+    parts: &Parts,
+    body: &Bytes,
+    type_name: &str,
+    path_params: &[(&str, String)],
+) -> Result<String, MlflowError> {
+    if parts.method == Method::GET {
+        if let Some(query) = parts.uri.query().filter(|q| !q.is_empty()) {
+            let mut pairs = parse_query_pairs(query);
+            for (name, value) in path_params {
+                pairs.retain(|(k, _)| k != name);
+                pairs.push(((*name).to_string(), value.clone()));
+            }
+            // `_get_request_message`'s GET branch: `request_json` is the raw
+            // `{field: value}` dict from `flask_request.args` (string-valued,
+            // repeated fields listed, bool fields validated+coerced). The codec's
+            // `dynamic_from_query_pairs` builds exactly that intermediate object,
+            // then we serialize it back so `parse_dict` + the schema validator
+            // both see the same JSON Python's GET branch produces.
+            let dynamic =
+                mlflow_proto::dynamic_from_query_pairs(&pairs, type_name).map_err(codec_err)?;
+            return mlflow_proto::to_mlflow_json(&dynamic, type_name).map_err(codec_err);
+        }
+    } else {
+        validate_content_type(parts)?;
+    }
+
+    let text = std::str::from_utf8(body).map_err(|_| {
+        MlflowError::invalid_parameter_value("Request body is not valid UTF-8.".to_string())
+    })?;
+    let json = if text.trim().is_empty() { "{}" } else { text };
+    merge_path_params(json, path_params)
 }
 
 /// Overlay `path_params` as string fields onto the parsed JSON body, replacing

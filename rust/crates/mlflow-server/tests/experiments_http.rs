@@ -271,6 +271,29 @@ async fn create_with_tags_and_artifact_location() {
 }
 
 #[tokio::test]
+async fn create_experiment_int_name_returns_python_schema_error() {
+    // T12.5 lenient-parse parity: an `int` name fails `parse_dict` (swallowed),
+    // then `_assert_string` on the raw JSON surfaces the schema error. Byte-exact
+    // with Python (verified live: `_validate_request_json_with_schema({'name':123},
+    // ..., False)` -> this message). Note the `supplied:  Hint:` double space.
+    let server = TestServer::start("int_name").await;
+    let res = post(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/create",
+        r#"{"name": 123}"#,
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.body);
+    assert_eq!(res.json()["error_code"], "INVALID_PARAMETER_VALUE");
+    assert_eq!(
+        res.json()["message"],
+        "Invalid value 123 for parameter 'name' supplied:  Hint: Value was of type 'int'. \
+         See the API docs for more information about request parameters."
+    );
+}
+
+#[tokio::test]
 async fn experiment_response_always_carries_workspace() {
     // Python's `Experiment.to_proto` always emits `workspace` (proto field 9,
     // "Always `default` if workspace is not enabled") because

@@ -364,11 +364,14 @@ async fn finalize_logged_model_updates_status() {
     let server = TestServer::start("finalize").await;
     let model_id = create_model(&server, "/api/2.0", "to_finalize").await;
 
+    // Exact Python parity (T12.5): `_finalize_logged_model` requires `model_id`
+    // in the BODY (its schema) and uses that body value for the store call, so
+    // the client sends it in both the URL and the JSON.
     let finalize = patch(
         &server,
         "/api/2.0",
         &format!("/mlflow/logged-models/{model_id}"),
-        r#"{"status": "LOGGED_MODEL_READY"}"#,
+        &format!(r#"{{"model_id": "{model_id}", "status": "LOGGED_MODEL_READY"}}"#),
     )
     .await;
     assert_eq!(finalize.status, StatusCode::OK, "{}", finalize.body);
@@ -387,15 +390,14 @@ async fn finalize_logged_model_updates_status() {
 }
 
 #[tokio::test]
-async fn finalize_path_param_wins_over_differing_body_model_id() {
-    // The path-param merge mechanism (`parse_request_with_path_params`)
-    // overlays the URL segment onto the parsed body, taking precedence over a
-    // conflicting `model_id` in the JSON — this proves the merge actually runs
-    // (rather than the body value coincidentally matching), and documents the
-    // one deliberate deviation from Python (which reads the body's `model_id`
-    // for this endpoint, not the URL's).
-    let server = TestServer::start("finalize_path_wins").await;
-    let model_id = create_model(&server, "/api/2.0", "path_wins").await;
+async fn finalize_uses_body_model_id_not_path() {
+    // Exact Python parity (T12.5): `_finalize_logged_model` reads
+    // `request_message.model_id` — the BODY value — for the store call, not the
+    // URL segment. So a body `model_id` that differs from the path is what the
+    // store sees; here it names a nonexistent model, which Python surfaces as a
+    // RESOURCE_DOES_NOT_EXIST (404), proving the body value drives the lookup.
+    let server = TestServer::start("finalize_body_model_id").await;
+    let model_id = create_model(&server, "/api/2.0", "body_wins").await;
 
     let finalize = patch(
         &server,
@@ -404,13 +406,16 @@ async fn finalize_path_param_wins_over_differing_body_model_id() {
         r#"{"model_id": "m-doesnotexist", "status": "LOGGED_MODEL_READY"}"#,
     )
     .await;
-    assert_eq!(finalize.status, StatusCode::OK, "{}", finalize.body);
-    assert_eq!(finalize.json()["model"]["info"]["model_id"], model_id);
+    assert_eq!(finalize.status, StatusCode::NOT_FOUND, "{}", finalize.body);
+    assert_eq!(finalize.json()["error_code"], "RESOURCE_DOES_NOT_EXIST");
 }
 
 #[tokio::test]
-async fn finalize_missing_status_is_invalid_parameter_value() {
-    let server = TestServer::start("finalize_missing_status").await;
+async fn finalize_empty_body_missing_required_model_id() {
+    // With an empty body, `_finalize_logged_model`'s schema
+    // (`model_id` then `status`, both required) fails on `model_id` first —
+    // exact byte-parity with Python's `_assert_required` message (T12.5).
+    let server = TestServer::start("finalize_empty_body").await;
     let model_id = create_model(&server, "/api/2.0", "no_status").await;
 
     let res = patch(
@@ -422,6 +427,11 @@ async fn finalize_missing_status_is_invalid_parameter_value() {
     .await;
     assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.body);
     assert_eq!(res.json()["error_code"], "INVALID_PARAMETER_VALUE");
+    assert_eq!(
+        res.json()["message"],
+        "Missing value for required parameter 'model_id'. \
+         See the API docs for more information about request parameters."
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -433,11 +443,14 @@ async fn log_logged_model_params_via_path_param() {
     let server = TestServer::start("log_params").await;
     let model_id = create_model(&server, "/api/2.0", "params_model").await;
 
+    // Exact Python parity (T12.5): `_log_logged_model_params` requires
+    // `model_id` in the BODY (schema), then uses the URL path arg for the store
+    // call. The client sends the id in both places.
     let res = post(
         &server,
         "/api/2.0",
         &format!("/mlflow/logged-models/{model_id}/params"),
-        r#"{"params": [{"key": "beta", "value": "1.0"}]}"#,
+        &format!(r#"{{"model_id": "{model_id}", "params": [{{"key": "beta", "value": "1.0"}}]}}"#),
     )
     .await;
     assert_eq!(res.status, StatusCode::OK, "{}", res.body);

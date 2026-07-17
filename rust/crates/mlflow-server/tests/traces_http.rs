@@ -262,6 +262,42 @@ async fn start_and_get_trace_info_on_both_prefixes() {
 }
 
 #[tokio::test]
+async fn start_trace_v3_non_rfc3339_request_time_partial_parses_to_200() {
+    // T12.5 lenient-parse parity: `request_time: "1000"` is not RFC3339, so
+    // `parse_dict` fails on that field (swallowed). trace_id + trace_location —
+    // which precede request_time — are applied; request_time/state are left at
+    // their proto defaults. The schema (`{"trace": [_assert_required]}`) passes
+    // (trace present), so Python returns 200 with request_time defaulted to 0.
+    // Previously Rust 400'd on the strict "invalid rfc3339 timestamp" codec error.
+    let server = TestServer::start("start_bad_ts").await;
+    let body = json!({
+        "trace": {
+            "trace_info": {
+                "trace_id": "tr-bad-ts",
+                "trace_location": {
+                    "type": "MLFLOW_EXPERIMENT",
+                    "mlflow_experiment": {"experiment_id": EXP_ID}
+                },
+                "request_time": "1000",
+                "state": "OK"
+            }
+        }
+    })
+    .to_string();
+    let res = post(&server, "/api/3.0", "/mlflow/traces", &body).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let info = &res.json()["trace"]["trace_info"];
+    assert_eq!(info["trace_id"], "tr-bad-ts");
+    assert_eq!(
+        info["trace_location"]["mlflow_experiment"]["experiment_id"],
+        EXP_ID
+    );
+    // request_time failed to parse -> defaulted; state (after it) also default.
+    assert_eq!(info["request_time"], "1970-01-01T00:00:00Z");
+    assert_eq!(info["state"], "STATE_UNSPECIFIED");
+}
+
+#[tokio::test]
 async fn get_missing_trace_info_is_resource_does_not_exist() {
     let server = TestServer::start("get_missing_info").await;
     let res = get_q(&server, "/api/3.0", "/mlflow/traces/tr-nope").await;

@@ -30,9 +30,86 @@ use mlflow_store::{
     RunStatus, RunsPage, ViewType,
 };
 
-use crate::proto_http::{parse_request, proto_response};
+use crate::proto_http::{parse_request, parse_request_lenient, proto_response};
+use crate::schema_validation::{missing_required_error, SchemaEntry, Validator};
 use crate::state::AppState;
 use crate::workspace::Workspace;
+
+/// `_log_batch`'s per-element presence closures (`handlers.py:2537-2549`):
+/// `_assert_metrics_fields_present` requires each metric's `key`/`value`/
+/// `timestamp`; `_assert_params_fields_present` requires each param's `key`;
+/// `_assert_tags_fields_present` requires each tag's `key`. Each mirrors
+/// `_assert_required(elem.get(field), path=f"...[i].field")`.
+fn assert_metrics_fields_present(value: &serde_json::Value) -> Result<(), MlflowError> {
+    assert_elem_fields(value, "metrics", &["key", "value", "timestamp"])
+}
+
+fn assert_params_fields_present(value: &serde_json::Value) -> Result<(), MlflowError> {
+    assert_elem_fields(value, "params", &["key"])
+}
+
+fn assert_tags_fields_present(value: &serde_json::Value) -> Result<(), MlflowError> {
+    assert_elem_fields(value, "tags", &["key"])
+}
+
+/// For each element of `value` (a JSON array), require every field in `fields`
+/// to be present and non-empty, matching `_assert_required(elem.get(field),
+/// path=f"{list_name}[{i}].{field}")`. A non-array value has no elements to walk
+/// (`_assert_array` would have failed earlier in the schema), so it is a no-op.
+fn assert_elem_fields(
+    value: &serde_json::Value,
+    list_name: &str,
+    fields: &[&str],
+) -> Result<(), MlflowError> {
+    let serde_json::Value::Array(items) = value else {
+        return Ok(());
+    };
+    for (idx, item) in items.iter().enumerate() {
+        for field in fields {
+            // `_assert_required`: present, not null, and not the empty string.
+            let ok = match item.get(field) {
+                None | Some(serde_json::Value::Null) => false,
+                Some(serde_json::Value::String(s)) => !s.is_empty(),
+                Some(_) => true,
+            };
+            if !ok {
+                return Err(missing_required_error(&format!(
+                    "{list_name}[{idx}].{field}"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `_log_batch`'s schema (`handlers.py:2554-2559`).
+const LOG_BATCH_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "run_id",
+        validators: &[Validator::String, Validator::Required],
+    },
+    SchemaEntry {
+        param: "metrics",
+        validators: &[
+            Validator::Array,
+            Validator::Custom(assert_metrics_fields_present),
+        ],
+    },
+    SchemaEntry {
+        param: "params",
+        validators: &[
+            Validator::Array,
+            Validator::Custom(assert_params_fields_present),
+        ],
+    },
+    SchemaEntry {
+        param: "tags",
+        validators: &[
+            Validator::Array,
+            Validator::Custom(assert_tags_fields_present),
+        ],
+    },
+];
 
 /// `_create_run` (`handlers.py:1663`).
 ///
@@ -360,7 +437,8 @@ pub async fn log_batch(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::LogBatch = parse_request(&parts, &body, "mlflow.LogBatch")?;
+    let req: pb::LogBatch =
+        parse_request_lenient(&parts, &body, "mlflow.LogBatch", LOG_BATCH_SCHEMA)?;
     let run_id = require_non_empty(req.run_id.as_deref(), "run_id")?;
 
     let metrics: Vec<MetricInput> = req
