@@ -1373,7 +1373,14 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       left for after-request hooks. 25 HTTP tests [`auth_middleware_http.rs` +
       `auth_middleware_no_default_http.rs`] + 10 unit tests; the lattice-only cases of
       `test_permissions.py` are covered by `mlflow-auth`'s `permissions` unit tests.
-      Python-suite runs ride Phase 12.)*
+      Python-suite runs ride Phase 12. Merge reconciliation (orchestrator): /signup
+      re-registered via `.route()` so the auth-layered fallback survives (a `.merge()`
+      clobbered it → unmatched traces paths 404'd instead of the fail-closed 403), the
+      layer re-applied to /signup directly + `(SIGNUP, GET)→validate_can_create_user`
+      added (auth/__init__.py:2649), and the T9.7/T11.5 tests moved to Python's
+      authenticated flow — `_before_request` gates /signup, create-user-ui, and
+      server-info too (the `:3638` server-info exemption is after-request-only).
+      Closes parity-backlog item #2 from T12.1.)*
 - [ ] **T9.5 After-request hooks**: creator-MANAGE grants on create; search/list response
       filtering for experiments/registered-models/model-versions/logged-models — prefer
       the query-integrated form (Q10) with a flag-gated fallback to Python-identical
