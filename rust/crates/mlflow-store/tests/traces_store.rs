@@ -1,60 +1,21 @@
 //! Behavioral integration tests for the tracing V3 store (plan T2.10), ported
 //! from `tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_traces.py`.
 //!
-//! Uses the committed SQLite fixture (Alembic head `b7e4c1a90f23`) copied to a
-//! temp file per test, exactly like `tracking_store.rs`.
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 #![allow(clippy::too_many_arguments, clippy::cloned_ref_to_slice_refs)]
 
-use std::path::{Path, PathBuf};
-
-use mlflow_store::{Db, PoolConfig, StartTraceInput, TrackingStore};
+use mlflow_store::{StartTraceInput, TrackingStore};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_traces_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 /// Build a `StartTraceInput` with the given fields; tags/metadata as `(k, v)`.
@@ -120,7 +81,7 @@ fn ids(page: &[mlflow_store::TraceInfo]) -> Vec<String> {
 
 #[tokio::test]
 async fn start_trace_and_get_info() {
-    let tmp = TempDb::new("start");
+    let tmp = TempDb::new("start").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let input = trace_input(
@@ -159,7 +120,7 @@ async fn start_trace_and_get_info() {
 
 #[tokio::test]
 async fn get_trace_info_missing_errors() {
-    let tmp = TempDb::new("get_missing");
+    let tmp = TempDb::new("get_missing").await;
     let s = store(&tmp).await;
     let err = s.get_trace_info(WS, "nope").await.unwrap_err();
     assert_eq!(
@@ -171,7 +132,7 @@ async fn get_trace_info_missing_errors() {
 
 #[tokio::test]
 async fn start_trace_idempotent_overwrites() {
-    let tmp = TempDb::new("start_idem");
+    let tmp = TempDb::new("start_idem").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     create_trace(&s, "tr", &exp, 1, Some(1), "OK", &[("a", "1")], &[]).await;
@@ -200,7 +161,7 @@ async fn start_trace_preserves_existing_preview_on_conflict() {
     // Python guard: on the conflict path, a None request/response preview does
     // NOT clear an existing one. Simulate log_spans having backfilled a preview
     // by first starting a trace with previews, then re-starting with None.
-    let tmp = TempDb::new("preview");
+    let tmp = TempDb::new("preview").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let mut input = trace_input("tr", &exp, 1, Some(1), "OK", &[], &[]);
@@ -224,7 +185,7 @@ async fn start_trace_preserves_existing_preview_on_conflict() {
 
 #[tokio::test]
 async fn batch_get_trace_infos_preserves_order_and_skips_missing() {
-    let tmp = TempDb::new("batch");
+    let tmp = TempDb::new("batch").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for id in ["a", "b", "c"] {
@@ -243,7 +204,7 @@ async fn batch_get_trace_infos_preserves_order_and_skips_missing() {
 
 #[tokio::test]
 async fn trace_tag_set_delete() {
-    let tmp = TempDb::new("tag");
+    let tmp = TempDb::new("tag").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     create_trace(&s, "tr", &exp, 1, Some(1), "OK", &[], &[]).await;
@@ -282,7 +243,7 @@ async fn trace_tag_set_delete() {
 
 #[tokio::test]
 async fn link_traces_to_run_dedups_and_limits() {
-    let tmp = TempDb::new("link");
+    let tmp = TempDb::new("link").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let run = s
@@ -325,7 +286,7 @@ async fn link_traces_to_run_dedups_and_limits() {
 
 #[tokio::test]
 async fn delete_traces_by_max_timestamp_inclusive() {
-    let tmp = TempDb::new("del_ts");
+    let tmp = TempDb::new("del_ts").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for i in 0..10 {
@@ -348,7 +309,7 @@ async fn delete_traces_by_max_timestamp_inclusive() {
 
 #[tokio::test]
 async fn delete_traces_max_count_oldest_first() {
-    let tmp = TempDb::new("del_count");
+    let tmp = TempDb::new("del_count").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for i in 0..10 {
@@ -371,7 +332,7 @@ async fn delete_traces_max_count_oldest_first() {
 
 #[tokio::test]
 async fn delete_traces_by_ids() {
-    let tmp = TempDb::new("del_ids");
+    let tmp = TempDb::new("del_ids").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for i in 0..10 {
@@ -392,7 +353,7 @@ async fn delete_traces_by_ids() {
 
 #[tokio::test]
 async fn delete_traces_cascades_children() {
-    let tmp = TempDb::new("del_cascade");
+    let tmp = TempDb::new("del_cascade").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     create_trace(
@@ -419,7 +380,7 @@ async fn delete_traces_cascades_children() {
 
 #[tokio::test]
 async fn delete_traces_hasfield_validation() {
-    let tmp = TempDb::new("del_validate");
+    let tmp = TempDb::new("del_validate").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
 
@@ -466,7 +427,7 @@ async fn delete_traces_hasfield_validation() {
 async fn delete_traces_max_timestamp_zero_is_set_not_unset() {
     // HasField edge: Some(0) is a real filter (delete traces at/before ts 0),
     // distinct from None (unset → validation error).
-    let tmp = TempDb::new("del_zero");
+    let tmp = TempDb::new("del_zero").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     create_trace(&s, "at-zero", &exp, 0, Some(1), "OK", &[], &[]).await;
@@ -486,7 +447,7 @@ async fn delete_traces_max_timestamp_zero_is_set_not_unset() {
 
 #[tokio::test]
 async fn workspace_isolation() {
-    let tmp = TempDb::new("ws");
+    let tmp = TempDb::new("ws").await;
     let s = store(&tmp).await;
     // Two experiments in two workspaces.
     let exp_a = s.create_experiment("wsA", "ea", None, &[]).await.unwrap();

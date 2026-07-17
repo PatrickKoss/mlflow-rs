@@ -2,64 +2,27 @@
 //! T2.4/T2.5), ported from the Python store suites
 //! (`tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_{experiments,runs,core}.py`).
 //!
-//! Each test copies the checked-in SQLite fixture (a real Alembic-migrated DB at
-//! head `b7e4c1a90f23`) into a temp file and operates on it, so the committed
-//! fixture is never mutated. The default artifact root is a fixed URI so
-//! artifact-URI assertions are deterministic.
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the committed fixture is never mutated and the
+//! same test bodies run across all three dialects (plan T2.2). The default
+//! artifact root is a fixed URI so artifact-URI assertions are deterministic.
 //!
-//! Postgres/MySQL variants of the concurrency stress test are gated behind
-//! `MLFLOW_RUST_TEST_PG_URI` / `MLFLOW_RUST_TEST_MYSQL_URI` (plan §6 item 8).
+//! A handful of tests below additionally connect directly to
+//! `MLFLOW_RUST_TEST_PG_URI` / `MLFLOW_RUST_TEST_MYSQL_URI` for
+//! concurrency-stress variants that don't fit the `TempDb` per-test-reset
+//! model (they need a dedicated experiment per stress run, not a truncated
+//! shared schema); those stay as-is and are additionally exercised via
+//! `TempDb` for their non-stress behavior above.
 
-use std::path::{Path, PathBuf};
-
-use mlflow_store::{Db, MetricInput, PoolConfig, TrackingStore};
+use mlflow_store::{Db, MetricInput, TrackingStore};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-/// Copy the fixture to a unique temp file; the returned guard removes it on drop.
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_trackstore_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +31,7 @@ async fn store(temp: &TempDb) -> TrackingStore {
 
 #[tokio::test]
 async fn create_and_get_experiment_defaults_artifact_location() {
-    let tmp = TempDb::new("create_exp");
+    let tmp = TempDb::new("create_exp").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "exp_a", None, &[]).await.unwrap();
     let exp = s.get_experiment(WS, &id).await.unwrap();
@@ -84,7 +47,7 @@ async fn create_and_get_experiment_defaults_artifact_location() {
 
 #[tokio::test]
 async fn create_experiment_with_tags() {
-    let tmp = TempDb::new("create_exp_tags");
+    let tmp = TempDb::new("create_exp_tags").await;
     let s = store(&tmp).await;
     let id = s
         .create_experiment(WS, "tagged", None, &[("team", "rust"), ("env", "test")])
@@ -102,7 +65,7 @@ async fn create_experiment_with_tags() {
 
 #[tokio::test]
 async fn duplicate_experiment_name_conflicts() {
-    let tmp = TempDb::new("dup_exp");
+    let tmp = TempDb::new("dup_exp").await;
     let s = store(&tmp).await;
     s.create_experiment(WS, "dupe", None, &[]).await.unwrap();
     let err = s
@@ -120,7 +83,7 @@ async fn duplicate_experiment_name_conflicts() {
 /// *deleted* experiment still conflicts (unique `(workspace, name)`).
 #[tokio::test]
 async fn create_conflicts_with_deleted_experiment_name() {
-    let tmp = TempDb::new("dup_deleted_exp");
+    let tmp = TempDb::new("dup_deleted_exp").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "ghost", None, &[]).await.unwrap();
     s.delete_experiment(WS, &id).await.unwrap();
@@ -145,7 +108,7 @@ async fn create_conflicts_with_deleted_experiment_name() {
 
 #[tokio::test]
 async fn get_experiment_missing_and_invalid_id() {
-    let tmp = TempDb::new("missing_exp");
+    let tmp = TempDb::new("missing_exp").await;
     let s = store(&tmp).await;
     let err = s.get_experiment(WS, "99999").await.unwrap_err();
     assert_eq!(
@@ -164,7 +127,7 @@ async fn get_experiment_missing_and_invalid_id() {
 
 #[tokio::test]
 async fn delete_restore_experiment_cascades_to_runs() {
-    let tmp = TempDb::new("del_restore_exp");
+    let tmp = TempDb::new("del_restore_exp").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "cascade", None, &[]).await.unwrap();
     let r1 = s
@@ -202,7 +165,7 @@ async fn delete_restore_experiment_cascades_to_runs() {
 
 #[tokio::test]
 async fn rename_experiment_requires_active() {
-    let tmp = TempDb::new("rename_exp");
+    let tmp = TempDb::new("rename_exp").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "old", None, &[]).await.unwrap();
     s.rename_experiment(WS, &id, "renamed").await.unwrap();
@@ -216,7 +179,7 @@ async fn rename_experiment_requires_active() {
 
 #[tokio::test]
 async fn set_and_delete_experiment_tag() {
-    let tmp = TempDb::new("exp_tag");
+    let tmp = TempDb::new("exp_tag").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "et", None, &[]).await.unwrap();
     s.set_experiment_tag(WS, &id, "k", "v1").await.unwrap();
@@ -247,7 +210,7 @@ async fn set_and_delete_experiment_tag() {
 
 #[tokio::test]
 async fn create_run_syncs_run_name_tag() {
-    let tmp = TempDb::new("run_name");
+    let tmp = TempDb::new("run_name").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "rn", None, &[]).await.unwrap();
 
@@ -296,7 +259,7 @@ async fn create_run_syncs_run_name_tag() {
 
 #[tokio::test]
 async fn create_run_conflicting_name_and_tag_errors() {
-    let tmp = TempDb::new("run_conflict");
+    let tmp = TempDb::new("run_conflict").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "rc", None, &[]).await.unwrap();
     let err = s
@@ -323,7 +286,7 @@ async fn create_run_conflicting_name_and_tag_errors() {
 
 #[tokio::test]
 async fn get_run_not_found() {
-    let tmp = TempDb::new("run_missing");
+    let tmp = TempDb::new("run_missing").await;
     let s = store(&tmp).await;
     let err = s.get_run(WS, "nonexistent").await.unwrap_err();
     assert_eq!(
@@ -335,7 +298,7 @@ async fn get_run_not_found() {
 
 #[tokio::test]
 async fn update_run_info_syncs_name_and_status() {
-    let tmp = TempDb::new("update_run");
+    let tmp = TempDb::new("update_run").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "ur", None, &[]).await.unwrap();
     let run = s
@@ -363,7 +326,7 @@ async fn update_run_info_syncs_name_and_status() {
 
 #[tokio::test]
 async fn delete_restore_run_lifecycle() {
-    let tmp = TempDb::new("del_run");
+    let tmp = TempDb::new("del_run").await;
     let s = store(&tmp).await;
     let id = s.create_experiment(WS, "dr", None, &[]).await.unwrap();
     let run = s
@@ -403,7 +366,7 @@ async fn delete_restore_run_lifecycle() {
 
 #[tokio::test]
 async fn log_param_immutability() {
-    let tmp = TempDb::new("param_immut");
+    let tmp = TempDb::new("param_immut").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -442,7 +405,7 @@ async fn log_param_immutability() {
 
 #[tokio::test]
 async fn set_and_delete_tag() {
-    let tmp = TempDb::new("tags");
+    let tmp = TempDb::new("tags").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -468,7 +431,7 @@ async fn set_and_delete_tag() {
 
 #[tokio::test]
 async fn log_metric_nan_inf_storage() {
-    let tmp = TempDb::new("metric_naninf");
+    let tmp = TempDb::new("metric_naninf").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -493,7 +456,7 @@ async fn log_metric_nan_inf_storage() {
 /// the lexicographic max of `(step, timestamp, value)`.
 #[tokio::test]
 async fn latest_metrics_tiebreak_out_of_order() {
-    let tmp = TempDb::new("latest_tiebreak");
+    let tmp = TempDb::new("latest_tiebreak").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -535,7 +498,7 @@ async fn latest_metrics_tiebreak_out_of_order() {
 
 #[tokio::test]
 async fn metric_history_pagination() {
-    let tmp = TempDb::new("metric_hist_page");
+    let tmp = TempDb::new("metric_hist_page").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     for i in 0..10 {
@@ -587,7 +550,7 @@ async fn metric_history_pagination() {
 
 #[tokio::test]
 async fn metric_history_max_results_zero_and_over() {
-    let tmp = TempDb::new("metric_hist_edge");
+    let tmp = TempDb::new("metric_hist_edge").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     for i in 0..5 {
@@ -614,7 +577,7 @@ async fn metric_history_max_results_zero_and_over() {
 
 #[tokio::test]
 async fn log_batch_happy_path() {
-    let tmp = TempDb::new("batch_ok");
+    let tmp = TempDb::new("batch_ok").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     s.log_batch(
@@ -637,7 +600,7 @@ async fn log_batch_happy_path() {
 
 #[tokio::test]
 async fn log_batch_limits_rejected() {
-    let tmp = TempDb::new("batch_limits");
+    let tmp = TempDb::new("batch_limits").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -672,7 +635,7 @@ async fn log_batch_limits_rejected() {
 
 #[tokio::test]
 async fn log_batch_param_immutability_is_atomic() {
-    let tmp = TempDb::new("batch_atomic");
+    let tmp = TempDb::new("batch_atomic").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     s.log_param(WS, &rid, "existing", "orig").await.unwrap();
@@ -703,7 +666,7 @@ async fn log_batch_param_immutability_is_atomic() {
 
 #[tokio::test]
 async fn log_batch_duplicate_param_keys_rejected() {
-    let tmp = TempDb::new("batch_dupkeys");
+    let tmp = TempDb::new("batch_dupkeys").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     let err = s
@@ -722,7 +685,7 @@ async fn log_batch_duplicate_param_keys_rejected() {
 
 #[tokio::test]
 async fn log_batch_duplicate_metrics_ok() {
-    let tmp = TempDb::new("batch_dupmetrics");
+    let tmp = TempDb::new("batch_dupmetrics").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     // Same identical metric twice in one batch — OK (deduped by PK).
@@ -738,7 +701,7 @@ async fn log_batch_duplicate_metrics_ok() {
 
 #[tokio::test]
 async fn log_batch_unchanged_and_new_params_ok() {
-    let tmp = TempDb::new("batch_unchanged");
+    let tmp = TempDb::new("batch_unchanged").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
     s.log_param(WS, &rid, "a", "0").await.unwrap();
@@ -758,7 +721,7 @@ async fn log_batch_unchanged_and_new_params_ok() {
 
 #[tokio::test]
 async fn workspace_isolation() {
-    let tmp = TempDb::new("workspaces");
+    let tmp = TempDb::new("workspaces").await;
     let s = store(&tmp).await;
     // Same name in two workspaces is allowed (unique is (workspace, name)).
     let id_a = s
@@ -798,7 +761,7 @@ async fn workspace_isolation() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_latest_metrics_is_correct() {
-    let tmp = TempDb::new("concurrent");
+    let tmp = TempDb::new("concurrent").await;
     let s = store(&tmp).await;
     let rid = new_run(&s).await;
 
@@ -1078,7 +1041,7 @@ async fn param_tag(s: &TrackingStore, rid: &str, key: &str) -> Option<String> {
 #[tokio::test]
 async fn search_experiments_active_and_all_view_types() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_views");
+    let tmp = TempDb::new("search_exp_views").await;
     let s = store(&tmp).await;
 
     let a = s.create_experiment(WS, "se_a", None, &[]).await.unwrap();
@@ -1115,7 +1078,7 @@ async fn search_experiments_active_and_all_view_types() {
 
 #[tokio::test]
 async fn search_experiments_unspecified_view_type_returns_empty() {
-    let tmp = TempDb::new("search_exp_unspecified");
+    let tmp = TempDb::new("search_exp_unspecified").await;
     let s = store(&tmp).await;
     // None mirrors an unset proto ViewType (0) → empty stages → no rows.
     let page = s
@@ -1129,7 +1092,7 @@ async fn search_experiments_unspecified_view_type_returns_empty() {
 #[tokio::test]
 async fn search_experiments_filter_by_name_and_tag() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_filter");
+    let tmp = TempDb::new("search_exp_filter").await;
     let s = store(&tmp).await;
     s.create_experiment(WS, "filter_a", None, &[("team", "rust")])
         .await
@@ -1172,7 +1135,7 @@ async fn search_experiments_filter_by_name_and_tag() {
 #[tokio::test]
 async fn search_experiments_order_by_name() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_order");
+    let tmp = TempDb::new("search_exp_order").await;
     let s = store(&tmp).await;
     s.create_experiment(WS, "zzz", None, &[]).await.unwrap();
     s.create_experiment(WS, "aaa", None, &[]).await.unwrap();
@@ -1197,7 +1160,7 @@ async fn search_experiments_order_by_name() {
 #[tokio::test]
 async fn search_experiments_pagination_token_walk() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_page");
+    let tmp = TempDb::new("search_exp_page").await;
     let s = store(&tmp).await;
     for i in 0..5 {
         s.create_experiment(WS, &format!("page_{i}"), None, &[])
@@ -1232,7 +1195,7 @@ async fn search_experiments_pagination_token_walk() {
 #[tokio::test]
 async fn search_experiments_rejects_bad_max_results() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_maxres");
+    let tmp = TempDb::new("search_exp_maxres").await;
     let s = store(&tmp).await;
 
     let err = s
@@ -1255,7 +1218,7 @@ async fn search_experiments_rejects_bad_max_results() {
 #[tokio::test]
 async fn search_experiments_is_workspace_scoped() {
     use mlflow_store::ViewType;
-    let tmp = TempDb::new("search_exp_ws");
+    let tmp = TempDb::new("search_exp_ws").await;
     let s = store(&tmp).await;
     // Create an experiment in a non-default workspace; the default-workspace
     // search must not see it.

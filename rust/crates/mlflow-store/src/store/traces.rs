@@ -862,7 +862,10 @@ impl TrackingStore {
                     Val::Text(trace_id.to_string()),
                     Val::Text(workspace.to_string()),
                 ],
-                |r| r.get_i64("present"),
+                // `SELECT 1 AS present` is a bare integer literal, which
+                // Postgres types as `INT4`; `get_int` widens, `get_i64` does
+                // not (plan T2.2 dialect bug).
+                |r| r.get_int("present"),
             )
             .await
             .map_err(internal)?;

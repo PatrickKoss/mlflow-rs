@@ -5,60 +5,21 @@
 //! one workspace must never see or mutate rows in another. These tests exercise
 //! the cross-workspace no-leak contract for get/rename/delete/tags/aliases/
 //! latest-versions, plus same-name coexistence across workspaces.
-
-use std::path::{Path, PathBuf};
+//!
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 use mlflow_error::ErrorCode;
 use mlflow_registry::RegistryStore;
-use mlflow_store::{Db, PoolConfig};
+use mlflow_test_support::TempDb;
 
 const TEAM_A: &str = "team-a";
 const TEAM_B: &str = "team-b";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("mlflow-store")
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_registryws_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> RegistryStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    RegistryStore::new(db)
+    RegistryStore::new(temp.connect().await)
 }
 
 fn assert_not_found(err: mlflow_error::MlflowError, name: &str) {
@@ -71,7 +32,7 @@ fn assert_not_found(err: mlflow_error::MlflowError, name: &str) {
 
 #[tokio::test]
 async fn registered_model_ops_are_workspace_scoped() {
-    let tmp = TempDb::new("rm_scoped");
+    let tmp = TempDb::new("rm_scoped").await;
     let s = store(&tmp).await;
 
     // team-a owns "alpha" with a tag.
@@ -114,7 +75,7 @@ async fn registered_model_ops_are_workspace_scoped() {
 
 #[tokio::test]
 async fn rename_is_workspace_scoped_and_preserves_tags() {
-    let tmp = TempDb::new("rename_scoped");
+    let tmp = TempDb::new("rename_scoped").await;
     let s = store(&tmp).await;
     s.create_registered_model(TEAM_A, "alpha", &[("owner", "team-a")], None)
         .await
@@ -146,7 +107,7 @@ async fn rename_is_workspace_scoped_and_preserves_tags() {
 
 #[tokio::test]
 async fn same_name_allowed_in_different_workspaces() {
-    let tmp = TempDb::new("same_name");
+    let tmp = TempDb::new("same_name").await;
     let s = store(&tmp).await;
     s.create_registered_model(TEAM_A, "shared-name", &[("w", "a")], None)
         .await
@@ -163,7 +124,7 @@ async fn same_name_allowed_in_different_workspaces() {
 
 #[tokio::test]
 async fn model_version_reads_are_workspace_scoped() {
-    let tmp = TempDb::new("mv_scoped");
+    let tmp = TempDb::new("mv_scoped").await;
     let s = store(&tmp).await;
     s.create_registered_model(TEAM_A, "alpha", &[], None)
         .await
@@ -194,7 +155,7 @@ async fn model_version_reads_are_workspace_scoped() {
 
 #[tokio::test]
 async fn alias_ops_are_workspace_scoped() {
-    let tmp = TempDb::new("alias_scoped");
+    let tmp = TempDb::new("alias_scoped").await;
     let s = store(&tmp).await;
     s.create_registered_model(TEAM_A, "alpha", &[], None)
         .await
@@ -229,7 +190,7 @@ async fn alias_ops_are_workspace_scoped() {
 
 #[tokio::test]
 async fn model_version_lifecycle_is_workspace_scoped() {
-    let tmp = TempDb::new("mv_lifecycle_scoped");
+    let tmp = TempDb::new("mv_lifecycle_scoped").await;
     let s = store(&tmp).await;
     // Same model name + version in both workspaces.
     for ws in [TEAM_A, TEAM_B] {

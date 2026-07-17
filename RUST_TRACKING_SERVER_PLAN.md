@@ -672,7 +672,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       alembic-migrated fixture (`rust/tools/make_test_db.py` →
       tests/fixtures/tracking.db); stale-head + uninitialized-DB refusal with
       Python-matching wording; Rust never creates DB files.)*
-- [ ] **T2.2 Dialect abstraction** (sqlite/postgres/mysql via sqlx, + mssql per T0.3):
+- [x] **T2.2 Dialect abstraction** (sqlite/postgres/mysql via sqlx, + mssql per T0.3):
       upsert forms, LIKE/ILIKE case semantics, pagination SQL, SQLite PRAGMAs.
       **AC:** store suite (T2.4+) passes on all enabled dialects.
       **VER:** `tests/db/compose.yml`-based matrix locally + CI. *(Foundation landed
@@ -685,8 +685,29 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       iters) green on live dockerized Postgres 16 + MySQL 8; 4 dialect bugs
       found+fixed (commit 9f5e9f70d), incl. session-level ANSI_QUOTES on MySQL
       so hand-written SQL can use standard `"quoted"` identifiers on all
-      dialects. Remaining for the tick: run the FULL sqlite-based store suites
-      (not just the gated smokes) against pg/mysql in CI.)*
+      dialects. 2026-07-17: new `mlflow-test-support` crate generalizes every
+      `mlflow-store`/`mlflow-registry` integration test file's hand-rolled
+      `TempDb` (sqlite fixture copy) into a dialect-dispatching helper — set
+      `MLFLOW_RUST_TEST_DIALECT=postgres|mysql` + the existing
+      MLFLOW_RUST_TEST_{PG,MYSQL}_URI and the *same* ~275 test bodies across 12
+      files run against a live, already-migrated (`mlflow db upgrade`, Rust
+      never migrates) Postgres/MySQL schema instead of a fresh sqlite copy,
+      truncating + re-seeding the shared schema before each test
+      (`--test-threads=1` required on the live dialects only). 3 corpus-replay
+      files with their own private per-corpus fixture DBs
+      (`search_runs_corpus.rs`, `sampling_corpus.rs`, `search_corpus.rs`) and
+      `mlflow-server`'s HTTP-layer tests are intentionally out of scope (own
+      fixtures / separate crate). Found+fixed 3 more dialect bugs: `status`/
+      `present`/`one` read via `get_i64` instead of `get_int` on physical
+      `Integer`/bare-literal columns (Postgres `INT4` widening,
+      logged_models.rs/traces.rs), and `SELECT key, value FROM
+      experiment_tags` missing the `"key"`/`"value"` quoting every other
+      `key`-column reference already had (MySQL reserved word,
+      search_experiments.rs). `rust/tests/db/compose.yml` (Postgres 16 + MySQL
+      8) for local runs; CI job `dialect-matrix` in `.github/workflows/rust.yml`
+      runs the full matrix via GitHub Actions service containers on every
+      rust/**-touching PR + master push, alongside the existing fmt/clippy/
+      build/test jobs.)*
 - [x] **T2.3 Search DSL parser** (`mlflow-search`): runs, experiments, logged models,
       traces grammars from `mlflow/utils/search_utils.py` incl. aliases, quoting,
       comparator validation, order_by.

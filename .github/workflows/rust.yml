@@ -103,3 +103,81 @@ jobs:
           workspaces: rust
       - name: Run tests
         run: cargo test --workspace
+
+  # Runs the SQLite-authored mlflow-store/mlflow-registry integration suites a
+  # second time against live Postgres/MySQL service containers (plan T2.2):
+  # mlflow-test-support's `TempDb` truncates + re-seeds the shared,
+  # already-migrated schema before every test rather than copying a fixture
+  # file, so the exact same test bodies exercise all three dialects. Schema
+  # provisioning uses the real `mlflow db upgrade` (Rust never migrates, see
+  # `mlflow-store::db`), mirroring `tests/db/check_migration.sh`.
+  dialect-matrix:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false || github.event.pull_request.user.login == 'Copilot' && github.event.pull_request.user.type == 'Bot')
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect: [postgres, mysql]
+        include:
+          - dialect: postgres
+            uri: postgresql://mlflow:mlflow@localhost:5432/mlflow
+          - dialect: mysql
+            uri: mysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mlflow
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U mlflow -d mlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: mlflow
+          MYSQL_USER: mlflow
+          MYSQL_PASSWORD: mlflow
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u mlflow -pmlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - uses: ./.github/actions/setup-python
+      - name: Provision schema (mlflow db upgrade)
+        working-directory: .
+        env:
+          DB_URI: ${{ matrix.uri }}
+        run: uv run --extra db mlflow db upgrade "$DB_URI"
+      - name: Run store/registry suites against live dialect
+        env:
+          MLFLOW_RUST_TEST_DIALECT: ${{ matrix.dialect }}
+          MLFLOW_RUST_TEST_PG_URI: postgresql://mlflow:mlflow@localhost:5432/mlflow
+          MLFLOW_RUST_TEST_MYSQL_URI: mysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4
+        # TempDb truncates the whole shared schema per test (see
+        # mlflow-test-support), so the live-dialect runs must be serial;
+        # unaffected suites (e.g. differential corpus tests, which keep their
+        # own private SQLite fixture) run fine interleaved at --test-threads=1
+        # too, just without the parallelism they'd get by default.
+        run: cargo test -p mlflow-store -p mlflow-registry -- --test-threads=1

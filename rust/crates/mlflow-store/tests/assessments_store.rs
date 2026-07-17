@@ -1,69 +1,25 @@
 //! Behavioral integration tests for assessments (plan T2.12), ported from
 //! `tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_assessments.py`.
 //!
-//! Each test copies the checked-in SQLite fixture into a temp file (same
-//! pattern as `tracking_store.rs`/`datasets_store.rs`), so the committed
-//! fixture is never mutated.
-//!
-//! T2.10 (the traces store) is being implemented in parallel and isn't landed
-//! in this tree yet, so traces are inserted directly into `trace_info` via raw
-//! SQL against the fixture's already-migrated schema, rather than through a
-//! store method.
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the committed fixture is never mutated and the
+//! same test bodies run across all three dialects (plan T2.2).
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 
 use mlflow_error::MlflowError;
 use mlflow_store::{
-    Assessment, AssessmentError, AssessmentSource, AssessmentUpdate, AssessmentValue, Db,
-    FeedbackUpdate, NewAssessment, PoolConfig, TrackingStore,
+    Assessment, AssessmentError, AssessmentSource, AssessmentUpdate, AssessmentValue,
+    FeedbackUpdate, NewAssessment, StartTraceInput, TrackingStore,
 };
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_assessments_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect temp fixture");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 fn uuid_like() -> String {
@@ -82,31 +38,35 @@ async fn new_experiment(s: &TrackingStore) -> String {
         .unwrap()
 }
 
-/// Insert a minimal `trace_info` row directly (T2.10 isn't landed in this
-/// tree yet). Mirrors the columns `start_trace` would populate.
-async fn insert_trace(s: &TrackingStore, experiment_id: &str, trace_id: &str) {
-    let Db::Sqlite(pool) = s.db() else {
-        panic!("expected sqlite pool in tests");
-    };
-    sqlx::query(
-        "INSERT INTO trace_info \
-         (request_id, experiment_id, timestamp_ms, execution_time_ms, status, \
-          client_request_id, request_preview, response_preview, db_payload_generation) \
-         VALUES (?, ?, ?, ?, 'OK', ?, NULL, NULL, 0)",
+/// Start a minimal trace via the real store method. Was previously a raw SQL
+/// `INSERT INTO trace_info` written before T2.10 (the traces store) landed;
+/// that raw insert hard-coded a `Db::Sqlite` pool and `?` placeholders (so it
+/// silently could not run against Postgres/MySQL — plan T2.2 dialect bug) and
+/// bypassed workspace validation entirely, unlike the real `start_trace`.
+async fn insert_trace(s: &TrackingStore, workspace: &str, experiment_id: &str, trace_id: &str) {
+    s.start_trace(
+        workspace,
+        &StartTraceInput {
+            trace_id: trace_id.to_string(),
+            experiment_id: experiment_id.to_string(),
+            request_time: 0,
+            execution_duration: Some(0),
+            state: "OK".to_string(),
+            client_request_id: Some(trace_id.to_string()),
+            request_preview: None,
+            response_preview: None,
+            tags: vec![],
+            trace_metadata: vec![],
+            trace_metrics: vec![],
+        },
     )
-    .bind(trace_id)
-    .bind(experiment_id.parse::<i64>().unwrap())
-    .bind(0i64)
-    .bind(0i64)
-    .bind(trace_id)
-    .execute(pool)
     .await
-    .expect("insert trace_info");
+    .expect("start_trace");
 }
 
 async fn new_trace(s: &TrackingStore, experiment_id: &str) -> String {
     let trace_id = format!("tr-{}", uuid_like());
-    insert_trace(s, experiment_id, &trace_id).await;
+    insert_trace(s, WS, experiment_id, &trace_id).await;
     trace_id
 }
 
@@ -182,7 +142,7 @@ fn feedback_str(value: &str) -> serde_json::Value {
 
 #[tokio::test]
 async fn create_and_get_feedback_and_expectation() {
-    let tmp = TempDb::new("create_get");
+    let tmp = TempDb::new("create_get").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -290,7 +250,7 @@ fn as_expectation_json(value: &AssessmentValue) -> serde_json::Value {
 
 #[tokio::test]
 async fn get_assessment_errors() {
-    let tmp = TempDb::new("get_errors");
+    let tmp = TempDb::new("get_errors").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -320,7 +280,7 @@ async fn get_assessment_errors() {
 
 #[tokio::test]
 async fn update_assessment_feedback() {
-    let tmp = TempDb::new("update_feedback");
+    let tmp = TempDb::new("update_feedback").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -387,7 +347,7 @@ async fn update_assessment_feedback() {
 /// error rather than preserving it independently.
 #[tokio::test]
 async fn update_assessment_feedback_clears_prior_error() {
-    let tmp = TempDb::new("update_feedback_clears_error");
+    let tmp = TempDb::new("update_feedback_clears_error").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -434,7 +394,7 @@ async fn update_assessment_feedback_clears_prior_error() {
 
 #[tokio::test]
 async fn update_assessment_expectation() {
-    let tmp = TempDb::new("update_expectation");
+    let tmp = TempDb::new("update_expectation").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -492,7 +452,7 @@ async fn update_assessment_expectation() {
 
 #[tokio::test]
 async fn update_assessment_partial_fields_preserves_others() {
-    let tmp = TempDb::new("update_partial");
+    let tmp = TempDb::new("update_partial").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -522,7 +482,7 @@ async fn update_assessment_partial_fields_preserves_others() {
 
 #[tokio::test]
 async fn update_assessment_type_validation() {
-    let tmp = TempDb::new("update_type_validation");
+    let tmp = TempDb::new("update_type_validation").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -590,7 +550,7 @@ async fn update_assessment_type_validation() {
 
 #[tokio::test]
 async fn update_assessment_errors() {
-    let tmp = TempDb::new("update_errors");
+    let tmp = TempDb::new("update_errors").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -632,7 +592,7 @@ async fn update_assessment_errors() {
 
 #[tokio::test]
 async fn update_assessment_metadata_merging() {
-    let tmp = TempDb::new("update_metadata_merge");
+    let tmp = TempDb::new("update_metadata_merge").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -672,7 +632,7 @@ async fn update_assessment_metadata_merging() {
 
 #[tokio::test]
 async fn update_assessment_timestamps() {
-    let tmp = TempDb::new("update_timestamps");
+    let tmp = TempDb::new("update_timestamps").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -712,7 +672,7 @@ async fn update_assessment_timestamps() {
 
 #[tokio::test]
 async fn create_assessment_with_overrides() {
-    let tmp = TempDb::new("overrides");
+    let tmp = TempDb::new("overrides").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -753,7 +713,7 @@ async fn create_assessment_with_overrides() {
 
 #[tokio::test]
 async fn create_assessment_override_nonexistent() {
-    let tmp = TempDb::new("override_nonexistent");
+    let tmp = TempDb::new("override_nonexistent").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -778,7 +738,7 @@ async fn create_assessment_override_nonexistent() {
 
 #[tokio::test]
 async fn delete_assessment_idempotent() {
-    let tmp = TempDb::new("delete_idempotent");
+    let tmp = TempDb::new("delete_idempotent").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -825,7 +785,7 @@ async fn delete_assessment_idempotent() {
 
 #[tokio::test]
 async fn delete_assessment_restores_overridden_validity() {
-    let tmp = TempDb::new("delete_override_restore");
+    let tmp = TempDb::new("delete_override_restore").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -884,7 +844,7 @@ async fn delete_assessment_restores_overridden_validity() {
 
 #[tokio::test]
 async fn assessment_with_run_id() {
-    let tmp = TempDb::new("run_id");
+    let tmp = TempDb::new("run_id").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -911,7 +871,7 @@ async fn assessment_with_run_id() {
 
 #[tokio::test]
 async fn assessment_with_error_round_trips() {
-    let tmp = TempDb::new("with_error");
+    let tmp = TempDb::new("with_error").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -966,7 +926,7 @@ fn as_error(value: &AssessmentValue) -> Option<AssessmentError> {
 
 #[tokio::test]
 async fn create_assessment_for_missing_trace_returns_not_found() {
-    let tmp = TempDb::new("missing_trace");
+    let tmp = TempDb::new("missing_trace").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     // Do not insert a trace row: "tr-doomed" never existed.
@@ -985,7 +945,7 @@ async fn create_assessment_for_missing_trace_returns_not_found() {
 
 #[tokio::test]
 async fn create_assessment_duplicate_id_is_constraint_violation() {
-    let tmp = TempDb::new("dup_id");
+    let tmp = TempDb::new("dup_id").await;
     let s = store(&tmp).await;
     let exp = new_experiment(&s).await;
     let trace_id = new_trace(&s, &exp).await;
@@ -1016,7 +976,7 @@ async fn create_assessment_duplicate_id_is_constraint_violation() {
 
 #[tokio::test]
 async fn assessment_workspace_isolation() {
-    let tmp = TempDb::new("workspace_isolation");
+    let tmp = TempDb::new("workspace_isolation").await;
     let s = store(&tmp).await;
 
     let exp_id = s
@@ -1024,7 +984,7 @@ async fn assessment_workspace_isolation() {
         .await
         .unwrap();
     let trace_id = format!("tr-{}", uuid_like());
-    insert_trace(&s, &exp_id, &trace_id).await;
+    insert_trace(&s, "ws-a", &exp_id, &trace_id).await;
 
     let created = s
         .create_assessment(

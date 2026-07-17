@@ -2,59 +2,22 @@
 //! upsert idempotency, trace time-range updates, `span_metrics`, cleared
 //! content, lazy content reads, and `duration_ns` (generated column). Ported
 //! from `test_sqlalchemy_store_traces.py` `test_log_spans*`.
+//!
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 #![allow(clippy::too_many_arguments, clippy::cloned_ref_to_slice_refs)]
 
-use std::path::{Path, PathBuf};
-
-use mlflow_store::{
-    Db, PoolConfig, SpanInput, SpanMetricInput, StartTraceInput, TraceTimeRange, TrackingStore,
-};
+use mlflow_store::{SpanInput, SpanMetricInput, StartTraceInput, TraceTimeRange, TrackingStore};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_spans_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 fn span(
@@ -95,7 +58,7 @@ fn range_from(trace_id: &str, start_ns: i64, end_ns: Option<i64>, status: &str) 
 
 #[tokio::test]
 async fn log_spans_creates_trace_and_time_range() {
-    let tmp = TempDb::new("create");
+    let tmp = TempDb::new("create").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     // Span 1s..2s. Trace auto-created with 1000ms start, 1000ms duration.
@@ -127,7 +90,7 @@ async fn log_spans_creates_trace_and_time_range() {
 
 #[tokio::test]
 async fn log_spans_updates_trace_time_range() {
-    let tmp = TempDb::new("timerange");
+    let tmp = TempDb::new("timerange").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
 
@@ -197,7 +160,7 @@ async fn log_spans_updates_trace_time_range() {
 
 #[tokio::test]
 async fn log_spans_no_end_time_leaves_duration_null() {
-    let tmp = TempDb::new("noend");
+    let tmp = TempDb::new("noend").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     s.log_spans(
@@ -216,7 +179,7 @@ async fn log_spans_no_end_time_leaves_duration_null() {
 
 #[tokio::test]
 async fn log_spans_idempotent_upsert() {
-    let tmp = TempDb::new("idem");
+    let tmp = TempDb::new("idem").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let range = range_from("tr", 1_000_000_000, Some(2_000_000_000), "OK");
@@ -248,7 +211,7 @@ async fn log_spans_idempotent_upsert() {
 
 #[tokio::test]
 async fn log_spans_writes_span_metrics_and_reads_duration() {
-    let tmp = TempDb::new("metrics");
+    let tmp = TempDb::new("metrics").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let sp = span("tr", "1", 1_000_000_000, Some(2_000_000_000), "OK", "{}");
@@ -281,7 +244,7 @@ async fn log_spans_writes_span_metrics_and_reads_duration() {
 #[tokio::test]
 async fn batch_get_trace_infos_does_not_require_spans() {
     // A TraceInfo read returns even when spans exist; and content isn't needed.
-    let tmp = TempDb::new("lazy");
+    let tmp = TempDb::new("lazy").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     s.log_spans(
@@ -308,7 +271,7 @@ async fn batch_get_trace_infos_does_not_require_spans() {
 #[tokio::test]
 async fn cleared_content_span_is_skipped_on_read() {
     // content == "" means the payload was cleared (archival); reads skip it.
-    let tmp = TempDb::new("cleared");
+    let tmp = TempDb::new("cleared").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     // One real span, one with empty content (simulate a cleared payload).
@@ -343,7 +306,7 @@ async fn cleared_content_span_is_skipped_on_read() {
 
 #[tokio::test]
 async fn log_spans_does_not_overwrite_finalized_trace() {
-    let tmp = TempDb::new("finalized");
+    let tmp = TempDb::new("finalized").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     // start_trace sets authoritative time + FINALIZED flag.
@@ -392,7 +355,7 @@ async fn log_spans_does_not_overwrite_finalized_trace() {
 
 #[tokio::test]
 async fn log_spans_multiple_traces_in_one_batch() {
-    let tmp = TempDb::new("multi");
+    let tmp = TempDb::new("multi").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let spans = vec![
@@ -419,7 +382,7 @@ async fn log_spans_multiple_traces_in_one_batch() {
 
 #[tokio::test]
 async fn log_spans_empty_is_noop() {
-    let tmp = TempDb::new("empty");
+    let tmp = TempDb::new("empty").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     s.log_spans(WS, &exp, &[], &[], &[]).await.unwrap();

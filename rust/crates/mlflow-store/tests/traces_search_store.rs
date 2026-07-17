@@ -1,59 +1,22 @@
 //! `search_traces` behavioral tests (plan T2.10), ported from the order-by /
 //! filter / pagination / run_id / span cases in
 //! `tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_traces.py`.
+//!
+//! Each test gets a fresh [`TempDb`] (SQLite fixture copy, or a live
+//! Postgres/MySQL database reset to a clean slate — see
+//! `mlflow-test-support`), so the same test bodies run across all three
+//! dialects (plan T2.2).
 
 #![allow(clippy::too_many_arguments, clippy::cloned_ref_to_slice_refs)]
 
-use std::path::{Path, PathBuf};
-
-use mlflow_store::{
-    Db, PoolConfig, SpanInput, StartTraceInput, TraceInfo, TraceTimeRange, TrackingStore,
-};
+use mlflow_store::{SpanInput, StartTraceInput, TraceInfo, TraceTimeRange, TrackingStore};
+use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
 const ART_ROOT: &str = "s3://bucket/mlruns";
 
-fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("tracking.db")
-}
-
-struct TempDb {
-    path: PathBuf,
-}
-
-impl TempDb {
-    fn new(tag: &str) -> Self {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "mlflow_rust_tracesearch_{}_{}_{}.db",
-            tag,
-            std::process::id(),
-            n
-        ));
-        let _ = std::fs::remove_file(&path);
-        std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
-    }
-    fn uri(&self) -> String {
-        format!("sqlite:///{}", self.path.display())
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 async fn store(temp: &TempDb) -> TrackingStore {
-    let db = Db::connect(&temp.uri(), PoolConfig::default())
-        .await
-        .expect("connect");
-    TrackingStore::new(db, ART_ROOT)
+    TrackingStore::new(temp.connect().await, ART_ROOT)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -183,7 +146,7 @@ async fn search_ids(
 
 #[tokio::test]
 async fn order_by_cases() {
-    let tmp = TempDb::new("order");
+    let tmp = TempDb::new("order").await;
     let s = store(&tmp).await;
     let (exp1, exp2) = seed(&s).await;
     let exps = [exp1, exp2];
@@ -246,7 +209,7 @@ async fn order_by_cases() {
 
 #[tokio::test]
 async fn filter_cases() {
-    let tmp = TempDb::new("filter");
+    let tmp = TempDb::new("filter").await;
     let s = store(&tmp).await;
     let (exp1, exp2) = seed(&s).await;
     let exps = [exp1, exp2];
@@ -277,7 +240,7 @@ async fn filter_cases() {
 
 #[tokio::test]
 async fn filter_invalid_errors() {
-    let tmp = TempDb::new("filter_invalid");
+    let tmp = TempDb::new("filter_invalid").await;
     let s = store(&tmp).await;
     let (exp1, exp2) = seed(&s).await;
     let exps = [exp1, exp2];
@@ -301,7 +264,7 @@ async fn filter_invalid_errors() {
 
 #[tokio::test]
 async fn run_id_filter_links_and_metadata() {
-    let tmp = TempDb::new("runid");
+    let tmp = TempDb::new("runid").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let run = s
@@ -365,7 +328,7 @@ async fn run_id_filter_links_and_metadata() {
 
 #[tokio::test]
 async fn run_id_filter_combined_with_tag() {
-    let tmp = TempDb::new("runid_tag");
+    let tmp = TempDb::new("runid_tag").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let run = s
@@ -456,7 +419,7 @@ fn range(trace_id: &str) -> TraceTimeRange {
 
 #[tokio::test]
 async fn span_name_and_type_filters() {
-    let tmp = TempDb::new("span_filter");
+    let tmp = TempDb::new("span_filter").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for id in ["trace1", "trace2", "trace3"] {
@@ -530,7 +493,7 @@ async fn span_name_and_type_filters() {
 
 #[tokio::test]
 async fn span_multiple_predicates_match_same_span() {
-    let tmp = TempDb::new("span_same");
+    let tmp = TempDb::new("span_same").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     create_trace(&s, "t", &exp, 1, Some(1), "OK", &[], &[]).await;
@@ -571,7 +534,7 @@ async fn span_multiple_predicates_match_same_span() {
 
 #[tokio::test]
 async fn pagination_walks_all_pages() {
-    let tmp = TempDb::new("pagination");
+    let tmp = TempDb::new("pagination").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     for i in 0..7 {
@@ -602,7 +565,7 @@ async fn pagination_walks_all_pages() {
 
 #[tokio::test]
 async fn max_results_validation() {
-    let tmp = TempDb::new("maxres");
+    let tmp = TempDb::new("maxres").await;
     let s = store(&tmp).await;
     let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
     let err = s

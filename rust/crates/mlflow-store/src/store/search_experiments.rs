@@ -177,8 +177,13 @@ impl TrackingStore {
             .parse()
             .map_err(|_| internal(sqlx::Error::Protocol("invalid experiment id".into())))?;
         let dialect = self.db().dialect();
+        // `key` is unquoted here in an unqualified column-list position, which
+        // MySQL parses as the reserved word `KEY` rather than an identifier
+        // (syntax error). Every other `key` column reference in this crate
+        // quotes it (`"key"`, relying on the session-level ANSI_QUOTES set
+        // for MySQL in `db.rs`); this one was missed (plan T2.2 dialect bug).
         let sql = format!(
-            "SELECT key, value FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} ORDER BY key",
+            "SELECT \"key\", value FROM {EXPERIMENT_TAGS} WHERE experiment_id = {} ORDER BY \"key\"",
             dialect.placeholder(1)
         );
         self.db()
