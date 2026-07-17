@@ -9,7 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use mlflow_error::ErrorCode;
-use mlflow_store::{Db, PoolConfig, Workspace, WorkspaceDeletionMode, WorkspaceStore};
+use mlflow_store::{
+    verify_single_tenant_data, Db, PoolConfig, Workspace, WorkspaceDeletionMode, WorkspaceStore,
+};
 
 const WS_URI: &str = "sqlite-workspaces";
 
@@ -839,4 +841,52 @@ async fn resolve_trace_archival_config_cache_updates_on_override_change() {
     );
     assert_eq!(updated.config.retention.as_deref(), Some("7d"));
     assert!(!updated.append_workspace_prefix);
+}
+
+// ---------------------------------------------------------------------------
+// Single-tenant startup guard (T10.3)
+// ---------------------------------------------------------------------------
+
+const EXPERIMENT_CHECKS: &[(&str, &str)] = &[("experiments", "experiments")];
+
+#[tokio::test]
+async fn single_tenant_guard_passes_with_only_default_workspace_rows() {
+    let temp = TempDb::new("guard-ok");
+    let db = Db::connect(&temp.uri(), PoolConfig::default())
+        .await
+        .expect("connect");
+    insert_experiment(&db, "in-default", "default").await;
+    // The fixture's rows are all in `default`; the guard must pass.
+    verify_single_tenant_data(&db, EXPERIMENT_CHECKS)
+        .await
+        .expect("guard should pass with only default-workspace rows");
+}
+
+#[tokio::test]
+async fn single_tenant_guard_rejects_non_default_experiments() {
+    let temp = TempDb::new("guard-exp");
+    let db = Db::connect(&temp.uri(), PoolConfig::default())
+        .await
+        .expect("connect");
+    insert_experiment(&db, "team-exp", "team-startup").await;
+    let err = verify_single_tenant_data(&db, EXPERIMENT_CHECKS)
+        .await
+        .expect_err("guard should reject non-default rows");
+    assert_eq!(err.error_code, mlflow_error::ErrorCode::InvalidState);
+    assert_eq!(
+        err.message,
+        "Cannot disable workspaces because experiments exist outside the default workspace"
+    );
+}
+
+#[tokio::test]
+async fn single_tenant_guard_skips_missing_tables() {
+    let temp = TempDb::new("guard-missing");
+    let db = Db::connect(&temp.uri(), PoolConfig::default())
+        .await
+        .expect("connect");
+    // A table that does not exist is skipped (no violation).
+    verify_single_tenant_data(&db, &[("no_such_table", "widgets")])
+        .await
+        .expect("missing table is not a guard violation");
 }

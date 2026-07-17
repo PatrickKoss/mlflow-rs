@@ -108,6 +108,10 @@ pub fn build_app_with_recorder(
     // the `nest` rather than added to `api`. Only mounted when auth is
     // enabled, matching every other auth-app route.
     let signup_state = state.clone().filter(AppState::auth_enabled);
+    // Kept for the workspace-resolution layer below, which needs `AppState`
+    // (its workspace store presence is the enabled/disabled signal). `state`
+    // itself is moved into `register_proto_routes`.
+    let workspace_state = state.clone();
 
     if let Some(state) = state {
         api = api.merge(register_proto_routes(state, config.artifacts_only));
@@ -153,6 +157,26 @@ pub fn build_app_with_recorder(
                 ))
                 .with_state(state),
         ),
+        None => app,
+    };
+
+    // Workspace-resolution middleware (plan T10.3, §3.17). Applied *after* the
+    // auth layer (which is wrapped inside `register_proto_routes`) so it is the
+    // *outer* of the two, but *before* the security layer below so it stays
+    // inner to security. This mirrors Python's install order: `security`'s
+    // `before_request` runs first, then `workspace_before_request_handler`, then
+    // the auth app's `_before_request` (`mlflow/server/__init__.py:82-84`). The
+    // layer resolves the `X-MLFLOW-WORKSPACE` header (validating against the
+    // workspace store when enabled, ignoring it → `default` when disabled),
+    // skips server-info, and stamps `ResolvedWorkspace` into request extensions
+    // for the `Workspace` extractor and the auth middleware's T10.4 seam. Only
+    // layered when a state (backend store) is present — the ops-only app has no
+    // workspace-scoped routes.
+    let app = match workspace_state {
+        Some(state) => app.layer(middleware::from_fn_with_state(
+            state,
+            workspace::workspace_middleware,
+        )),
         None => app,
     };
 

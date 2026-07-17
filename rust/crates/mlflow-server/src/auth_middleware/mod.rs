@@ -39,7 +39,7 @@ use base64::Engine;
 use serde_json::Value;
 
 use crate::state::AppState;
-use crate::workspace::{resolve_workspace, WORKSPACE_HEADER_NAME};
+use crate::workspace::{resolve_workspace, ResolvedWorkspace, Workspace, WORKSPACE_HEADER_NAME};
 use after_request::AfterCtx;
 use path_matchers::{dispatch_after_request, dispatch_request, Dispatched};
 use validators::RequestCtx;
@@ -221,11 +221,20 @@ pub async fn authorize(
         .get("x-mlflow-experiment-id")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
-    let workspace = resolve_workspace(
-        req.headers()
-            .get(WORKSPACE_HEADER_NAME)
-            .and_then(|v| v.to_str().ok()),
-    );
+    // Prefer the workspace resolved by the T10.3 workspace-resolution layer
+    // (which sits outside this auth layer, so its `ResolvedWorkspace` extension
+    // is present here). This carries the *real* resolved workspace when
+    // workspaces are enabled — the T10.4 seam for grant partitioning. When the
+    // layer did not run (workspaces off / ops-only app), fall back to
+    // header-based `default` resolution, matching the pre-T10.3 behavior.
+    let workspace = match req.extensions().get::<ResolvedWorkspace>() {
+        Some(ResolvedWorkspace(name)) => Workspace(name.clone()),
+        None => resolve_workspace(
+            req.headers()
+                .get(WORKSPACE_HEADER_NAME)
+                .and_then(|v| v.to_str().ok()),
+        ),
+    };
 
     // The after-request hook (if any) for this route. `_after_request` runs for
     // both admins and non-admins.

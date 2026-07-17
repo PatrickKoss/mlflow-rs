@@ -1552,7 +1552,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       artifact-root validators reproduce Python's `parameter_name` messages;
       create=201, delete=204 with `?mode=` (default RESTRICT, unknown → 400),
       disabled → plain-text 503. 8 unit + 30 integration tests.)*
-- [ ] **T10.3 Request workspace context + scoping**: `X-MLFLOW-WORKSPACE` header
+- [x] **T10.3 Request workspace context + scoping**: `X-MLFLOW-WORKSPACE` header
       resolution (skip for server-info), per-request context threaded through tracking
       **and** registry queries (`WHERE workspace = ?` on every scoped model), artifact
       location prefixing `workspaces/<name>/`, forbid explicit artifact_location on
@@ -1562,6 +1562,38 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       `tests/store/model_registry/test_sqlalchemy_workspace_store.py`) pass over HTTP;
       cross-workspace leakage tests all negative.
       **VER:** Phase 12 workspace runner + explicit isolation tests.
+      *(Done 2026-07-17: `mlflow-server/src/workspace.rs` gains
+      `workspace_middleware` (tower `from_fn_with_state`) + a `ResolvedWorkspace`
+      extension. Layer order (`lib.rs`): security (outermost) → workspace → auth
+      (innermost) → routes, mirroring Python installing
+      `workspace_before_request_handler` on the base app after
+      `security.init_security_middleware` but before the auth app's
+      `_before_request` (`__init__.py:82-84`). Enabled (workspace store present):
+      normalize header (`_normalize_workspace`), validate non-`default` names via
+      `WorkspaceNameValidator` (400), look up in the store (missing → 404
+      `"Workspace '{name}' not found"`); absent header → `get_default_workspace`.
+      Server-info skipped (`.../mlflow/server-info` suffix). Disabled: header
+      ignored → `default`. The resolved workspace flows to the auth middleware
+      via the extension (T10.4 grant-partitioning seam; pre-T10.4 validators
+      still resolve in `default`). Cross-workspace isolation rides the existing
+      store `WHERE workspace = ?` (tracking + registry scoped since Phase 2/T5.4)
+      — no new query plumbing. Artifact prefixing + forbid in the
+      `create_experiment` handler: enabled → forbid explicit `artifact_location`
+      (`INVALID_PARAMETER_VALUE`, byte-matched), else derive via new store
+      `create_experiment_workspace_scoped` + `WorkspaceArtifactRoot::Scoped`
+      (`resolve_artifact_root` → `should_append` ? `<root>/workspaces/<ws>/<id>`
+      : `<root>/<id>`; empty root → `"Cannot determine an artifact root"`).
+      Applies to `default` too when enabled. Single-tenant startup guard
+      `mlflow_store::verify_single_tenant_data` (INVALID_STATE, byte-matched
+      "Cannot disable workspaces because {experiments|registered models|webhooks}
+      exist outside the default workspace"), called from `main.rs` on the
+      workspaces-disabled path; missing tables skipped. Tests: 19 HTTP
+      (`workspace_scoping_http.rs`) + 5 workspace.rs unit + 3 guard unit
+      (`workspaces_store.rs`). Quirks: search assertions use `view_type=ALL`
+      (the ActiveOnly-default search is T3 territory). Deferred to T10.4:
+      workspace-aware auth grant partitioning; the reserved-artifact-root startup
+      guards (root ending `workspaces` / already scoped) are not yet ported —
+      only the disable-with-non-default-data guard is.)*
 - [ ] **T10.4 Workspace-aware auth integration**: role workspace partitioning, workspace
       USE/MANAGE grants, default-workspace inheritance, `NO_PERMISSIONS` boundary deny,
       workspace admin capabilities, `filter_list_workspaces`.

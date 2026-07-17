@@ -54,8 +54,8 @@ pub use store::{
     SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
 };
 pub use store::{
-    ResolvedTraceArchivalConfig, TraceArchivalConfig, Workspace, WorkspaceDeletionMode,
-    WorkspaceNameValidator, WorkspaceStore, DEFAULT_WORKSPACE_NAME as WORKSPACE_DEFAULT_NAME,
-    WORKSPACES,
+    verify_single_tenant_data, ResolvedTraceArchivalConfig, TraceArchivalConfig, Workspace,
+    WorkspaceArtifactRoot, WorkspaceDeletionMode, WorkspaceNameValidator, WorkspaceStore,
+    DEFAULT_WORKSPACE_NAME as WORKSPACE_DEFAULT_NAME, WORKSPACES,
 };
 pub use uri::{ParsedUri, UriError};
