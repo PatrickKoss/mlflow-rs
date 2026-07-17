@@ -18,6 +18,11 @@ on:
       - "rust/**"
       - "mlflow/**"
       - ".github/workflows/rust.yml"
+  # Nightly soak for the concurrency/chaos test (job `chaos`, plan T12.6),
+  # which is too heavy for the PR path. `workflow_dispatch` allows ad-hoc runs.
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -283,3 +288,52 @@ jobs:
           name: compliance-report
           path: rust/compliance/report/
           if-no-files-found: warn
+
+  # Concurrency/chaos soak (plan T12.6): boots the full axum server in-process
+  # against a live Postgres schema and hammers it with 10k mixed ops
+  # (`crates/mlflow-server/tests/chaos.rs`), asserting no unexpected 5xx and
+  # dense/unique model-version numbers under a `MAX(version)+1` race. Too heavy
+  # for the PR path, so — unlike every other job here — it runs ONLY on the
+  # nightly `schedule` and manual `workflow_dispatch`, never on push/PR. The
+  # test skips itself when `MLFLOW_RUST_TEST_PG_URI` is unset, so it never runs
+  # in the PR-path `test` job even though it lives in the same crate.
+  chaos:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mlflow
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U mlflow -d mlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - uses: ./.github/actions/setup-python
+      - name: Provision schema (mlflow db upgrade)
+        working-directory: .
+        env:
+          DB_URI: postgresql://mlflow:mlflow@localhost:5432/mlflow
+        run: uv run --extra db mlflow db upgrade "$DB_URI"
+      - name: Run chaos soak against live Postgres
+        env:
+          MLFLOW_RUST_TEST_PG_URI: postgresql://mlflow:mlflow@localhost:5432/mlflow
+        run: cargo test -p mlflow-server --test chaos -- --nocapture

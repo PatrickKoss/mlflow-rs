@@ -1820,11 +1820,28 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       TODO(T12.5) markers); no compose change needed (harness boots servers
       itself). `rust/.gitignore` now ignores `/compliance/report/`. Flip to
       required once T12.4 hits zero non-allowlisted diffs.)*
-- [ ] **T12.6 Concurrency/chaos**: parallel log-batch + start_trace + log_spans +
+- [x] **T12.6 Concurrency/chaos**: parallel log-batch + start_trace + log_spans +
       registry version creation + searches on postgres; no client-visible 5xx in 10k
       mixed ops; MV `MAX+1` race resolves via retry like Python.
       **AC:** 0 unexpected errors; version numbers dense and unique.
       **VER:** `rust/tests/chaos.rs` nightly.
+      Landed as `rust/crates/mlflow-server/tests/chaos.rs`: boots the full axum
+      app in-process on a real socket against a live Postgres schema, hammers it
+      with 10k mixed ops (`MLFLOW_CHAOS_OPS` override) over ~32 bounded tokio
+      tasks — log-batch 40%, start-trace 15%, log-spans 15%, MV-create 10%,
+      search-runs 10%, search-MVs 5%, search-traces 3%, exp create/delete 2%.
+      MV creation on one shared model is bounded to 4-way (the store/Python
+      `MAX(version)+1` retry loop has no backoff, so higher contention makes
+      retry-exhaustion the common case rather than a tail). Asserts 0 unexpected
+      5xx (the `CREATE_MODEL_VERSION_RETRIES=3` exhaustion → 500 is accepted as
+      Python's documented contract and tallied separately), MV versions dense
+      `1..=N` and unique (DB-level + client-observed), and experiment
+      create/delete consistency. Env-gated on `MLFLOW_RUST_TEST_PG_URI` (skips
+      fast otherwise; `cargo test --workspace` on sqlite stays green). Measured:
+      10k ops in ~16.5s (~600 ops/s), 0 other 5xx, ~1% MV retry-exhaustion.
+      CI: nightly `chaos` job in `.github/workflows/rust.yml` (`schedule` cron +
+      `workflow_dispatch` only, not on PRs; Postgres service + `mlflow db
+      upgrade`).
 
 ### Phase 13 — Schema evolution for 100 GB scale (after parity is proven)
 
