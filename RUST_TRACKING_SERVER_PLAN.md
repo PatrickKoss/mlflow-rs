@@ -1,12 +1,35 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress — Phases 3, 4, 5, 6, 7 complete; Phase 8 complete except
-T8.4 (in flight); Phase 9 started 2026-07-17 (user approved proceeding without
-prior review).** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-17
+Status: **in progress — Phases 2, 3, 4, 5, 6, 7, 8 complete; Phase 9 complete
+except T9.9 (admin UI validation); Phase 10 T10.1/T10.2 done; Phase 11
+T11.2/T11.3/T11.4/T11.5 done; Phase 12 T12.1/T12.2 done.** · Branch:
+`feature/rust-tracking-server` · Last updated: 2026-07-17
 
-**Resume notes (2026-07-17):** the three paused worktrees (GraphQL, T8.3, T7.5)
-were salvaged, completed, merged, and removed. In flight: T8.4 (event triggers),
-T9.1 (auth DB layer), T2.2 (CI dialect matrix).
+**Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8 —
+DB layer, users/roles/permissions APIs, enforcement middleware, after-request
+hooks + search filtering, GraphQL auth, signup/CSRF, and ini config + caches.
+All merged and green (fmt/clippy/full workspace suite by exit code).
+
+**Open (no work in flight — clean stopping point):**
+- **T12.4 (differential replay harness)** and **T12.6 (chaos test)** were in
+  flight when the two subagents hit the account spend limit and terminated.
+  Their partial work was checkpointed on the worktree branches (WIP commits,
+  NOT verified, NOT complete): `worktree-agent-a67a7f6d3a0f46a03` @ `95819ea0f`
+  (T12.4 — `rust/compliance/` corpus scaffold + an `experiments.rs` change) and
+  `worktree-agent-ad634b20ba0a07ff0` @ `cdd95e09f` (T12.6 — `chaos.rs` +
+  `rust.yml` CI job). Salvage or redo on resume. T12.4's last note flagged a
+  real parity lead: experiment `workspace` field (proto field 9, "always
+  `default` when workspaces disabled") — Python always emits it, Rust's
+  `to_proto_experiment` may omit it. Worth checking early.
+- Remaining pre-existing: **T9.9** (admin/account UI validation),
+  **T10.3/T10.4** (workspace request scoping + workspace-aware auth — several
+  T10.4 seams already marked in the auth code), **T11.1** (full CLI parity),
+  **T11.6** (UI smoke checklist), **T12.3/T12.5** (client-suite conformance +
+  CI matrix), and **Phases 13–14** (scale benchmarks, memory/soak validation).
+- Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
+  messages (serde text vs Python's "Invalid value … for parameter …"); #3
+  HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
+  #2 (auth enforcement) was closed by T9.4.
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -1381,13 +1404,35 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       authenticated flow — `_before_request` gates /signup, create-user-ui, and
       server-info too (the `:3638` server-info exemption is after-request-only).
       Closes parity-backlog item #2 from T12.1.)*
-- [ ] **T9.5 After-request hooks**: creator-MANAGE grants on create; search/list response
+- [x] **T9.5 After-request hooks**: creator-MANAGE grants on create; search/list response
       filtering for experiments/registered-models/model-versions/logged-models — prefer
       the query-integrated form (Q10) with a flag-gated fallback to Python-identical
       refetch behavior; grant cascade on delete/rename; workspace role seed/cleanup.
       **AC:** a non-admin user sees exactly the same filtered search results from Rust
       and Python on a seeded permission fixture, including page-fill behavior.
       **VER:** differential test with multi-user fixtures.
+      *(Done 2026-07-17: `auth_middleware/after_request.rs` dispatched by a new
+      `dispatch_after_request` (mirrors AFTER_REQUEST_HANDLERS). Creator MANAGE
+      grants (createExperiment; createRegisteredModel with prompt-vs-model
+      namespace from the response is_prompt tag). Search filtering
+      (experiments/RM/MV/logged-models) via `_role_based_read_predicate`
+      (list_role_grants_for_user_in_workspace); admins skip. **Default =
+      Python-identical refetch** (exact truncate-then-token math incl. the
+      logged-models opaque token and Python's `if next_page_token:`-only
+      overwrite quirk; MV is drop-only, no page-fill). Q10 query-integrated
+      form NOT implemented — documented env seam
+      `MLFLOW_RUST_AUTH_QUERY_INTEGRATED_FILTERING` (no effect). Grant cascade
+      on RM delete + rename over both registered_model/prompt namespaces.
+      Store methods added: delete_grants_for_resource, rename_grants_for_resource,
+      create_page_token (mlflow-search), logged_models token offset round-trip.
+      Deferred (T10.4 seams): workspace seed/cleanup + ListWorkspaces filter +
+      workspaces-enabled deny fallback; scorer/gateway/review-queue hooks not
+      served by this binary. Merge reconciliation (orchestrator): kept the
+      admin path running the after-request hook (not early-returning), sourced
+      is_admin from T9.8's cached authenticate_and_get_user, stamped the T9.6
+      AuthContext; default_permission()/readable_set fallback rewired to
+      AuthConfig; tests moved to AuthStore::with_config. 10 tests across 2
+      binaries.)*
 - [x] **T9.6 GraphQL auth middleware**: per-field READ checks, experiment-id narrowing
       for searchRuns, post-filter for searchModelVersions, admin bypass,
       `MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH` toggle.
@@ -1532,10 +1577,30 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       family mapped to the Rust pool.
       **AC:** documented parity matrix; unsupported flags fail loudly.
       **VER:** CLI integration tests.
-- [ ] **T11.2 Security middleware parity**: host-header allowlist, CORS, X-Frame-Options
+- [x] **T11.2 Security middleware parity**: host-header allowlist, CORS, X-Frame-Options
       (mirror `mlflow/server/security.py`).
       **AC:** identical responses to disallowed Host/CORS preflights.
       **VER:** table-driven HTTP tests vs both servers.
+      *(Done 2026-07-17: `mlflow-server/src/security.rs` tower layer, outermost
+      (runs before auth → disallowed Host is 403 before any 401, matching
+      Python installing security on the base app before the auth app). Ported
+      `security.py`/`security_utils.py`: Host allowlist
+      (`--allowed-hosts`/`MLFLOW_SERVER_ALLOWED_HOSTS`, default localhost +
+      RFC1918/4193 patterns, `*` disables, fnmatch only when pattern has `*`),
+      CORS (`--cors-allowed-origins`/env, localhost always allowed, wildcard
+      disables credentials, preflight 204 + exact ACA-* header set + `Vary:
+      Origin`, echoes request-headers), cross-origin state-change block, and
+      X-Frame-Options (`--x-frame-options`/env, default SAMEORIGIN, NONE
+      disables) + `X-Content-Type-Options: nosniff` on every response incl.
+      403/404. Byte-matched rejection bodies. Quirks reproduced: flask-cors
+      decorates even the 403 rejection with CORS headers for an allowed
+      origin; bare `[::1]` matched by equality not glob. Python has env only —
+      added the 3 CLI flags (flag>env) mirroring `--static-prefix`; full CLI
+      parity is T11.1. Deferred: notebook-renderer X-Frame exemption (no such
+      route here), FastAPI/OTLP security variant,
+      MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE kill-switch. 20 HTTP + 14 unit
+      tests; 24 existing test files updated for the 3 new ServerConfig
+      fields.)*
 - [x] **T11.3 nginx reference config** implementing §2.2 ("default → Rust, genai →
       Python"), `proxy_buffering off` for Python SSE/streaming locations,
       client_max_body_size for artifact uploads; `rust/deploy/nginx.conf` +
