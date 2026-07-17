@@ -78,6 +78,7 @@ fn config(
         cors_allowed_origins: cors_allowed_origins
             .map(|os| os.iter().map(|s| s.to_string()).collect()),
         x_frame_options: x_frame_options.to_string(),
+        ..Default::default()
     }
 }
 

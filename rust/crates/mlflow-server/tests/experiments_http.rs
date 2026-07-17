@@ -86,6 +86,7 @@ impl TestServer {
             allowed_hosts: None,
             cors_allowed_origins: None,
             x_frame_options: "SAMEORIGIN".to_string(),
+            ..Default::default()
         };
         // Per-router recorder handle so multiple test servers can coexist in
         // one process (a global recorder can only be installed once).

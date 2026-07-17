@@ -93,6 +93,15 @@ impl TestServer {
     /// Start with `serve_artifacts` on/off. Both the default-artifact root and
     /// the `--artifacts-destination` are local temp dirs.
     async fn start(tag: &str, serve_artifacts: bool) -> Self {
+        Self::start_with(tag, serve_artifacts, false).await
+    }
+
+    /// Start in `--artifacts-only` mode (serve_artifacts on).
+    async fn start_artifacts_only(tag: &str) -> Self {
+        Self::start_with(tag, true, true).await
+    }
+
+    async fn start_with(tag: &str, serve_artifacts: bool, artifacts_only: bool) -> Self {
         let db_file = TempDb::new(tag);
         let art_dir = TempDir::new().expect("art dir");
         let dest_dir = TempDir::new().expect("dest dir");
@@ -113,10 +122,12 @@ impl TestServer {
             backend_store_uri: None,
             default_artifact_root: None,
             serve_artifacts,
+            artifacts_only,
             artifacts_destination: Some(dest_uri),
             allowed_hosts: None,
             cors_allowed_origins: None,
             x_frame_options: "SAMEORIGIN".to_string(),
+            ..Default::default()
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
         let app_state = AppState::with_artifacts(
@@ -650,4 +661,34 @@ async fn proxy_download_large_file_is_memory_bounded() {
             "download RSS growth {growth} bytes exceeded 128 MiB bound"
         );
     }
+}
+
+// ===========================================================================
+// --artifacts-only mode (plan T11.1): only the artifact proxy surface + the
+// root /get-artifact and /upload-artifact endpoints are registered; tracking
+// RPCs are omitted (Python returns 503 via _disable_if_artifacts_only, the Rust
+// server does not register the route at all -> 404).
+// ===========================================================================
+
+#[tokio::test]
+async fn artifacts_only_serves_proxy_but_not_tracking() {
+    let server = TestServer::start_artifacts_only("artifacts_only").await;
+
+    // Proxy upload/list still works.
+    let res = send_bytes(
+        &server,
+        Method::PUT,
+        "/api/2.0/mlflow-artifacts/artifacts/exp/run/f.txt",
+        Some(b"payload".to_vec()),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+
+    let res = get(&server, "/api/2.0/mlflow-artifacts/artifacts?path=exp/run").await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+
+    // A tracking RPC (search-experiments) is NOT registered in artifacts-only
+    // mode, so it 404s (route absent) rather than executing.
+    let res = get(&server, "/api/2.0/mlflow/experiments/search").await;
+    assert_eq!(res.status, StatusCode::NOT_FOUND, "{}", res.text());
 }
