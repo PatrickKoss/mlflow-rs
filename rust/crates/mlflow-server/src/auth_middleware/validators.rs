@@ -13,14 +13,32 @@
 //!   workspaces disabled) → default; `NO_PERMISSIONS` → deny; otherwise
 //!   `max(role, default)`.
 //!
-//! ## Workspace scoping (T10.4 seam)
+//! ## Workspace scoping (T10.4)
 //!
-//! Workspace partitioning is T10.4. Pre-T10.4 the server is single-tenant, so
-//! we resolve every role lookup in the `"default"` workspace — exactly what
-//! Python does when `MLFLOW_ENABLE_WORKSPACES` is off (the `_role_permission_for`
-//! "workspaces disabled" branch returns the raw grant or `None`, never
-//! `NO_PERMISSIONS`). The request's `X-MLFLOW-WORKSPACE` header is carried
-//! through so the wiring is ready, but it always resolves to `"default"` here.
+//! Workspace partitioning (T10.4) threads the request's *resolved* workspace
+//! (`RequestCtx::workspace`, stamped by the T10.3 layer) into every role lookup
+//! and branches the "no grant matched" fold on whether workspaces are enabled
+//! (`RequestCtx::workspaces_enabled`, `AppState::workspace_store().is_some()`):
+//!
+//! * **Workspaces disabled** (single-tenant): a missing grant folds to
+//!   `default_permission` — the `_role_permission_for` "workspaces off" branch
+//!   returns `None`, never `NO_PERMISSIONS` (`__init__.py:711-712`). Byte-identical
+//!   to pre-T10.4.
+//! * **Workspaces enabled**: a missing grant in the request's workspace is the
+//!   `NO_PERMISSIONS` **boundary deny** (`__init__.py:715`) — NOT
+//!   `default_permission`. A resource in a workspace the user has no role in
+//!   denies, even where the user would have implicit `default_permission` READ
+//!   in single-tenant. The one exception is the opt-in default-workspace
+//!   auto-grant (`_user_inherits_default_workspace_grant`, `__init__.py:541`,
+//!   `grant_default_workspace_access` off by default): when on **and** the
+//!   request workspace is the default workspace, an ungranted user inherits
+//!   `default_permission` (`__init__.py:713-714`).
+//!
+//! Grant lookups are scoped to `RequestCtx::workspace` by
+//! `get_role_permission_for_resource(.., workspace)` (T9.3), which already folds
+//! `(workspace, *)` MANAGE grants into concrete-resource reads (workspace admin)
+//! and USE only for the workspace-tier create-gate — matching
+//! `sqlalchemy_store.py:2031-2041`.
 //!
 //! ## default_permission (T9.8)
 //!
@@ -38,12 +56,18 @@ use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_store::TrackingStore;
 use serde_json::Value;
 
+use crate::workspace::DEFAULT_WORKSPACE_NAME;
+
 /// Everything a validator needs about the current request. Built once by the
 /// middleware after buffering the body.
 pub struct RequestCtx<'a> {
     pub username: &'a str,
     pub method: &'a str,
     pub workspace: &'a str,
+    /// Whether the server runs with workspaces enabled
+    /// (`AppState::workspace_store().is_some()` ≈ `MLFLOW_ENABLE_WORKSPACES`).
+    /// Gates the `NO_PERMISSIONS` boundary deny (T10.4).
+    pub workspaces_enabled: bool,
     /// Captured path parameters (`request.view_args`).
     pub path_params: &'a [(String, String)],
     /// Query string parameters (`request.args`).
@@ -176,6 +200,11 @@ pub enum Validator {
     UpdateUserPassword,
     // ---- Webhooks (admin-only) ----
     SenderIsAdmin,
+    // ---- Workspaces (T10.4) ----
+    /// `validate_can_view_workspace` — GetWorkspace: workspaces off → True;
+    /// on → the `workspace_name` view arg is in the caller's accessible set (or
+    /// the default-workspace auto-grant).
+    ViewWorkspace,
 }
 
 impl Validator {
@@ -188,8 +217,15 @@ impl Validator {
             Allow => Ok(true),
             AdminOnlyFalse => Ok(false),
             SenderIsAdmin => sender_is_admin(ctx).await,
-            CanListUsers => Ok(true), // `_user_can_create_in_workspace` (workspaces off → True).
-            CanCreateExperiment | CanCreateRegisteredModel => Ok(true), // ditto.
+            // `validate_can_list_users` / `validate_can_create_experiment` /
+            // `validate_can_create_registered_model` all delegate to
+            // `_user_can_create_in_workspace` (`__init__.py:1208-1213`, `1663-1667`):
+            // workspaces off → True; on → a workspace-wide USE/MANAGE grant in the
+            // request workspace (or the default-workspace auto-grant).
+            CanListUsers | CanCreateExperiment | CanCreateRegisteredModel => {
+                user_can_create_in_workspace(ctx).await
+            }
+            ViewWorkspace => validate_can_view_workspace(ctx).await,
             // Experiments.
             ReadExperiment => Ok(experiment_perm_from_id_param(ctx).await?.can_read),
             ReadExperimentByName => Ok(experiment_perm_from_name(ctx).await?.can_read),
@@ -278,44 +314,107 @@ fn fold_default(
     }
 }
 
-/// `_get_experiment_permission(experiment_id, username)` (`__init__.py:750`),
-/// on the workspaces-disabled path: the role grant if any, else default. The
-/// store-level primitive, decoupled from [`RequestCtx`] so both the
-/// before-request validators and the GraphQL auth gate (T9.6) call it.
+/// `_user_inherits_default_workspace_grant` (`__init__.py:541`): the opt-in
+/// default-workspace auto-grant. True iff `grant_default_workspace_access` is on
+/// **and** the request workspace is the default workspace. Python resolves the
+/// live default workspace via `get_default_workspace_optional`; a workspace can
+/// only be *made* default (via `?mode=SET_DEFAULT` on delete) but the auth
+/// resolver's grant is keyed on that live default name — for the standard
+/// deployment the default workspace is [`DEFAULT_WORKSPACE_NAME`], so we compare
+/// against it. (The rename-to-default corner is not exercised by the ACs.)
+fn user_inherits_default_workspace_grant(auth_store: &AuthStore, workspace: &str) -> bool {
+    auth_store.config().grant_default_workspace_access && workspace == DEFAULT_WORKSPACE_NAME
+}
+
+/// The shared inner resolver (`_role_permission_for` closure + fold,
+/// `__init__.py:672-717`, `750-760`): look up the role grant on
+/// `(resource_type, resource_id)` scoped to `workspace`, then fold it against
+/// `default_permission` with the workspaces-enabled boundary deny.
+///
+/// * grant found → `max(grant, default)` (default is a floor, never a downgrade;
+///   `NO_PERMISSIONS` is preserved).
+/// * no grant, workspaces **disabled** → `default_permission` (single-tenant).
+/// * no grant, workspaces **enabled** → `NO_PERMISSIONS` boundary deny, unless
+///   the default-workspace auto-grant applies (→ `default_permission`).
+async fn resolve_role_permission(
+    auth_store: &AuthStore,
+    username: &str,
+    workspace: &str,
+    workspaces_enabled: bool,
+    resource_type: &str,
+    resource_id: &str,
+) -> Result<&'static Permission, MlflowError> {
+    let user = auth_store.get_user(username).await?;
+    let role_perm = auth_store
+        .get_role_permission_for_resource(user.id, resource_type, resource_id, workspace)
+        .await?;
+    let inner = match role_perm {
+        Some(p) => Some(p),
+        None if !workspaces_enabled => None,
+        None if user_inherits_default_workspace_grant(auth_store, workspace) => {
+            Some(default_permission(auth_store))
+        }
+        None => Some(&NO_PERMISSIONS),
+    };
+    Ok(fold_default(auth_store, inner))
+}
+
+/// `_get_experiment_permission(experiment_id, username)` (`__init__.py:750`): the
+/// role grant scoped to `workspace`, folded with the workspaces-enabled boundary
+/// deny (see [`resolve_role_permission`]). Store-level primitive, decoupled from
+/// [`RequestCtx`] so both the before-request validators and the GraphQL auth gate
+/// (T9.6) call it.
 pub(crate) async fn resolve_experiment_permission(
     auth_store: &AuthStore,
     username: &str,
     workspace: &str,
+    workspaces_enabled: bool,
     experiment_id: &str,
 ) -> Result<&'static Permission, MlflowError> {
-    let user = auth_store.get_user(username).await?;
-    let role_perm = auth_store
-        .get_role_permission_for_resource(user.id, "experiment", experiment_id, workspace)
-        .await?;
-    Ok(fold_default(auth_store, role_perm))
+    resolve_role_permission(
+        auth_store,
+        username,
+        workspace,
+        workspaces_enabled,
+        "experiment",
+        experiment_id,
+    )
+    .await
 }
 
-/// `_graphql_get_permission_for_model` (`__init__.py:4114`) on the
-/// workspaces-disabled path: the `registered_model` role grant if any, else
-/// default. Shared with [`registered_model_perm`].
+/// `_graphql_get_permission_for_model` (`__init__.py:4114`): the
+/// `registered_model` role grant scoped to `workspace`, folded with the
+/// workspaces-enabled boundary deny. Shared with [`registered_model_perm`].
 pub(crate) async fn resolve_registered_model_permission(
     auth_store: &AuthStore,
     username: &str,
     workspace: &str,
+    workspaces_enabled: bool,
     model_name: &str,
 ) -> Result<&'static Permission, MlflowError> {
-    let user = auth_store.get_user(username).await?;
-    let role_perm = auth_store
-        .get_role_permission_for_resource(user.id, "registered_model", model_name, workspace)
-        .await?;
-    Ok(fold_default(auth_store, role_perm))
+    resolve_role_permission(
+        auth_store,
+        username,
+        workspace,
+        workspaces_enabled,
+        "registered_model",
+        model_name,
+    )
+    .await
 }
 
 async fn experiment_permission(
     ctx: &RequestCtx<'_>,
     experiment_id: &str,
 ) -> Result<&'static Permission, MlflowError> {
-    resolve_experiment_permission(ctx.auth_store, ctx.username, ctx.workspace, experiment_id).await
+    resolve_experiment_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        experiment_id,
+    )
+    .await
 }
 
 async fn experiment_perm_from_id_param(
@@ -370,7 +469,14 @@ async fn registered_model_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permissi
     let name = require_param(ctx, "name")?;
     // Namespaced under `registered_model`; a real prompt/model classification
     // needs the registry store (later phase). Resolve the grant directly.
-    resolve_registered_model_permission(ctx.auth_store, ctx.username, ctx.workspace, &name).await
+    resolve_registered_model_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        &name,
+    )
+    .await
 }
 
 /// `validate_can_create_model_version` (`__init__.py:1188`): require UPDATE on
@@ -601,9 +707,15 @@ async fn validate_otlp(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
     Ok(experiment_permission(ctx, eid).await?.can_update)
 }
 
-/// `_get_permission_from_experiment_id_artifact_proxy` on the workspaces-disabled
-/// path: extract the experiment id from the artifact tail (path param or `?path=`
-/// query) and resolve; if no id is found, fall to `default_permission`.
+/// `_get_permission_from_experiment_id_artifact_proxy` (`__init__.py:780-806`):
+/// extract the experiment id from the artifact tail (path param or `?path=`
+/// query) and resolve as an experiment permission. When no id is found:
+///
+/// * workspaces **disabled** → `default_permission`.
+/// * workspaces **enabled** → the request-workspace `(workspace, *)` grant if
+///   any (with the default-workspace auto-grant fallback), else `NO_PERMISSIONS`
+///   — the coarse workspace-tier grant Python falls back to for a bare
+///   proxy-artifact path.
 async fn artifact_proxy_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permission, MlflowError> {
     // `artifact_path` (view arg) or `path` (query), then `_EXPERIMENT_ID_PATTERN`.
     let artifact_path = ctx
@@ -617,8 +729,24 @@ async fn artifact_proxy_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permission
             return experiment_permission(ctx, &eid).await;
         }
     }
-    // No experiment id resolved: workspaces-disabled → default_permission.
-    Ok(default_permission(ctx.auth_store))
+    if !ctx.workspaces_enabled {
+        // No experiment id resolved: workspaces-disabled → default_permission.
+        return Ok(default_permission(ctx.auth_store));
+    }
+    // Workspaces enabled: fall back to the coarse workspace-tier grant on
+    // `(workspace, *)` in the request workspace.
+    let user = ctx.auth_store.get_user(ctx.username).await?;
+    let perm = ctx
+        .auth_store
+        .get_role_permission_for_resource(user.id, "workspace", "*", ctx.workspace)
+        .await?;
+    if let Some(p) = perm {
+        return Ok(p);
+    }
+    if user_inherits_default_workspace_grant(ctx.auth_store, ctx.workspace) {
+        return Ok(default_permission(ctx.auth_store));
+    }
+    Ok(&NO_PERMISSIONS)
 }
 
 async fn all_can_read_experiments(
@@ -659,6 +787,52 @@ async fn validate_can_create_user(ctx: &RequestCtx<'_>) -> Result<bool, MlflowEr
 /// `sender_is_admin` (`__init__.py:1260`).
 async fn sender_is_admin(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
     Ok(ctx.auth_store.get_user(ctx.username).await?.is_admin)
+}
+
+/// `_user_can_create_in_workspace` (`__init__.py:580-610`): workspaces off →
+/// always True. On → a workspace-wide grant with `can_use` (USE/MANAGE stored on
+/// `(workspace, *)`) in the request workspace; resource-specific grants don't
+/// confer create. Honors the default-workspace auto-grant: an ungranted user in
+/// the default workspace inherits `default_permission` and can create iff it
+/// carries `can_use`.
+async fn user_can_create_in_workspace(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    if !ctx.workspaces_enabled {
+        return Ok(true);
+    }
+    let user = ctx.auth_store.get_user(ctx.username).await?;
+    let perm = ctx
+        .auth_store
+        .get_role_permission_for_resource(user.id, "workspace", "*", ctx.workspace)
+        .await?;
+    if let Some(p) = perm {
+        return Ok(p.can_use);
+    }
+    if user_inherits_default_workspace_grant(ctx.auth_store, ctx.workspace) {
+        return Ok(default_permission(ctx.auth_store).can_use);
+    }
+    Ok(false)
+}
+
+/// `validate_can_view_workspace` (`__init__.py:1216-1236`): workspaces off →
+/// True. On → the `workspace_name` view arg must be present and in the caller's
+/// accessible-workspace set (or the default-workspace auto-grant when the target
+/// is the default workspace). Admins bypass upstream in the middleware.
+async fn validate_can_view_workspace(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    if !ctx.workspaces_enabled {
+        return Ok(true);
+    }
+    let Some((_, workspace_name)) = ctx.path_params.iter().find(|(k, _)| k == "workspace_name")
+    else {
+        return Ok(false);
+    };
+    if user_inherits_default_workspace_grant(ctx.auth_store, workspace_name) {
+        return Ok(true);
+    }
+    let names = ctx
+        .auth_store
+        .list_accessible_workspace_names(ctx.username)
+        .await?;
+    Ok(names.contains(workspace_name.as_str()))
 }
 
 /// `_get_request_param` that raises the standard missing-param 400.

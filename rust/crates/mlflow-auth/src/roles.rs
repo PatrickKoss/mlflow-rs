@@ -785,6 +785,125 @@ impl AuthStore {
             .collect())
     }
 
+    /// `list_accessible_workspace_names` (`sqlalchemy_store.py:994-1050`): the set
+    /// of workspaces `username` can see, a two-source union:
+    ///
+    /// * any **non-synthetic** role assignment confers visibility on its
+    ///   workspace (admin-created roles count regardless of their permissions);
+    /// * a **synthetic** `__user_<id>__` role confers visibility only if its
+    ///   `(workspace, *)` grant has `can_read` — a per-resource-only grant on the
+    ///   synthetic role does NOT surface the workspace, and a migrated
+    ///   `NO_PERMISSIONS` workspace grant keeps it hidden.
+    ///
+    /// Used by `validate_can_view_workspace` and `filter_list_workspaces` (T10.4).
+    pub async fn list_accessible_workspace_names(
+        &self,
+        username: &str,
+    ) -> Result<BTreeSet<String>, MlflowError> {
+        let user = self.get_user(username).await?;
+        let dialect = self.db().reader().dialect();
+        // All (workspace, role_name) pairs the user is assigned to.
+        let sql = format!(
+            "SELECT DISTINCT r.workspace AS workspace, r.name AS name \
+             FROM {ROLES} r \
+             JOIN {USER_ROLE_ASSIGNMENTS} a ON a.role_id = r.id \
+             WHERE a.user_id = {}",
+            dialect.placeholder(1),
+        );
+        let assigned = self
+            .db()
+            .reader()
+            .fetch_all(&sql, &[Val::Int(user.id)], |row: &dyn RowLike| {
+                Ok((row.get_string("workspace")?, row.get_string("name")?))
+            })
+            .await
+            .map_err(internal)?;
+
+        let mut accessible = BTreeSet::new();
+        let mut synthetic_workspaces = BTreeSet::new();
+        for (workspace, role_name) in assigned {
+            if is_synthetic_role_name(&role_name) {
+                synthetic_workspaces.insert(workspace);
+            } else {
+                accessible.insert(workspace);
+            }
+        }
+
+        if synthetic_workspaces.is_empty() {
+            return Ok(accessible);
+        }
+
+        // For synthetic roles, only count workspaces whose `(workspace, *)` grant
+        // has `can_read`.
+        let sql = format!(
+            "SELECT r.workspace AS workspace, rp.permission AS permission \
+             FROM {ROLES} r \
+             JOIN {ROLE_PERMISSIONS} rp ON rp.role_id = r.id \
+             JOIN {USER_ROLE_ASSIGNMENTS} a ON a.role_id = r.id \
+             WHERE a.user_id = {} AND rp.resource_type = {} AND rp.resource_pattern = '*'",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+        );
+        let synthetic_rows = self
+            .db()
+            .reader()
+            .fetch_all(
+                &sql,
+                &[
+                    Val::Int(user.id),
+                    Val::Text(permissions::RESOURCE_TYPE_WORKSPACE.to_string()),
+                ],
+                |row: &dyn RowLike| {
+                    Ok((row.get_string("workspace")?, row.get_string("permission")?))
+                },
+            )
+            .await
+            .map_err(internal)?;
+        for (workspace, permission) in synthetic_rows {
+            if synthetic_workspaces.contains(&workspace)
+                && permissions::get_permission(&permission).can_read
+            {
+                accessible.insert(workspace);
+            }
+        }
+        Ok(accessible)
+    }
+
+    /// `delete_workspace_permissions_for_workspace` (`sqlalchemy_store.py:695-704`):
+    /// drop the `(workspace, *)` grants on the **synthetic** per-user roles in
+    /// `workspace` (the workspace-delete cleanup, T10.4). Non-synthetic roles and
+    /// the roles themselves are removed by
+    /// [`AuthStore::delete_roles_for_workspace`]; matching Python's narrow delete
+    /// keeps the cleanup order observable-identical.
+    pub async fn delete_workspace_permissions_for_workspace(
+        &self,
+        workspace: &str,
+    ) -> Result<(), MlflowError> {
+        let dialect = self.db().writer().dialect();
+        // Synthetic roles are `name LIKE '__user_%__'`; the `(workspace, *)` grant
+        // is the migrated workspace-permission row.
+        let sql = format!(
+            "DELETE FROM {ROLE_PERMISSIONS} \
+             WHERE resource_type = {} AND resource_pattern = '*' AND role_id IN \
+             (SELECT id FROM {ROLES} WHERE workspace = {} AND name LIKE '{}%__')",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            SYNTHETIC_ROLE_PREFIX,
+        );
+        self.db()
+            .writer()
+            .exec(
+                &sql,
+                &[
+                    Val::Text(permissions::RESOURCE_TYPE_WORKSPACE.to_string()),
+                    Val::Text(workspace.to_string()),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        Ok(())
+    }
+
     // ---- Private helpers ----
 
     async fn workspace_admin_workspaces(

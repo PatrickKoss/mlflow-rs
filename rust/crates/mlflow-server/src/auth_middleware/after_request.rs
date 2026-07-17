@@ -25,17 +25,20 @@
 //!
 //! ## Which hooks are ported (and which are seams)
 //!
-//! Python's `AFTER_REQUEST_PATH_HANDLERS` also carries scorer, gateway,
-//! review-queue, and workspace-listing hooks. Those REST surfaces are **not
-//! served by this Rust binary** (see `path_matchers` — the before-request
-//! dispatch omits them for the same reason), so their after-request handlers
-//! would be dead code and are intentionally absent. The workspace
-//! seed/cleanup hooks (`_seed_default_workspace_roles`,
-//! `_cleanup_workspace_permissions`) are gated on the multi-tenant workspace
-//! feature (T10.4) and its RBAC-seed flag; the workspace routes exist (T10.2)
-//! but pre-T10.4 the server is single-tenant, so seeding default roles into a
-//! freshly-created workspace and their cleanup are wired here as a documented
-//! `// T10.4 SEAM` and left out of the single-tenant matrix.
+//! Python's `AFTER_REQUEST_PATH_HANDLERS` also carries scorer, gateway, and
+//! review-queue hooks. Those REST surfaces are **not served by this Rust
+//! binary** (see `path_matchers` — the before-request dispatch omits them for
+//! the same reason), so their after-request handlers would be dead code and are
+//! intentionally absent.
+//!
+//! The workspace hooks (T10.4) **are** served: `filter_list_workspaces` filters
+//! the ListWorkspaces response to accessible workspaces (admins see all);
+//! `_seed_default_workspace_roles` seeds the two-tier `admin`(MANAGE)/`user`(USE)
+//! roles into a freshly-created workspace (gated on `MLFLOW_RBAC_SEED_DEFAULT_ROLES`,
+//! default on); `_cleanup_workspace_permissions` drops the workspace's synthetic
+//! grants + roles on delete. All three no-op when workspaces are disabled (the
+//! routes 503 before the handler runs) and match Python's log-not-raise
+//! failure handling for the seed/cleanup hooks.
 //!
 //! ## Query-integrated filtering (plan Q10)
 //!
@@ -88,6 +91,16 @@ pub enum AfterRequestHandler {
     FilterSearchModelVersions,
     /// `filter_search_logged_models`.
     FilterSearchLoggedModels,
+    /// `filter_list_workspaces` — drop workspaces the caller can't access from a
+    /// ListWorkspaces response (T10.4). Admins skip.
+    FilterListWorkspaces,
+    /// `_seed_default_workspace_roles` — seed the `admin`/`user` roles into a new
+    /// workspace after CreateWorkspace (T10.4), gated on
+    /// `MLFLOW_RBAC_SEED_DEFAULT_ROLES` (default on).
+    SeedDefaultWorkspaceRoles,
+    /// `_cleanup_workspace_permissions` — drop the workspace's grants + roles
+    /// after a DeleteWorkspace (T10.4).
+    CleanupWorkspacePermissions,
 }
 
 impl AfterRequestHandler {
@@ -100,6 +113,9 @@ impl AfterRequestHandler {
             self,
             AfterRequestHandler::DeleteGrantsRegisteredModel
                 | AfterRequestHandler::RenameGrantsRegisteredModel
+                // `_cleanup_workspace_permissions` reads `request.view_args`;
+                // DeleteWorkspace returns 204 with no body.
+                | AfterRequestHandler::CleanupWorkspacePermissions
         )
     }
 }
@@ -121,6 +137,9 @@ pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
         ("ModelRegistryService", "renameRegisteredModel") => RenameGrantsRegisteredModel,
         ("ModelRegistryService", "searchRegisteredModels") => FilterSearchRegisteredModels,
         ("ModelRegistryService", "searchModelVersions") => FilterSearchModelVersions,
+        ("MlflowService", "listWorkspaces") => FilterListWorkspaces,
+        ("MlflowService", "createWorkspace") => SeedDefaultWorkspaceRoles,
+        ("MlflowService", "deleteWorkspace") => CleanupWorkspacePermissions,
         _ => return None,
     };
     Some(h)
@@ -135,6 +154,9 @@ pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
 pub struct AfterCtx<'a> {
     pub username: &'a str,
     pub workspace: &'a str,
+    /// Whether workspaces are enabled (`AppState::workspace_store().is_some()`).
+    /// Gates the read-predicate fallback (deny vs `default_permission`, T10.4).
+    pub workspaces_enabled: bool,
     pub is_admin: bool,
     /// The request method (`"GET"`/`"POST"`/...), for re-parsing the search
     /// request exactly as the handler did.
@@ -145,6 +167,9 @@ pub struct AfterCtx<'a> {
     pub request_body: &'a Bytes,
     /// The parsed request JSON body (for the delete/rename cascades), if any.
     pub request_json: Option<&'a serde_json::Value>,
+    /// Captured path parameters (`request.view_args`) — the DeleteWorkspace
+    /// cleanup reads `workspace_name` here.
+    pub path_params: &'a [(String, String)],
     pub state: &'a AppState,
 }
 
@@ -228,6 +253,15 @@ async fn run_inner(
         }
         FilterSearchModelVersions => filter_search_model_versions(ctx, body_json(resp_body)?).await,
         FilterSearchLoggedModels => filter_search_logged_models(ctx, body_json(resp_body)?).await,
+        FilterListWorkspaces => filter_list_workspaces(ctx, body_json(resp_body)?).await,
+        SeedDefaultWorkspaceRoles => {
+            seed_default_workspace_roles(ctx, body_json(resp_body)?).await?;
+            Ok(None)
+        }
+        CleanupWorkspacePermissions => {
+            cleanup_workspace_permissions(ctx).await?;
+            Ok(None)
+        }
     }
 }
 
@@ -627,6 +661,137 @@ async fn filter_search_logged_models(
 }
 
 // ---------------------------------------------------------------------------
+// Workspace listing / seeding / cleanup (T10.4)
+// ---------------------------------------------------------------------------
+
+/// `MLFLOW_RBAC_SEED_DEFAULT_ROLES` (`environment_variables.py:124`, default
+/// `True`): whether CreateWorkspace seeds the default `admin`/`user` roles.
+fn rbac_seed_default_roles_enabled() -> bool {
+    std::env::var("MLFLOW_RBAC_SEED_DEFAULT_ROLES")
+        .map(|v| !matches!(v.to_ascii_lowercase().as_str(), "false" | "0" | ""))
+        .unwrap_or(true)
+}
+
+/// The two seed roles (`_DEFAULT_WORKSPACE_ROLES`, `__init__.py:3180`): both on
+/// the unified `(workspace, *)` slot — `admin` (MANAGE) and `user` (USE).
+const DEFAULT_WORKSPACE_ROLES: [(&str, &str, &str); 2] = [
+    (
+        "admin",
+        "MANAGE",
+        "Full MANAGE authority over the workspace.",
+    ),
+    (
+        "user",
+        "USE",
+        "Read every resource in the workspace and create new experiments \
+         and registered models; the creator-as-owner mechanism grants \
+         MANAGE on what you create, with no write or delete access to \
+         resources owned by other users.",
+    ),
+];
+
+/// `filter_list_workspaces` (`__init__.py:3140-3160`): admins see all (skip).
+/// Otherwise keep only workspaces in the caller's accessible set, plus the
+/// default workspace when the default-workspace auto-grant is on. Rewrites the
+/// response body.
+async fn filter_list_workspaces(
+    ctx: &AfterCtx<'_>,
+    resp_json: serde_json::Value,
+) -> Result<Option<Vec<u8>>, MlflowError> {
+    if ctx.is_admin {
+        return Ok(None);
+    }
+    let store: &AuthStore = ctx.state.auth_store().expect("auth enabled");
+    let mut resp: pb::list_workspaces::Response =
+        parse_response(&resp_json, "mlflow.ListWorkspaces.Response")?;
+
+    let mut allowed = store.list_accessible_workspace_names(ctx.username).await?;
+    if store.config().grant_default_workspace_access {
+        allowed.insert(crate::workspace::DEFAULT_WORKSPACE_NAME.to_string());
+    }
+    resp.workspaces
+        .retain(|ws| allowed.contains(ws.name.as_deref().unwrap_or("")));
+
+    serialize_response(&resp, "mlflow.ListWorkspaces.Response").map(Some)
+}
+
+/// `_seed_default_workspace_roles` (`__init__.py:3201-3256`): after a successful
+/// CreateWorkspace, seed the `admin`/`user` roles into the new workspace (parsed
+/// from the response). Gated on `MLFLOW_RBAC_SEED_DEFAULT_ROLES`. Partial
+/// failures are logged, not raised (the workspace already exists); a role whose
+/// permission add fails is rolled back (best-effort).
+async fn seed_default_workspace_roles(
+    ctx: &AfterCtx<'_>,
+    resp_json: serde_json::Value,
+) -> Result<(), MlflowError> {
+    if !rbac_seed_default_roles_enabled() {
+        return Ok(());
+    }
+    let store: &AuthStore = ctx.state.auth_store().expect("auth enabled");
+    let resp: pb::create_workspace::Response =
+        parse_response(&resp_json, "mlflow.CreateWorkspace.Response")?;
+    let workspace_name = resp.workspace.and_then(|w| w.name).unwrap_or_default();
+
+    for (role_name, permission, description) in DEFAULT_WORKSPACE_ROLES {
+        let role = match store
+            .create_role(role_name, &workspace_name, Some(description))
+            .await
+        {
+            Ok(role) => role,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to create default role '{role_name}' for workspace \
+                     '{workspace_name}': {e}"
+                );
+                continue;
+            }
+        };
+        if let Err(e) = store
+            .add_role_permission(role.id, "workspace", "*", permission)
+            .await
+        {
+            tracing::error!(
+                "Failed to add permission to default role '{role_name}' for workspace \
+                 '{workspace_name}': {e}. Rolling back the orphan role."
+            );
+            if let Err(delete_err) = store.delete_role(role.id).await {
+                tracing::error!(
+                    "Failed to roll back orphan role '{role_name}' (id={}) for workspace \
+                     '{workspace_name}': {delete_err}",
+                    role.id
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `_cleanup_workspace_permissions` (`__init__.py:3259-3282`): after a successful
+/// DeleteWorkspace, drop the workspace's synthetic grants then its roles. The
+/// `workspace_name` comes from the path (`request.view_args`); a missing one is a
+/// no-op. Failures are logged, not raised.
+async fn cleanup_workspace_permissions(ctx: &AfterCtx<'_>) -> Result<(), MlflowError> {
+    let Some((_, workspace_name)) = ctx.path_params.iter().find(|(k, _)| k == "workspace_name")
+    else {
+        return Ok(());
+    };
+    if workspace_name.is_empty() {
+        return Ok(());
+    }
+    let store: &AuthStore = ctx.state.auth_store().expect("auth enabled");
+    if let Err(e) = store
+        .delete_workspace_permissions_for_workspace(workspace_name)
+        .await
+    {
+        tracing::error!("Failed to delete workspace permissions for '{workspace_name}': {e}");
+    }
+    if let Err(e) = store.delete_roles_for_workspace(workspace_name).await {
+        tracing::error!("Failed to delete roles for workspace '{workspace_name}': {e}");
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Read predicate (`_role_based_read_predicate`, `__init__.py:1586`)
 // ---------------------------------------------------------------------------
 
@@ -669,10 +834,10 @@ async fn readable_set(ctx: &AfterCtx<'_>, resource_type: &str) -> Result<Readabl
             readable.insert(pattern);
         }
     }
-    // T10.4 SEAM: when workspaces are enabled the fallback is deny; pre-T10.4
-    // (single-tenant) it is `default_permission.can_read`, matching Python's
-    // `MLFLOW_ENABLE_WORKSPACES` off branch.
-    let fallback = super::validators::default_permission(store).can_read;
+    // `fallback = default_can_read if not MLFLOW_ENABLE_WORKSPACES.get() else False`
+    // (`__init__.py:1616`): when workspaces are enabled the fallback is deny;
+    // single-tenant it is `default_permission.can_read`.
+    let fallback = !ctx.workspaces_enabled && super::validators::default_permission(store).can_read;
     Ok(ReadableSet {
         readable,
         wildcard,
