@@ -47,6 +47,7 @@ from tests.server.auth.auth_test_utils import (
     User,
     create_user,
     grant_role_permission,
+    resolve_auth_server_launch,
     write_isolated_auth_config,
 )
 from tests.tracking.integration_test_utils import (
@@ -101,12 +102,15 @@ def client(request, tmp_path):
     extra_env = _isolate_auth_config(getattr(request, "param", {}), tmp_path)
     extra_env[MLFLOW_FLASK_SERVER_SECRET_KEY.name] = "my-secret-key"
 
+    # T12.1: route to the Rust binary under MLFLOW_SERVER_TYPE=rust (default: Flask).
+    server_type, extra_env = resolve_auth_server_launch(backend_uri, extra_env)
+
     with _init_server(
         backend_uri=backend_uri,
         root_artifact_uri=tmp_path.joinpath("artifacts").as_uri(),
         extra_env=extra_env,
         app="mlflow.server.auth:create_app",
-        server_type="flask",
+        server_type=server_type,
     ) as url:
         yield MlflowClient(url)
 

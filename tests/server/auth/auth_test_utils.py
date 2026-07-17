@@ -1,4 +1,8 @@
+import configparser
+import os
+import re
 from pathlib import Path
+from typing import Literal
 
 from mlflow.environment_variables import MLFLOW_TRACKING_PASSWORD, MLFLOW_TRACKING_USERNAME
 from mlflow.server.auth import auth_config
@@ -11,6 +15,90 @@ PERMISSION = "READ"
 NEW_PERMISSION = "EDIT"
 ADMIN_USERNAME = auth_config.admin_username
 ADMIN_PASSWORD = auth_config.admin_password
+
+# T12.1: the same opt-in switch used by ``tests/tracking/test_rest_tracking.py``.
+# DEFAULT is Python (Flask/FastAPI auth app); only ``MLFLOW_SERVER_TYPE=rust``
+# routes the auth-server launch to the compiled Rust binary.
+_RUN_AGAINST_RUST = os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust"
+
+
+def _auth_db_uri_from_config(config_path: Path) -> str:
+    """Read ``database_uri`` out of an isolated ``basic_auth.ini``.
+
+    The Rust server ignores the ini and reads the auth DB URI from the
+    ``MLFLOW_AUTH_DATABASE_URI`` env var (see
+    ``rust/crates/mlflow-server/src/main.rs::build_auth_store``), so tests must
+    surface the ini's ``database_uri`` there.
+    """
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+    return parser["mlflow"]["database_uri"]
+
+
+def _migrate_and_bootstrap_auth_db(auth_db_uri: str) -> None:
+    """Migrate the auth DB and seed the admin user before launching Rust.
+
+    The Rust server refuses an unmigrated auth DB and never bootstraps the admin
+    account (both are Python-side responsibilities per §5.4). Mirror what
+    ``mlflow.server.auth:create_app`` does on boot: ``SqlAlchemyStore.init_db``
+    runs the auth Alembic chain, then ``create_admin_user`` seeds the admin. We
+    reuse those helpers instead of reimplementing migrations.
+    """
+    from mlflow.server.auth.sqlalchemy_store import SqlAlchemyStore
+
+    store = SqlAlchemyStore()
+    store.init_db(auth_db_uri)
+    if not store.has_user(ADMIN_USERNAME):
+        store.create_user(ADMIN_USERNAME, ADMIN_PASSWORD, is_admin=True)
+    store.engine.dispose()
+
+
+def _migrate_tracking_db(backend_uri: str) -> None:
+    """Migrate the tracking backend store so the Rust server accepts it."""
+    from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+
+    store = SqlAlchemyStore(backend_uri, backend_uri)
+    store.engine.dispose()
+
+
+def resolve_auth_server_launch(
+    backend_uri: str,
+    extra_env: dict[str, str],
+) -> tuple[Literal["flask", "fastapi", "rust"], dict[str, str]]:
+    """Pick the auth-server launch flavor and env for ``_init_server`` (T12.1).
+
+    Returns ``(server_type, extra_env)``. Without the switch this is a no-op that
+    keeps the caller-supplied ``server_type`` decision (returned as ``"flask"``,
+    the auth app's default). With ``MLFLOW_SERVER_TYPE=rust`` it migrates both the
+    tracking and auth SQLite DBs, seeds the admin user, and injects
+    ``MLFLOW_AUTH_DATABASE_URI`` so the Rust ``build_auth_store`` path binds to the
+    isolated auth DB instead of the shipped ``basic_auth.db``.
+    """
+    if not _RUN_AGAINST_RUST:
+        return "flask", extra_env
+
+    config_path = extra_env.get("MLFLOW_AUTH_CONFIG_PATH")
+    if not config_path:
+        raise ValueError("Rust auth launch requires MLFLOW_AUTH_CONFIG_PATH in extra_env")
+    auth_db_uri = _auth_db_uri_from_config(Path(config_path))
+
+    _migrate_tracking_db(backend_uri)
+    _migrate_and_bootstrap_auth_db(auth_db_uri)
+
+    rust_env = {**extra_env, "MLFLOW_AUTH_DATABASE_URI": auth_db_uri}
+    if read_uri := _read_replica_uri(extra_env):
+        rust_env["MLFLOW_AUTH_READ_DATABASE_URI"] = read_uri
+    return "rust", rust_env
+
+
+def _read_replica_uri(extra_env: dict[str, str]) -> str | None:
+    """Extract an optional read-replica URI from the isolated ini, if present."""
+    config_path = extra_env.get("MLFLOW_AUTH_CONFIG_PATH")
+    if not config_path:
+        return None
+    text = Path(config_path).read_text()
+    match = re.search(r"^\s*read_database_uri\s*=\s*(.+)$", text, flags=re.MULTILINE)
+    return match.group(1).strip() if match else None
 
 
 def write_isolated_auth_config(tmp_path: Path) -> Path:
