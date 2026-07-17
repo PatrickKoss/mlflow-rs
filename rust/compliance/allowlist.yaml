@@ -11,12 +11,11 @@
 # that could not be safely fixed inside this task; they are backlog items. Keep
 # them prominently enumerated in the run report.
 
-# (T12.1 parity backlog #1, experiment_create_int_name_error, FIXED in T12.5:
-# the lenient ParseDict-parity parse + schema validation now emits Python's
-# exact "Invalid value 123 for parameter 'name' supplied:  Hint: ..." message.
-# Its allowlist entry was removed, leaving no tolerated diffs.)
-entries: []
-
+# (T12.1 parity backlog #1, experiment_create_int_name_error, was FIXED by the
+# lenient ParseDict-parity parse + schema validation port: the server now emits
+# Python's exact "Invalid value 123 for parameter 'name' supplied:  Hint: ..."
+# message, so its entry is gone.)
+entries:
   # ---- Framework-default error pages on route misses ---------------------
   # Flask serves its default HTML 404/405 page for a path/method that matches
   # no route; axum serves an empty body. Status codes match; the body is
