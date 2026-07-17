@@ -1372,10 +1372,23 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       `MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH` toggle.
       **AC:** GraphQL requests by non-admin users match Python results/errors.
       **VER:** auth GraphQL tests in Phase 12.
-- [ ] **T9.7 Signup UI + CSRF**: `/signup` server-rendered form (port template), CSRF
+- [x] **T9.7 Signup UI + CSRF**: `/signup` server-rendered form (port template), CSRF
       token validation on `create-user-ui`, flash-alert redirect behavior.
       **AC:** browser signup flow works; CSRF-less POST rejected.
       **VER:** HTTP tests + manual browser check.
+      *(Done 2026-07-17: `auth_api/signup.rs` + logo SVG ported verbatim.
+      flask_wtf CSRF reproduced observably (own per-process secret per D12,
+      NOT MLFLOW_FLASK_SERVER_SECRET_KEY): session cookie + timed form token
+      as two HMAC-SHA256 envelopes mirroring itsdangerous; validation order
+      + all 5 error texts byte-matched (missing/session-missing/expired
+      3600s/invalid/do-not-match — the mismatch case reachable cross-wise);
+      form-field → X-CSRFToken → X-CSRF-Token fallback chain. create_user_ui
+      CSRF-gates BEFORE content-type like Python's csrf.protect(). Flash
+      behavior: alert()+redirect HTML (auth/__init__.py:3703), duplicate →
+      /signup, success → home. /signup registered outside static_prefix
+      nesting (Python's one raw add_url_rule exception). Deferred: the
+      is_secure referrer branch (unreachable over plain HTTP). 6 unit + 9
+      HTTP tests; 2 T9.2 tests updated for CSRF.)*
 - [ ] **T9.8 Auth config + caches**: `basic_auth.ini` parsing (all fields incl.
       `default_permission`, `grant_default_workspace_access`, cache TTLs),
       `MLFLOW_AUTH_CONFIG_PATH`, optional credential cache (HMAC-keyed, default off),
@@ -1515,10 +1528,18 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       close when T9.4 merges; (3) HTTP reason-phrase casing "Bad Request" vs
       Python's "BAD REQUEST". Remaining auth fixtures (test_client*.py,
       fastapi_*) still flask-only — extend during T12.3.)*
-- [ ] **T12.2 `MLFLOW_RUST_STORE_TESTING` flag** mirroring the Go flag; every use links a
+- [x] **T12.2 `MLFLOW_RUST_STORE_TESTING` flag** mirroring the Go flag; every use links a
       justification.
       **AC:** flag exists; zero unexplained uses.
       **VER:** grep + review.
+      *(Done 2026-07-17: `_MLFLOW_RUST_STORE_TESTING` declared beside
+      `_MLFLOW_GO_STORE_TESTING` (environment_variables.py:1074 precedent —
+      Go has NO launcher coupling, it's purely an assertion deviation gate,
+      so the Rust flag stays orthogonal to T12.1's MLFLOW_SERVER_TYPE;
+      documented in the docstring). One justified use: reason-phrase casing
+      gate in test_auth.py (backlog #3), verified live both ways. Backlog #1
+      (validation messages) deliberately ungated until T12.3's mass sweep;
+      #2 left to close via T9.4.)*
 - [ ] **T12.3 Client-suite conformance**: `tests/tracking/test_tracking.py`, client
       tests, and `tests/store/model_registry/test_rest_store*.py`-derived HTTP checks
       with `MLFLOW_TRACKING_URI=http://rust`; DB reset between tests.
