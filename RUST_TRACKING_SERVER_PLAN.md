@@ -1246,12 +1246,26 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       timeout but no retries. Deferred (doc-commented): HTTPS delivery fails
       closed pending TLS stack; at-most-once per D11. 21 unit + 11
       integration tests incl. 11-target SSRF matrix.)*
-- [ ] **T8.4 Event triggers** wired into registry mutations (RM created; MV created; MV
+- [x] **T8.4 Event triggers** wired into registry mutations (RM created; MV created; MV
       tag set/deleted; MV alias set/deleted; PROMPT_* mirrors by is_prompt
       classification).
       **AC:** trigger matrix test: each mutation fires exactly the events Python fires
       (entity/action pairs from `webhooks.proto` enums).
       **VER:** differential trigger-capture test with a recording receiver.
+      *(Done 2026-07-17: all 12 seam sites wired post-commit in `registry.rs`
+      + payload builders in `registry/webhook_events.rs`. Matrix matched to
+      handlers.py:2636-3341: prompt events fire INSTEAD OF model events;
+      RM tag set/delete fires nothing for non-prompts (Python's
+      deliver_webhook is inside `if _is_prompt` with no else). Classification
+      parity: create paths use presence-only request-tag check
+      (`_is_prompt_request`), tag/alias paths re-query the stored tag
+      (`_is_prompt`, value.lower()=='true'). Payloads byte-matched to
+      webhooks/types.py TypedDict order incl. proto2 `""` description on RM
+      create vs `or None` on MV create; prompt_version pops
+      mlflow.prompt.text as `template` and omits source/run_id. fire_event
+      no-ops without a dispatcher; lookup failure degrades to not-a-prompt
+      (best-effort, documented). 9 unit + 4 HTTP trigger-matrix tests with a
+      recording receiver.)*
 
 ### Phase 9 — Auth & RBAC
 
