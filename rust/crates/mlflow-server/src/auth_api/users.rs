@@ -73,14 +73,21 @@ pub async fn create_user(
 
 /// `create_user_ui` (`auth/__init__.py:3798`): `POST /mlflow/users/create-ui`.
 ///
-/// The server-rendered signup form path. Full CSRF + HTML `alert(...)` rendering
-/// and the `MLFLOW_FLASK_SERVER_SECRET_KEY` session are the signup-UI task's
-/// concern (§3.16 "Signup UI"); v1 mirrors only the content-type contract and
-/// the empty-field / duplicate-user guards so the route exists and rejects the
-/// obvious bad inputs. A successful create returns 200 with an empty body.
+/// The server-rendered signup form path. `csrf.protect()` runs **first**,
+/// before the content-type check — a request with no valid CSRF pair is
+/// rejected regardless of its content type or fields (T9.7 closes this seam;
+/// T9.2 left it open, see the module-level history in the doc above). The
+/// submitted token is looked up the way Python's `_get_csrf_token` does: the
+/// `csrf_token` form field first, falling back to the `X-CSRFToken` /
+/// `X-CSRF-Token` headers (relevant for non-form content types, whose bodies
+/// this handler never parses as a form — see [`signup::csrf_token_from_request`]).
+/// On a duplicate username Python flashes a message and redirects back to
+/// `/signup`; on success it flashes and redirects to `/` (`HOME`) — both via
+/// the `alert(href)` HTML/script response ([`signup::alert_html`]).
 ///
-/// AUTH SEAM (T9.4): authorization is `validate_can_create_user` (via the CSRF
-/// wrapper); the middleware gates it.
+/// AUTH SEAM (T9.4): authorization is `validate_can_create_user`; the
+/// middleware gates it. CSRF validation here is independent of that gate —
+/// Python checks CSRF for every caller regardless of authorization.
 pub async fn create_user_ui(
     State(state): State<AppState>,
     parts: Parts,
@@ -93,6 +100,31 @@ pub async fn create_user_ui(
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .map(|v| v.split(';').next().unwrap_or("").trim());
+
+    // `csrf.protect()`: Flask only populates `request.form` for
+    // form-urlencoded/multipart bodies, so a non-form content type reaches
+    // this check with no form field to find — same as an actually-missing
+    // token. The CSRF gate therefore runs unconditionally, before the
+    // content-type branch below, exactly mirroring Python's check order.
+    let form = if content_type == Some("application/x-www-form-urlencoded") {
+        parse_form(&body)
+    } else {
+        Vec::new()
+    };
+    // `AppState::csrf_secret()` is always `Some` here: this route is only
+    // mounted when the basic-auth app (and therefore the secret) is enabled.
+    let csrf_secret = state
+        .csrf_secret()
+        .ok_or_else(|| MlflowError::internal_error("CSRF secret is not configured"))?;
+    let form_csrf_token = form_get(&form, super::signup::CSRF_FIELD_NAME);
+    let csrf_token =
+        super::signup::csrf_token_from_request(&parts.headers, form_csrf_token.as_deref());
+    if let Err(csrf_err) =
+        super::signup::validate_csrf_request(csrf_secret, &parts.headers, csrf_token.as_deref())
+    {
+        return Ok(csrf_err.into_response());
+    }
+
     if content_type != Some("application/x-www-form-urlencoded") {
         return Ok(text_response(
             StatusCode::BAD_REQUEST,
@@ -100,7 +132,6 @@ pub async fn create_user_ui(
         ));
     }
 
-    let form = parse_form(&body);
     let username = form_get(&form, "username").unwrap_or_default();
     let password = form_get(&form, "password").unwrap_or_default();
     if username.is_empty() || password.is_empty() {
@@ -110,10 +141,25 @@ pub async fn create_user_ui(
         ));
     }
 
-    // Python flashes + re-renders the signup page on a duplicate; v1 mirrors the
-    // duplicate-user store error instead of the HTML alert (see fn doc).
+    // `if store.has_user(username): flash(...); return alert(href=SIGNUP)`.
+    if store.has_user(&username).await? {
+        return Ok(text_response(
+            StatusCode::OK,
+            &super::signup::alert_html(
+                &format!("Username has already been taken: {username}"),
+                super::signup::SIGNUP_PATH,
+            ),
+        ));
+    }
+
     store.create_user(&username, &password, false).await?;
-    Ok(text_response(StatusCode::OK, ""))
+    Ok(text_response(
+        StatusCode::OK,
+        &super::signup::alert_html(
+            &format!("Successfully signed up user: {username}"),
+            super::signup::HOME_PATH,
+        ),
+    ))
 }
 
 /// `get_user` (`auth/__init__.py:3836`): `GET /mlflow/users/get`.

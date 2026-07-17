@@ -199,23 +199,42 @@ async fn send(
     HttpResponse { status, body, json }
 }
 
-/// Send a raw (non-JSON) body with an explicit content type.
-async fn send_raw(
+/// Options for [`send_raw_with_cookie`]: the pieces beyond method/path/body
+/// that vary per call (auth, content type, and the T9.7 CSRF carriers).
+/// Bundled into a struct rather than positional params since the CSRF cases
+/// need most of these independently toggled.
+#[derive(Default)]
+struct RawRequestOpts<'a> {
+    auth: Option<(&'a str, &'a str)>,
+    content_type: Option<&'a str>,
+    cookie: Option<&'a str>,
+    csrf_header: Option<&'a str>,
+}
+
+/// Send a raw (non-JSON) body with the given options, optionally carrying a
+/// `Cookie` and/or `X-CSRFToken` header (the `create-ui` CSRF flow needs the
+/// cookie always, and the header when the body isn't form-urlencoded).
+async fn send_raw_with_cookie(
     base: &str,
     method: Method,
     path: &str,
-    auth: Option<(&str, &str)>,
-    content_type: Option<&str>,
+    opts: RawRequestOpts<'_>,
     body: &str,
 ) -> HttpResponse {
     let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
     let uri = format!("{base}{path}");
     let mut builder = Request::builder().method(method).uri(uri);
-    if let Some((u, p)) = auth {
+    if let Some((u, p)) = opts.auth {
         builder = builder.header("Authorization", basic_header(u, p));
     }
-    if let Some(ct) = content_type {
+    if let Some(ct) = opts.content_type {
         builder = builder.header("Content-Type", ct);
+    }
+    if let Some(c) = opts.cookie {
+        builder = builder.header("Cookie", c);
+    }
+    if let Some(t) = opts.csrf_header {
+        builder = builder.header("X-CSRFToken", t);
     }
     let req = builder
         .body(Full::new(Bytes::from(body.to_string())))
@@ -226,6 +245,59 @@ async fn send_raw(
     let body = String::from_utf8_lossy(&bytes).into_owned();
     let json = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     HttpResponse { status, body, json }
+}
+
+/// Send a raw (non-JSON) body with an explicit content type.
+async fn send_raw(
+    base: &str,
+    method: Method,
+    path: &str,
+    auth: Option<(&str, &str)>,
+    content_type: Option<&str>,
+    body: &str,
+) -> HttpResponse {
+    send_raw_with_cookie(
+        base,
+        method,
+        path,
+        RawRequestOpts {
+            auth,
+            content_type,
+            ..Default::default()
+        },
+        body,
+    )
+    .await
+}
+
+/// `GET /signup`, returning the `Set-Cookie` value and the `csrf_token` form
+/// field embedded in the rendered HTML — the pair a browser-driven signup
+/// POST needs to pass CSRF (T9.7).
+async fn fetch_csrf_pair(base: &str) -> (String, String) {
+    let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("{base}/signup"))
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+    let resp = client.request(req).await.expect("request");
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("signup sets a cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&bytes).into_owned();
+    let marker = "name=\"csrf_token\" value=\"";
+    let start = html.find(marker).expect("csrf field present") + marker.len();
+    let end = html[start..].find('"').expect("closing quote") + start;
+    (cookie, html[start..end].to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -800,6 +872,7 @@ async fn routes_absent_when_auth_disabled() {
         (Method::PATCH, "/api/2.0/mlflow/users/update-admin"),
         (Method::DELETE, "/api/2.0/mlflow/users/delete"),
         (Method::POST, "/api/2.0/mlflow/users/create-ui"),
+        (Method::GET, "/signup"),
     ] {
         let resp = send(&srv.base, method.clone(), path, Some(ALICE), None).await;
         assert_eq!(
@@ -812,13 +885,24 @@ async fn routes_absent_when_auth_disabled() {
 
 #[tokio::test]
 async fn create_user_ui_rejects_wrong_content_type() {
+    // T9.7: CSRF is checked *before* content type, so a JSON-content-typed
+    // POST needs a valid CSRF pair to actually reach the content-type
+    // branch this test exercises (see `auth_signup_http.rs` for the
+    // CSRF-rejection cases themselves).
     let srv = TestServer::start("ui_ct", true).await;
-    let resp = send_raw(
+    let (cookie, csrf_token) = fetch_csrf_pair(&srv.base).await;
+    // A JSON body has no `csrf_token` form field, so the token travels via
+    // the `X-CSRFToken` header instead — Python's `_get_csrf_token` fallback.
+    let resp = send_raw_with_cookie(
         &srv.base,
         Method::POST,
         "/api/2.0/mlflow/users/create-ui",
-        Some(ALICE),
-        Some("application/json"),
+        RawRequestOpts {
+            auth: Some(ALICE),
+            content_type: Some("application/json"),
+            cookie: Some(&cookie),
+            csrf_header: Some(&csrf_token),
+        },
         "{}",
     )
     .await;
@@ -832,13 +916,19 @@ async fn create_user_ui_rejects_wrong_content_type() {
 #[tokio::test]
 async fn create_user_ui_form_creates_user() {
     let srv = TestServer::start("ui_ok", true).await;
-    let resp = send_raw(
+    let (cookie, csrf_token) = fetch_csrf_pair(&srv.base).await;
+    let body = format!("username=dave&password=dave-password-12&csrf_token={csrf_token}");
+    let resp = send_raw_with_cookie(
         &srv.base,
         Method::POST,
         "/api/2.0/mlflow/users/create-ui",
-        Some(ALICE),
-        Some("application/x-www-form-urlencoded"),
-        "username=dave&password=dave-password-12",
+        RawRequestOpts {
+            auth: Some(ALICE),
+            content_type: Some("application/x-www-form-urlencoded"),
+            cookie: Some(&cookie),
+            ..Default::default()
+        },
+        &body,
     )
     .await;
     assert_eq!(resp.status, StatusCode::OK, "{}", resp.body);

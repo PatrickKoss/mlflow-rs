@@ -30,6 +30,8 @@ use mlflow_registry::RegistryStore;
 use mlflow_store::TrackingStore;
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
+use crate::auth_api::signup::CsrfSecret;
+
 /// A resolved artifact repository plus the repo-relative path to operate on —
 /// the output of resolving a run's / logged model's artifact URI against the
 /// server's proxy configuration. Mirrors the `(artifact_repo, artifact_path)`
@@ -69,6 +71,11 @@ struct AppStateInner {
     /// mounted at all — mirroring Python, where those endpoints exist only in
     /// the `mlflow.server.auth` app, so a plain tracking server 404s on them.
     auth_store: Option<AuthStore>,
+    /// The `/signup` CSRF signing secret (T9.7). `Some` exactly when
+    /// `auth_store` is `Some` — generated once, alongside the auth store, by
+    /// [`AppState::with_auth_store`] (plan D12: this is the Rust server's own
+    /// secret, independent of Python's `MLFLOW_FLASK_SERVER_SECRET_KEY`).
+    csrf_secret: Option<CsrfSecret>,
     /// `_is_serving_proxied_artifacts()` — whether `--serve-artifacts` is on.
     serve_artifacts: bool,
     /// The lazily-shared `--artifacts-destination` proxy repo, built once at
@@ -107,6 +114,7 @@ impl AppState {
                 webhook_store: Some(webhook_store),
                 webhook_dispatcher: Some(webhook_dispatcher),
                 auth_store: inner.auth_store.clone(),
+                csrf_secret: inner.csrf_secret.clone(),
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
@@ -115,11 +123,13 @@ impl AppState {
     }
 
     /// Attach the auth/RBAC [`AuthStore`] (T9.1 DB layer) to this state, enabling
-    /// the auth API surface (T9.2 users). Additive builder mirroring
+    /// the auth API surface (T9.2 users) plus a freshly generated `/signup` CSRF
+    /// secret (T9.7). Additive builder mirroring
     /// [`AppState::with_webhook_store`]: returns a new `AppState` sharing every
     /// existing field plus the auth store. `main` calls this when the basic-auth
-    /// app is enabled; when it isn't, `auth_store` stays `None` and the routes
-    /// are never mounted (Python: the endpoints only exist in the auth app).
+    /// app is enabled; when it isn't, `auth_store` (and `csrf_secret`) stay
+    /// `None` and the routes are never mounted (Python: the endpoints only exist
+    /// in the auth app).
     pub fn with_auth_store(self, auth_store: AuthStore) -> Self {
         let inner = &self.inner;
         Self {
@@ -129,6 +139,7 @@ impl AppState {
                 webhook_store: inner.webhook_store.clone(),
                 webhook_dispatcher: inner.webhook_dispatcher.clone(),
                 auth_store: Some(auth_store),
+                csrf_secret: Some(CsrfSecret::generate()),
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
@@ -191,6 +202,7 @@ impl AppState {
                 webhook_store,
                 webhook_dispatcher: None,
                 auth_store: None,
+                csrf_secret: None,
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
@@ -203,6 +215,12 @@ impl AppState {
     /// `None`, the routes are never registered (see [`AppState::auth_enabled`]).
     pub fn auth_store(&self) -> Option<&AuthStore> {
         self.inner.auth_store.as_ref()
+    }
+
+    /// The `/signup` CSRF secret (T9.7), or `None` when the basic-auth app is
+    /// not enabled. `Some` exactly when [`AppState::auth_store`] is `Some`.
+    pub fn csrf_secret(&self) -> Option<&CsrfSecret> {
+        self.inner.csrf_secret.as_ref()
     }
 
     /// Whether the auth/RBAC API surface is enabled for this server instance

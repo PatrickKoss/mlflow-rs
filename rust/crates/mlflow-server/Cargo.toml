@@ -47,6 +47,10 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
+# `/signup` CSRF signing (T9.7): HMAC-SHA256 tokens, own secret per plan D12.
+hmac = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
 
 # GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the
 # no-batching/query-safety guard and hand-written resolution against the fixed,

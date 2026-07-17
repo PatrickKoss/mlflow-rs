@@ -27,6 +27,7 @@ use base64::Engine;
 use mlflow_auth::AuthStore;
 
 pub mod roles;
+pub mod signup;
 pub mod users;
 
 pub use roles::register_role_routes;
