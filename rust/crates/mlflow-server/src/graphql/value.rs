@@ -56,6 +56,18 @@ impl GqlVal {
         }
     }
 
+    /// Mutable field lookup on an object (used by the T9.6 auth gate to
+    /// post-filter the `modelVersions` list in place). `None` for non-objects
+    /// or absent fields.
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut GqlVal> {
+        match self {
+            GqlVal::Object { fields, .. } => {
+                fields.iter_mut().find(|(k, _)| *k == name).map(|(_, v)| v)
+            }
+            _ => None,
+        }
+    }
+
     /// The internal type tag for an object (for `__typename`), or `None`.
     pub fn tag(&self) -> Option<&'static str> {
         match self {

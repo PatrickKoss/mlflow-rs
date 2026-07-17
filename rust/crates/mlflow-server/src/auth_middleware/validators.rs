@@ -245,7 +245,10 @@ impl Validator {
 /// `default_permission` — T9.8 SEAM: reads `MLFLOW_AUTH_DEFAULT_PERMISSION`
 /// (default `"READ"`, the packaged `basic_auth.ini` value). The full ini-file
 /// config layer (`read_auth_config`) lands in T9.8.
-fn default_permission() -> &'static Permission {
+///
+/// Exposed `pub(crate)` so the GraphQL auth gate (T9.6) resolves the same
+/// default-permission floor without re-deriving it.
+pub(crate) fn default_permission() -> &'static Permission {
     // T9.8 SEAM: replace this env fallback with `AuthConfig.default_permission`.
     let name = std::env::var("MLFLOW_AUTH_DEFAULT_PERMISSION").unwrap_or_else(|_| "READ".into());
     // An invalid value falls back to READ rather than panicking (defensive; the
@@ -260,7 +263,9 @@ fn default_permission() -> &'static Permission {
 /// `_get_role_permission_or_default` (`__init__.py:556`): fold the role-derived
 /// permission against `default_permission`. `None` → default; `NO_PERMISSIONS`
 /// stays a deny; otherwise `max(role, default)`.
-fn fold_default(role_perm: Option<&'static Permission>) -> &'static Permission {
+///
+/// `pub(crate)` for reuse by the GraphQL auth gate (T9.6).
+pub(crate) fn fold_default(role_perm: Option<&'static Permission>) -> &'static Permission {
     let default = default_permission();
     match role_perm {
         None => default,
@@ -270,17 +275,43 @@ fn fold_default(role_perm: Option<&'static Permission>) -> &'static Permission {
 }
 
 /// `_get_experiment_permission(experiment_id, username)` (`__init__.py:750`),
-/// on the workspaces-disabled path: the role grant if any, else default.
+/// on the workspaces-disabled path: the role grant if any, else default. The
+/// store-level primitive, decoupled from [`RequestCtx`] so both the
+/// before-request validators and the GraphQL auth gate (T9.6) call it.
+pub(crate) async fn resolve_experiment_permission(
+    auth_store: &AuthStore,
+    username: &str,
+    workspace: &str,
+    experiment_id: &str,
+) -> Result<&'static Permission, MlflowError> {
+    let user = auth_store.get_user(username).await?;
+    let role_perm = auth_store
+        .get_role_permission_for_resource(user.id, "experiment", experiment_id, workspace)
+        .await?;
+    Ok(fold_default(role_perm))
+}
+
+/// `_graphql_get_permission_for_model` (`__init__.py:4114`) on the
+/// workspaces-disabled path: the `registered_model` role grant if any, else
+/// default. Shared with [`registered_model_perm`].
+pub(crate) async fn resolve_registered_model_permission(
+    auth_store: &AuthStore,
+    username: &str,
+    workspace: &str,
+    model_name: &str,
+) -> Result<&'static Permission, MlflowError> {
+    let user = auth_store.get_user(username).await?;
+    let role_perm = auth_store
+        .get_role_permission_for_resource(user.id, "registered_model", model_name, workspace)
+        .await?;
+    Ok(fold_default(role_perm))
+}
+
 async fn experiment_permission(
     ctx: &RequestCtx<'_>,
     experiment_id: &str,
 ) -> Result<&'static Permission, MlflowError> {
-    let user = ctx.auth_store.get_user(ctx.username).await?;
-    let role_perm = ctx
-        .auth_store
-        .get_role_permission_for_resource(user.id, "experiment", experiment_id, ctx.workspace)
-        .await?;
-    Ok(fold_default(role_perm))
+    resolve_experiment_permission(ctx.auth_store, ctx.username, ctx.workspace, experiment_id).await
 }
 
 async fn experiment_perm_from_id_param(
@@ -333,14 +364,9 @@ async fn experiment_perm_from_model(
 /// model and is the conservative fallback for the model-registry routes.
 async fn registered_model_perm(ctx: &RequestCtx<'_>) -> Result<&'static Permission, MlflowError> {
     let name = require_param(ctx, "name")?;
-    let user = ctx.auth_store.get_user(ctx.username).await?;
     // Namespaced under `registered_model`; a real prompt/model classification
     // needs the registry store (later phase). Resolve the grant directly.
-    let role_perm = ctx
-        .auth_store
-        .get_role_permission_for_resource(user.id, "registered_model", &name, ctx.workspace)
-        .await?;
-    Ok(fold_default(role_perm))
+    resolve_registered_model_permission(ctx.auth_store, ctx.username, ctx.workspace, &name).await
 }
 
 /// `validate_can_create_model_version` (`__init__.py:1188`): require UPDATE on

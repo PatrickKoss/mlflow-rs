@@ -43,9 +43,16 @@ pub struct GraphQlRequest {
 /// JSON object (graphene's `MlflowXxxInput` → the resolver's `input`).
 pub type ResolverInput = serde_json::Map<String, serde_json::Value>;
 
-/// The outcome of resolving a single root field: either the response object or a
-/// GraphQL error message (the store/validation error surfaced by the resolver).
-pub type ResolveResult = Result<GqlVal, String>;
+/// The outcome of resolving a single root field:
+///
+/// * `Ok(Some(value))` — resolved successfully; the projected object.
+/// * `Ok(None)` — the field was **authorization-denied** (T9.6): graphene's
+///   auth middleware returns `None` for a denied protected field, so the field
+///   serializes as `null` in `data` with **no** entry in `errors`. Reproduces
+///   that exactly.
+/// * `Err(msg)` — the resolver raised (store/validation error): the field is
+///   `null` in `data` and `msg` joins the top-level `errors`.
+pub type ResolveResult = Result<Option<GqlVal>, String>;
 
 /// A resolved-and-projected root field plus its output key (alias or field
 /// name), ready to be assembled into the `data` object.
@@ -117,12 +124,20 @@ where
         };
 
         match resolve(field.name.clone(), input).await {
-            Ok(resolved) => {
+            Ok(Some(resolved)) => {
                 let mut buf = String::new();
                 project_value(&resolved, &field.selection_set, &mut buf);
                 results.push(RootFieldResult {
                     key,
                     value: Ok(buf),
+                });
+            }
+            // Authorization-denied: `null` in `data`, no `errors` entry (graphene
+            // returns `None` from the auth middleware for a denied protected field).
+            Ok(None) => {
+                results.push(RootFieldResult {
+                    key,
+                    value: Ok("null".to_string()),
                 });
             }
             Err(msg) => {

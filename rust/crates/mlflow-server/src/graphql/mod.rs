@@ -37,6 +37,7 @@
 //! `.get`) → 500; we return a clean GraphQL error body instead, a deliberate,
 //! documented hardening that is still a rejection.
 
+pub mod auth;
 pub mod executor;
 pub mod no_batching;
 pub mod resolvers;
@@ -50,8 +51,10 @@ use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use graphql_parser::query::parse_query;
 
+use crate::auth_middleware::AuthContext;
 use crate::state::AppState;
 use crate::workspace::Workspace;
+use auth::{FieldAuth, GraphQlAuthGate};
 use executor::{error_only_body, execute, parse_variables, GraphQlRequest};
 use value::GqlVal;
 
@@ -92,25 +95,44 @@ pub async fn graphql(
         return json_ok(error_only_body(&msg));
     }
 
+    // Per-field authorization (T9.6): the T9.4 layer authenticated the request
+    // and stamped the identity onto the extensions. The gate is `None` when
+    // per-field auth is inactive (toggle off / auth app disabled), so every
+    // field resolves unguarded — matching Python's empty middleware list.
+    let auth_context = parts.extensions.get::<AuthContext>();
+    let gate = GraphQlAuthGate::for_request(&state, &workspace, auth_context);
+
     // Execute: resolve each selected root field against the stores.
     let body = execute(&doc, &request, |field_name, input| {
         let state = state.clone();
         let workspace = workspace.clone();
-        async move { resolve_root(&state, &workspace, &field_name, input).await }
+        let gate = &gate;
+        async move { resolve_root(&state, &workspace, gate, &field_name, input).await }
     })
     .await;
 
     json_ok(body)
 }
 
-/// Dispatch a root field to its resolver, mapping any [`MlflowError`] into the
-/// bare message string graphene would surface (`str(exception)`).
+/// Dispatch a root field to its resolver, running the T9.6 per-field
+/// authorization gate around it: pre-resolution READ check (denied →
+/// `Ok(None)`, i.e. `null` with no error) and post-resolution filtering
+/// (`searchModelVersions`). A resolver [`MlflowError`] maps to the bare message
+/// string graphene would surface (`str(exception)`).
 async fn resolve_root(
     state: &AppState,
     workspace: &Workspace,
+    gate: &Option<GraphQlAuthGate<'_>>,
     field_name: &str,
-    input: serde_json::Map<String, serde_json::Value>,
-) -> Result<GqlVal, String> {
+    mut input: serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<GqlVal>, String> {
+    // Pre-resolution authorization (may narrow `experimentIds` in `input`).
+    if let Some(gate) = gate {
+        if let FieldAuth::Deny = gate.authorize_field(field_name, &mut input).await {
+            return Ok(None);
+        }
+    }
+
     let result = match field_name {
         "mlflowGetExperiment" => resolvers::get_experiment(state, workspace, &input).await,
         "mlflowGetRun" => resolvers::get_run(state, workspace, &input).await,
@@ -123,13 +145,19 @@ async fn resolve_root(
         }
         "mlflowSearchRuns" => resolvers::search_runs(state, workspace, &input).await,
         "mlflowSearchDatasets" => resolvers::search_datasets(state, workspace, &input).await,
-        "test" => return Ok(resolvers::test_echo("Test", &input)),
-        "testMutation" => return Ok(resolvers::test_echo("TestMutation", &input)),
+        "test" => return Ok(Some(resolvers::test_echo("Test", &input))),
+        "testMutation" => return Ok(Some(resolvers::test_echo("TestMutation", &input))),
         // An unknown root field would be a validation error in graphene
         // ("Cannot query field ..."). Real UI/test queries never hit this.
         other => return Err(format!("Cannot query field \"{other}\" on type \"Query\".")),
     };
-    result.map_err(|e| e.message)
+    let mut value = result.map_err(|e| e.message)?;
+
+    // Post-resolution filtering (`searchModelVersions` drops unreadable rows).
+    if let Some(gate) = gate {
+        gate.post_resolve(field_name, &mut value).await;
+    }
+    Ok(Some(value))
 }
 
 /// Extract `{query, variables, operationName}` from the JSON body. Returns
