@@ -52,4 +52,9 @@ pub use store::{
     SEARCH_MAX_RESULTS_THRESHOLD, SEARCH_TRACES_DEFAULT_MAX_RESULTS, SPANS_LOCATION_ARCHIVE_REPO,
     SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
 };
+pub use store::{
+    ResolvedTraceArchivalConfig, TraceArchivalConfig, Workspace, WorkspaceDeletionMode,
+    WorkspaceNameValidator, WorkspaceStore, DEFAULT_WORKSPACE_NAME as WORKSPACE_DEFAULT_NAME,
+    WORKSPACES,
+};
 pub use uri::{ParsedUri, UriError};

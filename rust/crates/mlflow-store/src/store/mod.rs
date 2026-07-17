@@ -48,6 +48,7 @@ mod traces_analytics;
 mod traces_search;
 mod uri_util;
 mod validation;
+mod workspaces;
 
 pub use assessments::{AssessmentUpdate, FeedbackUpdate, NewAssessment};
 pub use datasets::{DatasetInputSpec, MAX_DATASET_SUMMARIES_RESULTS};
@@ -76,6 +77,10 @@ pub use traces_analytics::{
     MAX_RESULTS_QUERY_TRACE_METRICS,
 };
 pub use traces_search::{TracesPage, SEARCH_TRACES_DEFAULT_MAX_RESULTS};
+pub use workspaces::{
+    ResolvedTraceArchivalConfig, TraceArchivalConfig, Workspace, WorkspaceDeletionMode,
+    WorkspaceNameValidator, WorkspaceStore, DEFAULT_WORKSPACE_NAME, WORKSPACES,
+};
 
 use crate::db::Db;
 
