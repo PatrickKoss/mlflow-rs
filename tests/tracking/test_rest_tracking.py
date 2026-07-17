@@ -121,9 +121,22 @@ def store_type(request):
     return request.param
 
 
+# T12.1: opt-in switch that runs the ``mlflow_client``-backed suite against the
+# compiled Rust server instead of the in-process Python app. DEFAULT is Python;
+# CI for the Python project is unaffected unless ``MLFLOW_SERVER_TYPE=rust`` is set.
+_SERVER_TYPE = os.environ.get("MLFLOW_SERVER_TYPE", "python").lower()
+_RUN_AGAINST_RUST = _SERVER_TYPE == "rust"
+
+
 @pytest.fixture
 def mlflow_client(store_type: str, tmp_path: Path, db_uri: str, monkeypatch):
-    """Provides an MLflow Tracking API client pointed at the local tracking server."""
+    """Provides an MLflow Tracking API client pointed at the local tracking server.
+
+    By default this serves the Python app in-process via ``ServerThread``. When
+    ``MLFLOW_SERVER_TYPE=rust`` is set (T12.1), it instead launches the compiled
+    Rust ``mlflow-server`` binary against the same migrated backend store, so the
+    existing suite doubles as a Rust parity harness.
+    """
     # Set passphrase for secrets management (required for encryption)
     monkeypatch.setenv(
         "MLFLOW_CRYPTO_KEK_PASSPHRASE", "test-passphrase-at-least-32-characters-long"
@@ -135,6 +148,17 @@ def mlflow_client(store_type: str, tmp_path: Path, db_uri: str, monkeypatch):
         backend_uri = tmp_path.joinpath("file").as_uri()
     elif store_type == "sqlalchemy":
         backend_uri = db_uri
+
+    if _RUN_AGAINST_RUST:
+        if store_type != "sqlalchemy":
+            pytest.skip("Rust server only supports SQLAlchemy backend stores")
+        with _init_server(
+            backend_uri=backend_uri,
+            root_artifact_uri=tmp_path.as_uri(),
+            server_type="rust",
+        ) as url:
+            yield MlflowClient(url)
+        return
 
     # Force-reset backend stores before each test.
     handlers._tracking_store = None

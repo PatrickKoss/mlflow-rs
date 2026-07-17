@@ -1,9 +1,12 @@
 import contextlib
 import logging
 import os
+import shutil
 import socket
+import subprocess
 import sys
 import time
+from pathlib import Path
 from subprocess import Popen
 from threading import Thread
 from typing import Any, Generator, Literal
@@ -18,6 +21,59 @@ from mlflow.server import ARTIFACT_ROOT_ENV_VAR, BACKEND_STORE_URI_ENV_VAR
 from tests.helper_functions import LOCALHOST, get_safe_port
 
 _logger = logging.getLogger(__name__)
+
+# T12.1: env var overriding the compiled Rust server binary path used by the
+# ``server_type="rust"`` launch path. When unset we fall back to the workspace
+# debug build (``rust/target/debug/mlflow-server``), building it on demand.
+MLFLOW_RUST_SERVER_BIN_ENV_VAR = "MLFLOW_RUST_SERVER_BIN"
+_RUST_DIR = Path(__file__).resolve().parents[2] / "rust"
+_RUST_SERVER_BIN = _RUST_DIR / "target" / "debug" / "mlflow-server"
+
+
+def _resolve_rust_server_bin() -> Path:
+    """Locate the compiled Rust ``mlflow-server`` binary for the Rust launch path.
+
+    Honors the ``MLFLOW_RUST_SERVER_BIN`` override; otherwise falls back to the
+    workspace debug build and runs ``cargo build`` when it is missing. Mirrors
+    ``rust/tools/make_test_db.py``'s reliance on a prebuilt Cargo target.
+    """
+    if override := os.environ.get(MLFLOW_RUST_SERVER_BIN_ENV_VAR):
+        bin_path = Path(override)
+        if not bin_path.exists():
+            raise FileNotFoundError(
+                f"{MLFLOW_RUST_SERVER_BIN_ENV_VAR}={override!r} does not point at a file"
+            )
+        return bin_path
+    if not _RUST_SERVER_BIN.exists():
+        if shutil.which("cargo") is None:
+            raise FileNotFoundError(
+                f"Rust server binary not found at {_RUST_SERVER_BIN} and `cargo` is not on PATH; "
+                f"build it or set {MLFLOW_RUST_SERVER_BIN_ENV_VAR}"
+            )
+        _logger.info("Rust server binary missing; building with `cargo build`")
+        subprocess.check_call(["cargo", "build", "--bin", "mlflow-server"], cwd=_RUST_DIR)
+    return _RUST_SERVER_BIN
+
+
+def _rust_server_cmd(bin_path: Path, port: int, backend_uri: str, root_artifact_uri: str) -> list:
+    """Map the Python launch args onto the Rust binary's CLI (rust/.../config.rs Cli).
+
+    Unmappable Python server flags fail loudly rather than silently diverging.
+    """
+    return [
+        bin_path,
+        "--host",
+        LOCALHOST,
+        "--port",
+        str(port),
+        "--backend-store-uri",
+        backend_uri,
+        "--default-artifact-root",
+        root_artifact_uri,
+        "--serve-artifacts",
+        "--artifacts-destination",
+        root_artifact_uri,
+    ]
 
 
 def _await_server_up_or_die(port: int, timeout: int = 30) -> None:
@@ -42,7 +98,7 @@ def _init_server(
     root_artifact_uri: str,
     extra_env: dict[str, Any] | None = None,
     app: str | None = None,
-    server_type: Literal["flask", "fastapi"] = "fastapi",
+    server_type: Literal["flask", "fastapi", "rust"] = "fastapi",
 ) -> Generator[str, None, None]:
     """
     Launch a new REST server using the tracking store specified by backend_uri and root artifact
@@ -53,7 +109,10 @@ def _init_server(
         root_artifact_uri: Root artifact URI for the server
         extra_env: Additional environment variables
         app: Application module path (defaults based on server_type if None)
-        server_type: Server type to use - "fastapi" (default) or "flask"
+        server_type: Server type to use - "fastapi" (default), "flask", or "rust".
+            "rust" launches the compiled Rust ``mlflow-server`` binary (T12.1); the
+            caller must have already migrated ``backend_uri`` (the Rust server refuses
+            an unmigrated DB) and, for auth, the ``MLFLOW_AUTH_DATABASE_URI`` DB.
 
     Yields:
         The string URL of the server.
@@ -61,7 +120,10 @@ def _init_server(
     mlflow.set_tracking_uri(None)
     server_port = get_safe_port()
 
-    if server_type == "fastapi":
+    if server_type == "rust":
+        bin_path = _resolve_rust_server_bin()
+        cmd = _rust_server_cmd(bin_path, server_port, backend_uri, root_artifact_uri)
+    elif server_type == "fastapi":
         # Use uvicorn for FastAPI
         cmd = [
             sys.executable,
