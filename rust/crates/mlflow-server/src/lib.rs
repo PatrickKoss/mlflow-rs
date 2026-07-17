@@ -128,15 +128,23 @@ pub fn build_app_with_recorder(
     };
 
     match signup_state {
-        Some(state) => {
-            let signup_router = Router::new()
-                .route(
-                    auth_api::signup::SIGNUP_PATH,
-                    get(auth_api::signup::signup_page),
-                )
-                .with_state(state);
-            app.merge(signup_router)
-        }
+        // Registered via `.route()` (not `.merge()` of a fresh router): merging
+        // would replace the app's fallback with the new router's default one,
+        // dropping the T9.4 auth layer that wraps the fallback and provides the
+        // fail-closed 403 on unmatched paths (e.g. unknown `/mlflow/traces/`
+        // subpaths). Because this route is added after that layer, the auth
+        // middleware is re-applied here directly: Python's `_before_request`
+        // covers `/signup` like any other Flask route (`(SIGNUP, "GET"):
+        // validate_can_create_user`, `__init__.py:2649`).
+        Some(state) => app.route(
+            auth_api::signup::SIGNUP_PATH,
+            get(auth_api::signup::signup_page)
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    auth_middleware::authorize,
+                ))
+                .with_state(state),
+        ),
         None => app,
     }
 }

@@ -8,6 +8,13 @@
 //! mismatch) gets its own case asserting the exact 400 status + Python
 //! message text (`flask_wtf.csrf.validate_csrf`). Finally, the auth-disabled
 //! case confirms `/signup` 404s like every other auth-app route.
+//!
+//! Like every Flask route, `/signup` and `create-user-ui` sit behind Python's
+//! `_before_request` (T9.4 middleware here): the caller must authenticate, and
+//! `GET /signup` additionally runs `validate_can_create_user`
+//! (`__init__.py:2649`). The flows below therefore authenticate as the
+//! fixture's admin (`alice_scrypt`), who bypasses the validator; CSRF checks
+//! run inside the handler after that gate, exactly as in Python.
 
 use std::path::{Path, PathBuf};
 
@@ -143,19 +150,33 @@ impl Drop for TestServer {
     }
 }
 
+/// The fixture's admin user (`auth_fixture.json`); admins bypass the
+/// `validate_can_create_user` gate in `_before_request`, like in Python.
+const ADMIN: (&str, &str) = ("alice_scrypt", "alice-password-123");
+
+fn basic_auth(user: &str, password: &str) -> String {
+    let encoded = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        format!("{user}:{password}"),
+    );
+    format!("Basic {encoded}")
+}
+
 struct HttpResponse {
     status: StatusCode,
     body: String,
     set_cookie: Option<String>,
 }
 
-async fn get(base: &str, path: &str) -> HttpResponse {
+async fn get(base: &str, path: &str, creds: Option<(&str, &str)>) -> HttpResponse {
     let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
-    let req = Request::builder()
+    let mut builder = Request::builder()
         .method(Method::GET)
-        .uri(format!("{base}{path}"))
-        .body(Full::new(Bytes::new()))
-        .unwrap();
+        .uri(format!("{base}{path}"));
+    if let Some((user, password)) = creds {
+        builder = builder.header("Authorization", basic_auth(user, password));
+    }
+    let req = builder.body(Full::new(Bytes::new())).unwrap();
     let resp = client.request(req).await.expect("request");
     let status = resp.status();
     let set_cookie = resp
@@ -184,6 +205,7 @@ async fn post_create_ui(
     let mut builder = Request::builder()
         .method(Method::POST)
         .uri(format!("{base}/api/2.0/mlflow/users/create-ui"))
+        .header("Authorization", basic_auth(ADMIN.0, ADMIN.1))
         .header("Content-Type", content_type);
     if let Some(c) = cookie {
         builder = builder.header("Cookie", c);
@@ -210,7 +232,7 @@ async fn post_create_ui(
 /// `GET /signup`, returning the cookie (first `;`-delimited attribute of
 /// `Set-Cookie`) and the embedded `csrf_token` field value.
 async fn fetch_csrf_pair(base: &str) -> (String, String) {
-    let resp = get(base, "/signup").await;
+    let resp = get(base, "/signup", Some(ADMIN)).await;
     assert_eq!(resp.status, StatusCode::OK);
     let cookie = resp
         .set_cookie
@@ -230,9 +252,18 @@ async fn fetch_csrf_pair(base: &str) -> (String, String) {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+async fn signup_page_requires_authentication() {
+    let srv = TestServer::start("unauth", true).await;
+    // Python's `_before_request` covers `/signup` too: no credentials → the
+    // 401 Basic challenge, not the form.
+    let resp = get(&srv.base, "/signup", None).await;
+    assert_eq!(resp.status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn signup_page_renders_form_with_token_and_cookie() {
     let srv = TestServer::start("page", true).await;
-    let resp = get(&srv.base, "/signup").await;
+    let resp = get(&srv.base, "/signup", Some(ADMIN)).await;
     assert_eq!(resp.status, StatusCode::OK);
     assert!(resp.set_cookie.is_some(), "signup must Set-Cookie");
     assert!(resp.body.contains(r#"name="username""#));
@@ -386,6 +417,6 @@ async fn token_cookie_mismatch_is_rejected() {
 #[tokio::test]
 async fn signup_404s_when_auth_disabled() {
     let srv = TestServer::start("disabled", false).await;
-    let resp = get(&srv.base, "/signup").await;
+    let resp = get(&srv.base, "/signup", None).await;
     assert_eq!(resp.status, StatusCode::NOT_FOUND);
 }

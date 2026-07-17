@@ -275,9 +275,13 @@ async fn send_raw(
 /// POST needs to pass CSRF (T9.7).
 async fn fetch_csrf_pair(base: &str) -> (String, String) {
     let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
+    // `/signup` sits behind `_before_request` like every route (T9.4): it
+    // needs an authenticated caller, and the admin bypasses its
+    // `validate_can_create_user` gate.
     let req = Request::builder()
         .method(Method::GET)
         .uri(format!("{base}/signup"))
+        .header("Authorization", basic_header(ALICE.0, ALICE.1))
         .body(Full::new(Bytes::new()))
         .unwrap();
     let resp = client.request(req).await.expect("request");

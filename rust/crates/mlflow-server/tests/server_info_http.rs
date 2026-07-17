@@ -159,14 +159,28 @@ struct HttpResponse {
     json: Value,
 }
 
+/// The auth fixture's admin (`auth_fixture.json`), for the auth-enabled cases:
+/// like every route, `server-info` sits behind Python's `_before_request`
+/// authentication gate when the basic-auth app is on (it has no *authorization*
+/// validator, so any authenticated caller may read it).
+const ADMIN: (&str, &str) = ("alice_scrypt", "alice-password-123");
+
 async fn get(base: &str, path: &str) -> HttpResponse {
+    get_with(base, path, None).await
+}
+
+async fn get_with(base: &str, path: &str, creds: Option<(&str, &str)>) -> HttpResponse {
     let client: Client<_, Full<Bytes>> = Client::builder(TokioExecutor::new()).build_http();
     let uri = format!("{base}{path}");
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(uri)
-        .body(Full::new(Bytes::new()))
-        .unwrap();
+    let mut builder = Request::builder().method(Method::GET).uri(uri);
+    if let Some((user, password)) = creds {
+        let encoded = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            format!("{user}:{password}"),
+        );
+        builder = builder.header("Authorization", format!("Basic {encoded}"));
+    }
+    let req = builder.body(Full::new(Bytes::new())).unwrap();
     let resp = client.request(req).await.expect("request");
     let status = resp.status();
     let content_type = resp
@@ -217,7 +231,7 @@ async fn plain_deployment_both_flags_off() {
 async fn auth_enabled_workspaces_disabled() {
     let srv = TestServer::start("auth_only", true, false).await;
     for path in PATHS {
-        let resp = get(&srv.base, path).await;
+        let resp = get_with(&srv.base, path, Some(ADMIN)).await;
         // `server-info` reports no `auth_enabled` field at all (Python parity):
         // enabling auth must not change the response shape or its other values.
         assert_shape(&resp, false);
@@ -237,19 +251,25 @@ async fn workspaces_enabled_auth_disabled() {
 async fn auth_and_workspaces_both_enabled() {
     let srv = TestServer::start("both", true, true).await;
     for path in PATHS {
-        let resp = get(&srv.base, path).await;
+        let resp = get_with(&srv.base, path, Some(ADMIN)).await;
         assert_shape(&resp, true);
     }
 }
 
 #[tokio::test]
-async fn server_info_reachable_without_authentication() {
-    // Python keeps `server-info` reachable even under the basic-auth app
-    // without credentials (no before-request auth gate on this endpoint,
-    // `mlflow/server/workspace_helpers.py:103-105` carves it out of the
-    // workspace-header gate too). No `Authorization` header is sent here.
+async fn server_info_requires_authentication_under_auth() {
+    // Under the basic-auth app, `server-info` goes through `_before_request`
+    // like every route: no credentials → the 401 Basic challenge. (It has no
+    // authorization validator, so any authenticated user gets the payload —
+    // covered above. The exemption at `auth/__init__.py:3638` is for
+    // *after-request* handlers only; `workspace_helpers.py:103-105` carves it
+    // out of the workspace-header gate, not out of authentication.)
     let srv = TestServer::start("no_creds", true, false).await;
     let resp = get(&srv.base, "/ajax-api/3.0/mlflow/server-info").await;
+    assert_eq!(resp.status, StatusCode::UNAUTHORIZED, "{}", resp.body);
+    // Any authenticated (non-admin would also do) caller succeeds; the admin
+    // fixture user keeps it simple.
+    let resp = get_with(&srv.base, "/ajax-api/3.0/mlflow/server-info", Some(ADMIN)).await;
     assert_shape(&resp, false);
 }
 

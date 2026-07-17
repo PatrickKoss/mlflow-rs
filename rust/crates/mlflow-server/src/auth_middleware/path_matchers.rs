@@ -336,6 +336,16 @@ fn build_dispatch() -> Dispatch {
         validator: Validator::ReadTraceArtifact,
     });
 
+    // `/signup` (T9.7) — Python's `(SIGNUP, "GET"): validate_can_create_user`
+    // (`__init__.py:2649`). Registered at the root (raw `add_url_rule`, outside
+    // the api prefixes and the static-prefix nest), but still gated by
+    // `_before_request` like every Flask route.
+    d.exact.push(Route {
+        matcher: TemplateMatcher::compile("/signup"),
+        method: "GET",
+        validator: Validator::CanCreateUser,
+    });
+
     // OTLP trace ingestion (`/v1/traces`). Python routes this through the
     // FastAPI middleware (`_find_fastapi_validator` prefix `/v1/traces` →
     // `_get_otel_validator`): experiment UPDATE from the `X-Mlflow-Experiment-Id`
