@@ -18,6 +18,7 @@ from mlflow.entities import Dataset, DatasetInput, InputTag, LoggedModelOutput
 from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.environment_variables import (
     _MLFLOW_INTERNAL_GATEWAY_AUTH_TOKEN,
+    _MLFLOW_RUST_STORE_TESTING,
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_FLASK_SERVER_SECRET_KEY,
     MLFLOW_TRACKING_PASSWORD,
@@ -181,7 +182,10 @@ def test_authenticate(client, monkeypatch):
     ],
 )
 def test_validate_username_and_password(client, username, password):
-    with pytest.raises(requests.exceptions.HTTPError, match=r"BAD REQUEST"):
+    # T12.1 parity backlog #3: the Rust server emits the standard HTTP reason phrase
+    # "Bad Request", while Flask/werkzeug (Python default) emits "BAD REQUEST".
+    reason = "Bad Request" if _MLFLOW_RUST_STORE_TESTING.get() else "BAD REQUEST"
+    with pytest.raises(requests.exceptions.HTTPError, match=re.escape(reason)):
         create_user(client.tracking_uri, username=username, password=password)
 
 
