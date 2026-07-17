@@ -1,1 +1,5 @@
 /target
+# T12.4/T12.5 differential replay harness output (rust/compliance/replay.py),
+# regenerated on every local run and by the `compliance` CI job (uploaded as
+# an artifact instead, see .github/workflows/rust.yml).
+/compliance/report/

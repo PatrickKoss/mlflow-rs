@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "rust/**"
+      - "mlflow/**"
       - ".github/workflows/rust.yml"
     branches:
       - master
@@ -15,6 +16,7 @@ on:
       - reopened
     paths:
       - "rust/**"
+      - "mlflow/**"
       - ".github/workflows/rust.yml"
 
 concurrency:
@@ -181,3 +183,103 @@ jobs:
         # own private SQLite fixture) run fine interleaved at --test-threads=1
         # too, just without the parallelism they'd get by default.
         run: cargo test -p mlflow-store -p mlflow-registry -- --test-threads=1
+
+  # T12.5 compliance CI matrix: runs the T12.4 differential replay harness
+  # (rust/compliance/replay.py) — dual-boots the Python and Rust
+  # `mlflow-server`, replays the request corpus against both, and diffs.
+  #
+  # GATING: ADVISORY ONLY (continue-on-error), not a required check. As of
+  # T12.5 the harness reports 67 non-allowlisted diffs and 18 status
+  # mismatches across the 133-case corpus (artifacts/auth sections fail
+  # almost entirely because the harness's Python-side boot never sets
+  # SERVE_ARTIFACTS_ENV_VAR — a harness gap, not solely a Rust regression;
+  # logged_models/traces/runs have genuine unreviewed diffs). Only
+  # `server_info` (3 cases) and `workspaces` (9 cases) are fully clean today.
+  # Forcing this job to be required would either block all Rust PRs on
+  # unrelated/unreviewed diffs or (worse) tempt someone into disabling
+  # sections to fake green. Instead this job always runs, always uploads its
+  # report, and is visible in the PR checks list so regressions are seen
+  # early - but it cannot block merges until T12.4 actually drives the
+  # corpus to zero non-allowlisted diffs.
+  # TODO(T12.5): flip `continue-on-error` to `false` (and add this job to
+  # required-checks branch protection) once T12.4 gets the full corpus to
+  # zero non-allowlisted diffs on sqlite.
+  #
+  # DIALECT COVERAGE: `rust/compliance/replay.py` only seeds/boots SQLite
+  # today (`_seed_tracking_db`, `DualServers.__enter__` both hardcode
+  # `sqlite:///...` URIs; there is no dialect switch like
+  # `MLFLOW_RUST_TEST_DIALECT` in the T2.2 dialect-matrix job). Postgres/MySQL
+  # service containers are still brought up here (mirroring dialect-matrix)
+  # so the job is READY the moment replay.py grows dialect support, but today
+  # they are unused by replay.py itself.
+  # TODO(T12.5): once replay.py supports seeding/booting against
+  # MLFLOW_RUST_TEST_PG_URI / MLFLOW_RUST_TEST_MYSQL_URI, run it once per
+  # dialect here instead of sqlite-only.
+  compliance:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false || github.event.pull_request.user.login == 'Copilot' && github.event.pull_request.user.type == 'Bot')
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mlflow
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U mlflow -d mlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: mlflow
+          MYSQL_USER: mlflow
+          MYSQL_PASSWORD: mlflow
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - "3306:3306"
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u mlflow -pmlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - name: Build mlflow-server
+        run: cargo build -p mlflow-server
+      - uses: ./.github/actions/setup-python
+      - name: Install Python mlflow with auth + db extras
+        working-directory: .
+        # `auth` -> flask-wtf, needed for the `auth` corpus section's
+        # basic-auth server boot. `db` -> psycopg2-binary/PyMySQL/pymssql,
+        # kept available for when replay.py gains dialect support (see
+        # TODO above); unused by the sqlite-only run today.
+        run: uv sync --extra auth --extra db
+      - name: Run differential replay harness (sqlite, advisory)
+        working-directory: .
+        env:
+          MLFLOW_RUST_SERVER_BIN: ${{ github.workspace }}/rust/target/debug/mlflow-server
+        # Not gated on exit code: see the job-level GATING comment above.
+        continue-on-error: true
+        run: uv run --no-sync python rust/compliance/replay.py
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: compliance-report
+          path: rust/compliance/report/
+          if-no-files-found: warn
