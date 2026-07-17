@@ -249,6 +249,7 @@ impl<'a> GraphQlAuthGate<'a> {
             self.auth_store,
             &self.username,
             self.workspace.name(),
+            self.state.workspace_store().is_some(),
             experiment_id,
         )
         .await?
@@ -270,6 +271,7 @@ impl<'a> GraphQlAuthGate<'a> {
             self.auth_store,
             &self.username,
             self.workspace.name(),
+            self.state.workspace_store().is_some(),
             model_name,
         )
         .await?

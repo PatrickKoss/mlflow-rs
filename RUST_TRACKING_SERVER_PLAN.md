@@ -1594,11 +1594,43 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       workspace-aware auth grant partitioning; the reserved-artifact-root startup
       guards (root ending `workspaces` / already scoped) are not yet ported —
       only the disable-with-non-default-data guard is.)*
-- [ ] **T10.4 Workspace-aware auth integration**: role workspace partitioning, workspace
+- [x] **T10.4 Workspace-aware auth integration**: role workspace partitioning, workspace
       USE/MANAGE grants, default-workspace inheritance, `NO_PERMISSIONS` boundary deny,
       workspace admin capabilities, `filter_list_workspaces`.
       **AC:** `test_auth_workspace.py` + `test_client_workspace.py` pass against Rust.
       **VER:** Phase 12 auth+workspace runner; UI workspace selector smoke.
+      *(Done 2026-07-17: threaded `RequestCtx::workspaces_enabled` /
+      `AfterCtx::workspaces_enabled` (`AppState::workspace_store().is_some()`)
+      through the auth validators + after-request hooks. The
+      enabled-vs-disabled difference lives in the fold's "no grant matched"
+      branch (`validators.rs::resolve_role_permission`): workspaces OFF → fall
+      to `default_permission` (`_role_permission_for` returns `None`,
+      `__init__.py:711-712`); ON → `NO_PERMISSIONS` boundary deny
+      (`:715`) unless the opt-in default-workspace auto-grant
+      (`_user_inherits_default_workspace_grant`, `:541`,
+      `grant_default_workspace_access` off by default) applies in the `default`
+      workspace. Grant lookups already scope to `RequestCtx::workspace` (T10.3
+      resolved) via `get_role_permission_for_resource`, whose `(workspace,*)`
+      fold gives workspace-admin MANAGE concrete-resource reads and USE only the
+      workspace-tier create-gate. Wired: `_user_can_create_in_workspace`
+      (create-experiment/RM + list-users, `:580`/`:1663`/`:1208`),
+      `validate_can_view_workspace` (GetWorkspace, `:1216`), workspace REST
+      before-request validators (`Create/Update/Delete → sender_is_admin`,
+      `Get → view`, `List → none`, `:2611`), and after-request hooks
+      `filter_list_workspaces` (`:3140`), `_seed_default_workspace_roles`
+      (`:3201`, admin/user two-tier, `MLFLOW_RBAC_SEED_DEFAULT_ROLES` default
+      on), `_cleanup_workspace_permissions` (`:3259`). Read-predicate fallback
+      gated to deny when enabled (`after_request.rs::readable_set`, `:1616`).
+      New auth-store methods `list_accessible_workspace_names`
+      (`sqlalchemy_store.py:994`, synthetic-role can_read semantics) +
+      `delete_workspace_permissions_for_workspace` (`:695`). Single-tenant
+      (disabled) path byte-identical to pre-T10.4 — full workspace test suite
+      green. Cache decision: the T9.8 resource→workspace cache is NOT on the
+      hot path — Rust store fetches are already workspace-scoped, so the auth
+      resolver looks up grants directly in the request workspace with no
+      unscoped resource→workspace round-trip to memoize (documented in
+      `workspace_cache.rs`). 14 HTTP tests in
+      `tests/auth_workspace_http.rs`.)*
 
 ### Phase 11 — Server config, nginx, deployment
 

@@ -8,18 +8,26 @@
 //! cache keyed by `"<resource_label>:<workspace_scope>:<resource_id>"`
 //! (`__init__.py:636-657`).
 //!
-//! ## Status: T10.4 seam
+//! ## Status: not on the T10.4 hot path (Rust resolves differently)
 //!
-//! Pre-T10.4 the Rust server is single-tenant and every permission lookup
-//! resolves the `"default"` workspace directly
-//! (`auth_middleware/validators.rs`), so nothing consults this cache yet. It is
-//! implemented and unit-tested here now (its config fields
-//! `workspace_cache_max_size` / `workspace_cache_ttl_seconds` come from the same
-//! ini the Python server reads) so **T10.4** — which introduces the real
-//! resource→workspace resolver — can drop it in front of that resolver without
-//! re-deriving the cache. The plug point is `experiment_permission` /
-//! `registered_model_perm` in `validators.rs`: T10.4 replaces the hardcoded
-//! `"default"` with `cache.get_or_insert(key, || resolve(...))`.
+//! Python needs this cache because `_get_resource_workspace` fetches the
+//! resource *unscoped* (base `_get_query` has no workspace filter,
+//! `sqlalchemy_store.py:414-418`) to read its owning workspace, then scopes the
+//! role lookup to that workspace — an extra DB round-trip per permission check
+//! that the immutable resource→workspace mapping lets it cache.
+//!
+//! The Rust store fetches are **already workspace-scoped** (`get_experiment(ws,
+//! id)`, `get_run(ws, id)`, … filter on `workspace = ?`), and the T10.4 auth
+//! resolver (`auth_middleware/validators.rs`) looks up grants directly in the
+//! request's resolved workspace (`RequestCtx::workspace`, stamped by T10.3)
+//! without a separate resource→workspace fetch. There is therefore no
+//! resource→workspace resolution step to memoize on the Rust permission path,
+//! and nothing consults this cache. It is kept (implemented + unit-tested, its
+//! `workspace_cache_max_size` / `workspace_cache_ttl_seconds` config read from
+//! the same ini as Python) so a future resolver that does an unscoped
+//! resource→workspace lookup (e.g. to reject a cross-workspace resource id whose
+//! grant string collides) can drop it in front via `get_or_insert` without
+//! re-deriving the cache.
 //!
 //! Uses the same `Mutex<HashMap>` TTL-cache pattern as `mlflow-store`'s
 //! workspace caches (cachetools.TTLCache parity: `maxsize` + `ttl`, oldest-entry

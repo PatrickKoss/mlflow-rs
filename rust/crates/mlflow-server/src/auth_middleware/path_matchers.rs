@@ -193,6 +193,15 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         ("MlflowService", "setLoggedModelTags") => UpdateLoggedModel,
         ("MlflowService", "listLoggedModelArtifacts") => ReadLoggedModel,
         ("MlflowService", "LogLoggedModelParams") => UpdateLoggedModel,
+        // ---- Workspaces (BEFORE_REQUEST_HANDLERS, T10.4 — `__init__.py:2611`) ----
+        // `ListWorkspaces: None` — no before-request gate (any authenticated
+        // caller); the after-request `filter_list_workspaces` filters rows. So
+        // `listWorkspaces` intentionally returns `None` here (falls through to
+        // Allow), while its after-request hook is registered separately.
+        ("MlflowService", "createWorkspace") => SenderIsAdmin,
+        ("MlflowService", "getWorkspace") => ViewWorkspace,
+        ("MlflowService", "updateWorkspace") => SenderIsAdmin,
+        ("MlflowService", "deleteWorkspace") => SenderIsAdmin,
         // ---- Webhooks (WEBHOOK_BEFORE_REQUEST_HANDLERS — admin-only) ----
         ("WebhookService", "createWebhook") => SenderIsAdmin,
         ("WebhookService", "getWebhook") => SenderIsAdmin,
@@ -457,15 +466,20 @@ fn build_after_routes() -> Vec<AfterRoute> {
     routes
 }
 
-/// Map an incoming `(path, method)` to its after-request handler, mirroring
+/// Map an incoming `(path, method)` to its after-request handler + captured path
+/// params (Flask's `request.view_args`), mirroring
 /// `AFTER_REQUEST_HANDLERS.get((request.path, request.method))`. Returns `None`
-/// when the route has no after-request hook.
-pub fn dispatch_after_request(path: &str, method: &str) -> Option<AfterRequestHandler> {
+/// when the route has no after-request hook. The params feed the DeleteWorkspace
+/// cleanup, which reads `workspace_name` from the path.
+pub fn dispatch_after_request(
+    path: &str,
+    method: &str,
+) -> Option<(AfterRequestHandler, Vec<(String, String)>)> {
     after_routes().iter().find_map(|r| {
         if r.method != method {
             return None;
         }
-        r.matcher.matches(path).map(|_| r.handler)
+        r.matcher.matches(path).map(|params| (r.handler, params))
     })
 }
 

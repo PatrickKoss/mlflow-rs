@@ -235,6 +235,10 @@ pub async fn authorize(
                 .and_then(|v| v.to_str().ok()),
         ),
     };
+    // Whether workspaces are enabled (`MLFLOW_ENABLE_WORKSPACES` ≈ a wired
+    // workspace store): gates the T10.4 `NO_PERMISSIONS` boundary deny and the
+    // read-predicate deny fallback.
+    let workspaces_enabled = state.workspace_store().is_some();
 
     // The after-request hook (if any) for this route. `_after_request` runs for
     // both admins and non-admins.
@@ -271,6 +275,7 @@ pub async fn authorize(
             username: &username,
             method: &method,
             workspace: workspace.name(),
+            workspaces_enabled,
             path_params: &path_params,
             query: &query,
             json_body: json_body.as_ref(),
@@ -297,7 +302,7 @@ pub async fn authorize(
 
     // 5. After-request hook (`_after_request`, T9.5). Only on a successful
     //    (`2xx`/`3xx`) response, mirroring the `400 <= status < 600` skip.
-    let Some(after_handler) = after_handler else {
+    let Some((after_handler, after_params)) = after_handler else {
         return resp;
     };
     if resp.status().is_client_error() || resp.status().is_server_error() {
@@ -324,11 +329,13 @@ pub async fn authorize(
     let ctx = AfterCtx {
         username: &username,
         workspace: workspace.name(),
+        workspaces_enabled,
         is_admin,
         method: &method,
         query: request_query.as_deref(),
         request_body: &body_bytes,
         request_json: json_body.as_ref(),
+        path_params: &after_params,
         state: &state,
     };
     after_request::run(after_handler, &ctx, resp, resp_body).await
