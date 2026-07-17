@@ -1,4 +1,8 @@
-# Rust MLflow Server — Implementation Plan (everything except genai)
+# Rust MLflow Server — Implementation Plan
+
+**Part I** (§1–§10, Phases 0–14): everything except genai. **Part II** (§11–§18,
+Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app parity
+in Rust, retiring the Python server plane entirely.
 
 Status: **in progress — Phases 2–8 and 10 complete; Phase 9 complete except
 T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
@@ -40,7 +44,9 @@ This document is the master plan for reimplementing the MLflow server in Rust fo
 webhooks, auth/RBAC (incl. the admin/account UI backend), and workspaces** — fronted by
 nginx, with full wire-level feature parity against the Python implementation. GenAI
 features (gateway, scorers, evaluation, issues, label schemas, review queues, prompt
-optimization, assistant, jobs) stay on the Python server.
+optimization, assistant, jobs) stay on the Python server **during Part I only** —
+Part II (§11 onward) plans their port; its end state keeps Python solely as an
+internal job-worker runtime (D14), not a server.
 
 It is written so that individual tasks can be picked up by other contributors/models:
 every task has a checkbox, acceptance criteria (AC), and a verification method (VER).
@@ -68,7 +74,13 @@ When in doubt, the Python implementation is the spec.
 - A **compliance test harness** that runs the existing Python test suites against the
   Rust server (proven pattern from the Go store effort, see §6).
 
-### Non-Goals (genai — stay in Python, routed there by nginx)
+### Non-Goals (genai — stay in Python, routed there by nginx) — Part I boundary
+
+> **2026-07-17:** every item below is now planned in Part II (Phases 15–22),
+> except the Databricks-only endpoints, the UC registry/prompt services, and the
+> deprecated standalone YAML gateway, which remain permanently out of scope
+> (§11.3). This list stays authoritative as the Part I boundary and as the
+> interim nginx routing contract until the matching Part II phase lands.
 
 - Gateway (`/gateway/*`, `gateway-proxy`, secrets/endpoints/model-definitions/budget/guardrails)
 - Scorers (`/3.0/mlflow/scorers/*`, scorer invoke, online scoring configs)
@@ -144,7 +156,9 @@ auth DB) and refuses to run on a mismatch (mirrors `_verify_schema`,
 
 ### 2.2 nginx routing table (the contract)
 
-Default rule: **everything not listed below goes to Rust.**
+Default rule: **everything not listed below goes to Rust.** (Interim contract
+for the split deployment — Part II's cutover, T22.4, deletes the Python rows one
+phase at a time.)
 
 | Route pattern (under optional static prefix) | Backend |
 |---|---|
@@ -2039,3 +2053,858 @@ Compliance infra:
   `tests/store/workspace/`, `tests/db/compose.yml`, `.github/workflows/master.yml`
   (database job), `mlflow/environment_variables.py:1074`,
   `mlflow/tracking/_tracking_service/utils.py:252`.
+
+---
+
+---
+
+# Part II — GenAI Port (full-app parity)
+
+Added 2026-07-17, after Part I reached compliance-green on the core surface.
+New goal: **the entire MLflow Python server ported to Rust** — the genai
+features Part I excluded are now in scope. Same rules as Part I: every fact
+below was derived from the current codebase (file/line refs included); when in
+doubt, the Python implementation is the spec. Phase numbers, task IDs, and
+decision IDs continue Part I's sequences.
+
+## 11. Goals, end state, and the execution boundary
+
+### 11.1 End state
+
+- Rust serves **every** HTTP route of `mlflow server`: Part I's surface plus
+  gateway (CRUD + runtime), scorers, evaluation datasets, genai evaluate,
+  issues, label schemas, review queues, prompt optimization, the jobs API,
+  assistant, promptlab, and trace archival.
+- The Python *server plane* (uvicorn workers) is retired; the genai rows in
+  §2.2's nginx table are deleted one phase at a time (T22.4).
+- Python remains only as an **internal execution runtime**: per-job worker
+  subprocesses spawned by the Rust job runner to execute genai payloads
+  (evaluation harness, scorer runs, issue detection, prompt optimization) —
+  see D14. The assistant keeps spawning external CLIs (`claude`, `codex`)
+  exactly as Python does today.
+
+```
+            ┌──────────────────────────────────────────────┐
+            │                    nginx                     │
+            │  static React build · everything else → Rust │
+            └──────────────────────┬───────────────────────┘
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │         Rust server          │
+                    │  Part I surface + gateway,   │
+                    │  genai CRUD, jobs runner,    │
+                    │  assistant SSE, archival     │
+                    └──┬─────────┬─────────┬───────┘
+        spawns per job │         │ HTTPS   │ spawns per assistant turn
+                       ▼         ▼         ▼
+            ┌────────────────┐ ┌────────┐ ┌──────────────────┐
+            │ Python worker  │ │ LLM    │ │ claude / codex   │
+            │ (mlflow.genai  │ │ provi- │ │ CLIs (NDJSON     │
+            │ job payloads)  │ │ ders   │ │ streaming)       │
+            └────────────────┘ └────────┘ └──────────────────┘
+```
+
+### 11.2 The one hard boundary: arbitrary Python execution
+
+The genai surface splits cleanly into three tiers:
+
+| Tier | What | Port strategy |
+|---|---|---|
+| **A — CRUD/wire** | eval datasets, scorers CRUD + online configs, issues CRUD, label schemas, review queues, prompt-opt job CRUD, jobs API, gateway CRUD (secrets/endpoints/model-defs/bindings/tags/budgets/guardrail configs) | native Rust, byte parity — same discipline as Part I |
+| **B — network runtime** | gateway proxying + SSE, budget enforcement, assistant SSE + CLI subprocesses + tool loop, trace archival, periodic schedulers | native Rust (tokio); no Python involved |
+| **C — Python payloads** | evaluation harness, scorer execution, issue-detection LLM pipeline, prompt optimization (`gepa`/litellm), decorator-scorer `exec` | Rust orchestrates (queue, states, retries, timeouts); the payload runs in a Python worker subprocess executing the existing `mlflow.genai` code |
+
+Tier C is not a bolted-on compromise — it mirrors what Python already does.
+The current runner is three layers: Huey consumers → `_exec_job` → **a fresh
+`python -m mlflow.server.jobs._job_subproc_entry` subprocess per job**
+(`mlflow/server/jobs/utils.py:169,300`; `_job_subproc_entry.py:76` calls
+`function(**params)`). Rust replaces the first two layers (queue + dispatch)
+and keeps the third: the per-job subprocess boundary is already the contract.
+Consequence: deployments wanting scorer/eval/issue/prompt-opt execution need a
+Python env with `mlflow` installed next to the Rust binary (same container
+image); pure tracking/registry/gateway deployments don't.
+
+Facts that make full-native Tier C impossible today (all verified):
+
+- Decorator scorers store raw Python source and are reconstructed via `exec()`
+  (`mlflow/genai/scorers/scorer_utils.py:179`). Python itself blocks them on
+  OSS backends (`base.py:574-585`) and blocks registration server-side
+  (`handlers.py:5461-5464`) — Rust replicates both blocks.
+- Third-party scorers dynamically `importlib.import_module` + instantiate
+  (`base.py:485-519`).
+- The eval harness calls each scorer as a Python callable
+  (`mlflow/genai/evaluation/harness.py:907-939`), capturing exceptions into
+  `Feedback` with `error_code="SCORER_ERROR"` (`harness.py:942-953`).
+- Issue detection is a 4-phase LLM pipeline over `mlflow.genai.evaluate` +
+  `make_judge` + LLM clustering (`mlflow/genai/discovery/pipeline.py:586`).
+- Prompt optimization imports the external `gepa` package and litellm
+  (`mlflow/genai/optimize/optimizers/gepa_optimizer.py:13`, `job.py:217,241`).
+
+### 11.3 Permanently out of scope (unchanged)
+
+- **Databricks-only `unified-traces` / `get-online-trace-details`**: not served
+  by the OSS Python server at all — absent from `HANDLERS`
+  (`handlers.py:7663+`); only `DatabricksRestStore` calls them, client→
+  Databricks (`databricks_rest_store.py:556,587`; abstract store raises
+  `NotImplementedError`, `abstract_store.py:471-479`). Nothing to port.
+- **UC prompt/registry protos** (`unity_catalog_prompt_service.proto`):
+  client-only (`store/_unity_catalog/registry/rest_store.py:178`); no OSS route.
+- **Legacy standalone YAML gateway** (`mlflow gateway start`,
+  `mlflow/gateway/app.py`; deprecated at `mlflow/gateway/cli.py:48-51`) — D15:
+  stays a deprecated Python CLI. Rust ports only the DB-backed embedded
+  gateway. The `/ajax-api/2.0/mlflow/gateway-proxy` Flask bridge to a legacy
+  deployments server IS ported (it's a thin validated proxy, §12.8).
+- `databricks-agents` managed archival (`mlflow/tracing/archival.py:7-70`).
+
+---
+
+## 12. GenAI API surface (complete inventory)
+
+### 12.1 Evaluation datasets (12 proto endpoints)
+
+RPCs on `MlflowService` (`service.proto:1594-1963`), so served on **both**
+`/api/3.0` and `/ajax-api/3.0` via the generic route generation; handlers
+`handlers.py:7012-7242`. Entity messages live in a separate proto:
+`mlflow/protos/datasets.proto` (proto2, messages only — `Dataset:10`,
+`DatasetRecord:45`, `DatasetRecordSource:86`, `SourceType` enum
+`TRACE/HUMAN/DOCUMENT/CODE`).
+
+create (POST `/mlflow/datasets/create`), get / delete
+(GET/DELETE `/mlflow/datasets/{dataset_id}`), search (POST **and** GET
+`/mlflow/datasets/search`), tags (PATCH `.../tags`, DELETE `.../tags/{key}`),
+records (POST/GET/DELETE `.../records`), experiment-ids (GET
+`.../experiment-ids`), add-experiments / remove-experiments (POST).
+
+Wire quirks: `Dataset.tags/schema/profile` and all `DatasetRecord` payload
+fields are **JSON strings** on the wire (`datasets.proto:17-24,52-84`);
+`UpsertDatasetRecords.records` is ONE JSON-serialized list string, not a
+repeated message (`service.proto:5007`). Search uses offset tokens
+(default/cap 1000, `sqlalchemy_store.py:7027-7064`); records use **cursor
+tokens** base64(`"created_time:record_id"`) with a legacy integer-offset
+fallback (`:7206-7228`). Upsert dedups on
+`input_hash = sha256(json.dumps(inputs, sort_keys=True))` (`:7293`) under
+unique `(dataset_id, input_hash)`; recomputes schema/profile/digest
+(`:7070-7137`). Filter DSL: `SearchEvaluationDatasetsUtils` (`:7031`).
+
+### 12.2 GenAI evaluate invoke + generic jobs API (3 ajax-only endpoints)
+
+- `POST /ajax-api/3.0/mlflow/genai/evaluate/invoke` (`handlers.py:6852-6855`,
+  handler `:5004`): hand-rolled JSON `{experiment_id, trace_ids[],
+  serialized_scorers[]}` (`:5017-5023`); pre-creates an eval run tagged
+  `mlflow.runType=genai_evaluate` (`:5042-5045`), submits
+  `invoke_genai_evaluate_job` to the runner (`:5050`), tags the run
+  `mlflow.genaiEvaluate.jobId` (`:5059`), returns `{"job_id", "run_id"}`
+  (`:5064`).
+- `GET /ajax-api/3.0/mlflow/jobs/<job_id>` → `{status, result(parsed),
+  status_details}` (`handlers.py:6870`, handler `:5067-5077`);
+  `PATCH /ajax-api/3.0/mlflow/jobs/cancel/<job_id>` (`:6865`, handler
+  `:5082-5089`).
+- The job (`mlflow/genai/evaluation/job.py:24`) links traces to the run,
+  deserializes scorers via pydantic `Scorer.model_validate_json`, and runs
+  `mlflow.genai.evaluate` — Tier C. Results land as run metrics + trace
+  assessments + trace-run links (`harness.py:765-766,1015-1039`); there is no
+  separate results table.
+
+### 12.3 Scorers (5 proto endpoints + 3 hand-rolled)
+
+- Proto RPCs (`service.proto:1790-1867`, messages `:5105-5210`; handlers
+  `handlers.py:5443-5562`, dispatch `:7803-7808`): register (POST
+  `/2.0/mlflow/scorers/register`), list (GET `.../list`; empty
+  `experiment_id` ⇒ cross-experiment), versions (GET `.../versions`), get
+  (GET `.../get`; omitted `version` ⇒ latest), delete (DELETE `.../delete`;
+  omitted `version` ⇒ all versions).
+- `POST /ajax-api/3.0/mlflow/scorer/invoke` (`routes.py:83`,
+  `handlers.py:6835`, handler `:6663`): `{experiment_id, serialized_scorer,
+  trace_ids[], log_assessments}` → one job per trace batch; response
+  `{"jobs": [{"job_id", "trace_ids"}]}` (`:6718-6720`).
+- Online scoring config (hand-rolled, on both prefixes,
+  `handlers.py:6981-7004`): GET `/3.0/mlflow/scorers/online-configs`
+  (`{scorer_ids[]}` → `{"configs":[...]}`), PUT
+  `/3.0/mlflow/scorers/online-config` (`{experiment_id, name, sample_rate,
+  filter_string?}`).
+
+Semantics: `serialized_scorer` is **JSON (pydantic), never pickle**
+(`base.py:300-354`); versioning is append-only `MAX(scorer_version)+1`
+(`sqlalchemy_store.py:2629-2631`); register resolves gateway-endpoint
+name→ID rewriting the payload (`:2594-2604`) and **rejects decorator scorers**
+(`call_source` present → error, `handlers.py:5461-5464`); list returns the
+latest version per name (`:2737-2749`).
+
+### 12.4 Issues (4 proto endpoints + detection invoke)
+
+- RPCs (`service.proto:1377-1447`; messages `mlflow/protos/issues.proto`;
+  handlers `handlers.py:4428-4530`, dispatch `:7763-7766`): create (POST
+  `/3.0/mlflow/issues`), update (PATCH `/{issue_id}`), get (GET
+  `/{issue_id}`), search (POST `/search`; `include_trace_count` populates
+  `trace_count`).
+- `POST /ajax-api/3.0/mlflow/issues/invoke` (`handlers.py:6842-6849`, handler
+  `:4925`): creates a detection run, submits `invoke_issue_detection_job` —
+  Tier C (LLM pipeline, `discovery/pipeline.py:586`).
+- Issue↔trace linkage is an **assessment** (`assessment_type="issue"`,
+  `name=issue_id`, via `mlflow.log_issue`, `tracing/assessment.py:332-401`);
+  `trace_count` = distinct trace_ids of those assessments
+  (`sqlalchemy_store.py:7880-7894`). `source_run_id` links the detection run.
+
+### 12.5 Label schemas (6 proto endpoints)
+
+RPCs `/3.0/mlflow/label-schemas/{create,get,get-by-name,list,update,delete}`
+(`service.proto:1453-1590`; messages `mlflow/protos/label_schemas.proto`;
+handlers around `handlers.py:4536-4617`, dispatch `:7768-7773`). Pure CRUD.
+Unique `(experiment_id, name)`; `type` (`feedback|expectation`) immutable;
+input configs (`pass_fail/categorical/numeric/text`) stored as JSON text.
+Schemas are UI rendering hints only — they never gate assessment writes
+(`models.py:3233-3245`).
+
+### 12.6 Review queues (11 proto endpoints)
+
+RPCs `/3.0/mlflow/review-queues/{create,get-or-create-user,get,get-by-name,
+list,update,delete}` + `items/{add,remove,list,set-status}`
+(`service.proto:2765-3010`; messages `mlflow/protos/review_queues.proto`;
+handlers `handlers.py:4655-4771`, dispatch `:7774-7784`). Pure CRUD. Quirks:
+`name_key` = lowercased identity with unique `(experiment_id, name_key)`
+(`models.py:3473-3477`); items are **soft references** to traces (shape/dedup
+validation only, `review_queues/validation.py:241-255`; `item_type` v1 =
+`trace`, `session`/`span` reserved); `review_queue_label_schemas.schema_id`
+deliberately NOT an FK (MSSQL multi-cascade-path, `models.py:3679-3691`); user
+queues resolve to all experiment schemas at read time; item status changes
+only on explicit reviewer action (`models.py:3568-3571`).
+
+### 12.7 Prompt optimization (5 RPCs / 6 routes)
+
+RPCs `/3.0/mlflow/prompt-optimization/jobs` (POST create), `/{job_id}` (GET,
+DELETE), `/search` (POST **and** GET), `/{job_id}/cancel` (POST)
+(`service.proto:2633-2760`; messages `mlflow/protos/prompt_optimization.proto`,
+`OptimizerType` `GEPA/METAPROMPT`; handlers `handlers.py:7359-7647`, dispatch
+`:7854-7858`). **No dedicated table** — jobs ride the generic `jobs` table +
+an MLflow run holding config as params (`:7429-7456`); proto responses are
+rebuilt from the job entity (`_build_prompt_optimization_job_from_entity`
+`:7477`), optimized-prompt URI read from the job result (`:7520-7524`).
+Execution (`optimize_prompts_job`, `mlflow/genai/optimize/job.py:250-321`) is
+Tier C.
+
+### 12.8 Gateway CRUD (36 proto endpoints + 5 hand-rolled)
+
+Proto RPCs under `/2.0/mlflow/gateway/...` (`service.proto:1974-2618`;
+messages from `:5209`; handlers from `handlers.py:5662`):
+
+- **secrets** create/get/update/delete/list (5)
+- **endpoints** create/get/update/delete/list (5)
+- **model-definitions** create/get/list/update/delete (5)
+- **endpoints/models** attach/detach (2)
+- **endpoints/bindings** create/delete/list (3)
+- **endpoints** set-tag/delete-tag (2)
+- **budgets** create/get/update/delete/list/windows (6)
+- **guardrails** create/get/delete/list, add-to-endpoint,
+  remove-from-endpoint, list-for-endpoint, update-config (8)
+
+Hand-rolled ajax (`handlers.py:6811-6839`, paths `auth/routes.py:79-82`): GET
+`supported-providers`, `supported-models`, `provider-config`,
+`secrets/config` (handlers `:6621-6653`). Plus the legacy bridge
+`GET/POST /ajax-api/2.0/mlflow/gateway-proxy` (`server/__init__.py:146-148`,
+handler `:2317`): forwards to `MLFLOW_DEPLOYMENTS_TARGET`; validates
+`gateway_path` (GET must equal `api/2.0/endpoints`, POST must match
+`gateway/[^/]+/invocations`, `:2295-2309`); returns `{"endpoints": []}` when
+the target is unset.
+
+### 12.9 Gateway runtime (10 routes, SSE) — Tier B
+
+FastAPI router prefix `/gateway` (`mlflow/server/gateway_api.py:88`), mounted
+ahead of Flask (`fastapi_app.py:190-199`) — in Rust these are ordinary axum
+routes:
+
+`/{endpoint_name}/mlflow/invocations` (unified chat/embeddings, auto-detected
+by `messages` vs `input`, `:600`); `/mlflow/v1/chat/completions` (endpoint via
+`model`, `:729`); `/openai/v1/{chat/completions,embeddings,responses,
+responses/compact}` (`:836-1128`); `/anthropic/v1/messages` (`:1172`);
+`/gemini/v1beta/models/{name}:generateContent` and `:streamGenerateContent`
+(`:1271,1341`); `/proxy/{endpoint_name}/{path...}` (raw passthrough, `model`
+NOT rewritten, query string preserved, `:1410`).
+
+Must-match behaviors:
+
+1. **Providers**: 23 registered (`provider_registry.py:64-89`); litellm is the
+   fallback for anything unhandled (`gateway_api.py:400-411`) — D16.
+   Composites: `TrafficRouteProvider` (weighted random pick, `base.py:613`)
+   and `FallbackProvider` (sequential, propagates last status, `base.py:697`;
+   models by `fallback_order`).
+2. **Secret resolution**: endpoint config cache decrypts secrets
+   (`config_resolver.py:147`); provider-specific auth modes incl. Bedrock
+   api-key/access-keys/iam-role/default-chain and Databricks pat/oauth-m2m
+   (`gateway_api.py:335-392`).
+3. **Egress**: single choke point; strip `accept-encoding` +
+   `X-MLflow-Authorization`, force `Accept-Encoding: gzip, deflate, identity`
+   (`providers/utils.py:11-33`); timeout `MLFLOW_GATEWAY_ROUTE_TIMEOUT_SECONDS`
+   (default 300).
+4. **SSE**: chunks exactly `data: {json}\n\n` (`utils.py:348`); `[DONE]`
+   skipped; mid-stream errors emit `{"error":{"message","type"}}` since
+   headers are already sent (`utils.py:364`); incomplete-chunk buffering on
+   `\n` (`utils.py:400`); **post-LLM guardrails NOT applied to streams**
+   (`gateway_api.py:638`).
+5. **Budget**: REJECT policies → HTTP 429 with the exact message
+   `Budget limit exceeded. Limit: ${amount:.2f} USD per {value} {unit}.
+   Budget resets at {ISO8601 Z}. Request rejected.` (`budget.py:157-184`);
+   spend computed from trace span metrics `total_cost`
+   (`sqlalchemy_mixin.py:1339`); tracker backends in-memory or Redis
+   (`MLFLOW_GATEWAY_BUDGET_REDIS_URL`); ALERT policies fire
+   `budget_policy.exceeded` webhooks (`budget.py:107`) — reuses the Part I
+   `mlflow-webhooks` dispatcher.
+6. **Guardrails** (`gateway/guardrails.py`): stage BEFORE/AFTER; VALIDATION →
+   HTTP 400 on violation; SANITIZATION rewrites the payload via an
+   action-endpoint LLM call carrying `X-MLflow-Guardrail-Bypass: 1` to prevent
+   recursion (`:34,262`) — execution strategy is D17.
+7. **Headers/quirks**: timing headers `X-MLflow-Gateway-Duration-Ms` /
+   `X-MLflow-Gateway-Overhead-Duration-Ms` (`fastapi_app.py:121-154`);
+   `X-MLflow-Gateway-Caller` accepts only `judge`; subscription-CLI detection
+   (User-Agent `claude-cli`/`codex`/`geminicli` + own auth header keeps client
+   credentials, `providers/base.py:45-73`); `model` field in unified payloads
+   → HTTP 422 (`base.py:603`); provider allowlist
+   `MLFLOW_GATEWAY_ALLOWED_PROVIDERS`; Anthropic `max_tokens` default
+   8192/max 1,000,000.
+
+### 12.10 Assistant (9 routes, SSE) — Tier B
+
+FastAPI router `/ajax-api/3.0/mlflow/assistant` with a **localhost-only 403
+gate on every route** (`server/assistant/api.py:44-71`): POST `/message` (→
+`{session_id, stream_url}`); GET `/sessions/{id}/stream` (SSE); PATCH
+`/sessions/{id}` (cancel via subprocess SIGTERM); POST
+`/sessions/{id}/permission`; GET `/providers/{p}/health` (501/412/401
+exception mapping); GET+PUT `/config`; POST `/skills/install`; GET
+`/providers/{p}/models` (API key via `X-API-Key` header).
+
+Mechanics: SSE frames `event: {type}\ndata: {json}\n\n` with 6 event types
+(`mlflow/assistant/types.py:54-104`); providers ClaudeCode / Codex /
+MlflowGateway / Ollama (`providers/__init__.py:19-29`); the Claude provider
+spawns `claude -p ... --output-format stream-json --verbose
+--append-system-prompt ...` (`claude_code.py:366-411`), streams NDJSON with a
+100 MB line buffer, maps SIGKILL to an `interrupted` event, and delegates auth
+to the CLI's own credential store; the OpenAI-compatible base runs an
+in-process tool loop (Bash/Read/Write/Edit with cwd path-confinement +
+restricted allowlist, `tool_executor.py:14-127`) and **encodes the whole chat
+history as JSON in `session_id`** trimmed to 500 KB
+(`openai_compatible.py:44-145,407-417`); permission pause/resume spans the
+`permission_request` event + the `/permission` POST. Sessions are JSON files
+under `$TMPDIR/mlflow-assistant-sessions` with UUID validation + PID files for
+cancellation (`session.py:12-242`); config at
+`~/.mlflow/assistant/config.json`. Known Python bug: `/message` returns
+`stream_url=.../stream/{id}` but the route is `/sessions/{id}/stream`
+(`api.py:154` vs `:158`) — D18. The `dev/dev_stubs/` fake-`claude` mechanism
+must keep working against Rust (CI ui-review bot).
+
+### 12.11 Promptlab (1 endpoint)
+
+`POST /ajax-api/2.0/mlflow/runs/create-promptlab-run`
+(`server/__init__.py:140-143`, handler `handlers.py:2340-2404`). Requires
+`experiment_id, prompt_template, prompt_parameters, model_route, model_input,
+mlflow_version`; creates a run with params + tags
+(`MLFLOW_RUN_SOURCE_TYPE="PROMPT_ENGINEERING"`), **saves a real pyfunc
+"promptlab" model artifact** (MLmodel/requirements/`parameters.yaml`, pinned
+`mlflow[gateway]==<version>`) plus `eval_results_table.json`
+(`utils/promptlab_utils.py:27-146`, `prompt/promptlab_model.py:105-197`), and
+responds with proto `CreateRun.Response`. The handler itself never calls the
+gateway (prediction happens only when the saved model is later loaded).
+Artifact-writer strategy is D19. Auth: experiment UPDATE
+(`auth/__init__.py:2172,2726`).
+
+### 12.12 Trace archival (no routes — closes D6) — Tier B
+
+- Config: `--trace-archival-config` / `MLFLOW_TRACE_ARCHIVAL_CONFIG` YAML
+  (`trace_archival` key: `enabled`, `location`, `retention`,
+  `long_retention_allowlist`, `interval_seconds` default 300 max 86400,
+  `max_traces_per_pass`; `mlflow/tracing/trace_archival_config.py:22-143`),
+  5s-TTL cached with stale-on-error tolerance (`:50-102`); rejected together
+  with `--artifacts-only` (`cli/__init__.py:672-682`).
+- Repo constraints: archival location must NOT be `mlflow-artifacts:` proxy,
+  Databricks, or DBFS-rest, and the repo must implement `delete_artifacts`
+  (`utils/validation.py:197-235`).
+- Payload: `traces.pb` = OTLP `TracesData`, one ResourceSpans/one ScopeSpans,
+  root-first span sort (`mlflow/tracing/otel/otel_archival.py:16-132`) —
+  Rust already has the OTLP protos from T1.2.
+- Store: `archive_traces` (`sqlalchemy_store.py:5830+`); finalize flips
+  `SPANS_LOCATION` → `ARCHIVE_REPO` + writes `ARCHIVE_LOCATION` tag + blanks
+  `spans.content` in one transaction with a `db_payload_generation` race guard
+  (`:6390-6437`); trace delete removes archived payloads (`:4356-4431`);
+  reads flow through `getTrace`/`get-trace-artifact` (Part I stubbed these
+  NOT_IMPLEMENTED — T21.2 removes the stubs). Retention/allowlist resolution:
+  `store/tracking/utils/trace_archival.py:96-174`.
+- Scheduler: periodic task every minute with a process-local monotonic gate to
+  `interval_seconds`, workspace-fairness iteration, `max_traces_per_pass`
+  budget (`trace_archival_service.py:39-212`, registration
+  `jobs/utils.py:785-793`).
+
+### 12.13 Auth treatment (verified per area)
+
+| Area | Gate |
+|---|---|
+| Scorers CRUD | validators: register→experiment UPDATE; list→`validate_can_read_scorer_list` + after-request `filter_list_scorers`; get/versions→read scorer; delete→delete scorer (`auth/__init__.py:2527-2532`, `:3566`) |
+| Scorer invoke | `validate_gateway_proxy` (`:2729`) |
+| Online-config routes | **explicitly excluded** from validators (`:2637`) — authenticated-only |
+| Datasets (all 12) | **no validators** — authenticated-only (absent from `BEFORE_REQUEST_VALIDATORS`) |
+| Issues (all 4 + invoke) | **no validators** — authenticated-only (`:2639-2641` only exempts the invoke path) |
+| Label schemas | full validator set (`:2603-2610`) |
+| Review queues | full validator set + admin-bypass integrity hook `enforce_review_queue_name_not_username` (`:2593-2601`, `:2360`) |
+| Prompt optimization | validator set (`:2562-2566`) |
+| Jobs API | FastAPI middleware guards prefix `/ajax-api/3.0/jobs` but the Flask route is `/ajax-api/3.0/mlflow/jobs/...` (`:4479` vs `handlers.py:6862`) — verify which layer actually gates it and port the observed behavior |
+| gateway-proxy | `validate_gateway_proxy` (`:2196,2727`) |
+| Assistant | localhost gate + authenticated-only (`:4482-4483`) |
+| Promptlab | experiment UPDATE (`:2726`) |
+
+The unvalidated areas (datasets, issues, online-configs) are ported
+**faithfully as authenticated-only**, each with a `// AUTH GAP:` marker and a
+backlog entry (D21) — silently "fixing" them would diverge from Python.
+
+---
+
+## 13. Storage & crypto
+
+### 13.1 Tables (all already exist — Part I's pinned head includes them)
+
+The Part I alembic head `b7e4c1a90f23` IS the review-queue migration, so a
+migrated DB already contains every genai table; **no new migrations are needed
+to start Part II**, and Rust's startup head-check needs no change.
+
+- Datasets: `evaluation_datasets`, `evaluation_dataset_tags`,
+  `evaluation_dataset_records` (`models.py:1554,1699,1739`) +
+  `entity_associations` (already Part I).
+- Scorers: `scorers`, `scorer_versions`, `online_scoring_configs`
+  (`models.py:2125,2166,2226`).
+- Issues: `issues` (`models.py:1154`). Label schemas: `label_schemas`
+  (`:3232`). Review queues: `review_queues`, `review_queue_users`,
+  `review_queue_items`, `review_queue_label_schemas` (`:3389-3658`).
+- Jobs: `jobs` (`models.py:2291`) — states as int enums, `params` JSON text,
+  `status_details` JSON, workspace column, index
+  `(job_name, workspace, status, creation_time)`.
+- Gateway: `secrets`, `endpoints`, `model_definitions`,
+  `endpoint_model_mappings`, `endpoint_bindings`, `endpoint_tags`,
+  `budget_policies`, `guardrails`, `guardrail_configs`
+  (`models.py:2398-3227`).
+
+All carry `workspace` columns with per-workspace uniques — the Part I
+workspace plumbing (§3.17) extends unchanged.
+
+### 13.2 Secrets crypto — envelope AES-GCM, NOT Fernet
+
+`mlflow/utils/crypto.py`: per-secret random 256-bit DEK; value and DEK both
+AES-256-GCM (`nonce(12) + ct + tag(16)`); KEK derived via
+**PBKDF2-HMAC-SHA256, 600,000 iterations**, fixed salt
+`b"mlflow-secrets-kek-v1-2025"` + big-endian `kek_version` (`:59-204`);
+passphrase from `MLFLOW_CRYPTO_KEK_PASSPHRASE` (dev default with warning);
+**AAD = `"{secret_id}|{secret_name}"`** so both fields are immutable
+(`:399-420`, `models.py:2410-2422`); plaintext is JSON with `sort_keys=True`
+(`:508`); masking first-3+`...`+last-4 / `***` if <8 (`:423-450`); KEK
+rotation (`rotate_secret_encryption` `:600`). RustCrypto `aes-gcm` + `pbkdf2`
+cover this; cross-language spike required (T15.3), same pattern as Part I's
+Fernet spike. During any mixed period both planes need the identical
+passphrase (extends D12).
+
+---
+
+## 14. Runtime engines to build
+
+### 14.1 Rust job runner (replaces Huey) — D20
+
+Source of truth is the existing `jobs` table (Python already recovers from it
+at startup, re-enqueueing unfinished jobs — `utils.py:642-657`). The Rust
+runner polls/claims from the table directly; the SqliteHuey queue files
+(`*.mlflow-huey-store`, per-function instances, JSON serializer,
+`utils.py:434-493`) are NOT reproduced. Semantics to match exactly:
+
+- States `PENDING/RUNNING/SUCCEEDED/FAILED/TIMEOUT/CANCELED` stored as int
+  ordinals; proto mapping folds TIMEOUT→FAILED (`_job_status.py:7-49`);
+  finalized jobs immune to mutation (`store/jobs/sqlalchemy_store.py:126`).
+- Retry only on transient errors: `retry_count >= 
+  MLFLOW_SERVER_JOB_TRANSIENT_ERROR_MAX_RETRIES` → FAILED, else PENDING with
+  incremented count (`:210-238`); exponential backoff via the base/max delay
+  env vars.
+- Timeout: poll + kill subprocess + `mark_job_timed_out` (`utils.py:266-271`).
+- `exclusive=["experiment_id"]`: lock key
+  `sha256(job_name + params_subset)`; a locked submission is **CANCELED, not
+  queued** (`utils.py:284-297,333-354`).
+- Per-function `max_workers` concurrency (from the `@job` decorator metadata);
+  startup recovery resets RUNNING→PENDING.
+- Gating: `MLFLOW_SERVER_ENABLE_JOB_EXECUTION`, requires DB-backed store,
+  rejects Windows (`utils.py:713-727`).
+
+### 14.2 Python worker protocol — D14
+
+Per job, spawn a subprocess equivalent to
+`python -m mlflow.server.jobs._job_subproc_entry` with the function path +
+JSON params, restricted to the 6-function allowlist
+(`jobs/__init__.py:20-42`): `invoke_scorer_job`,
+`run_online_trace_scorer_job`, `run_online_session_scorer_job`,
+`optimize_prompts_job`, `invoke_issue_detection_job`,
+`invoke_genai_evaluate_job`. Env propagation: `MLFLOW_TRACKING_URI` →
+the Rust server, `MLFLOW_TRACKING_USERNAME`/`PASSWORD` (submitting user),
+`_MLFLOW_INTERNAL_GATEWAY_AUTH_TOKEN`, `MLFLOW_GATEWAY_URI`
+(`genai/scorers/job.py:168-171`, `server/__init__.py:466,511`). Optional
+per-job uv venvs from `pip_requirements` (`utils.py:196-228`) are v2 (D14
+consequence: worker jobs call BACK into the Rust server over HTTP for all
+store access — which Part I's parity work makes safe).
+
+### 14.3 Gateway execution engine
+
+Native tokio/hyper: provider adapter trait mirroring `BaseProvider`
+(chat/chat_stream/completions/embeddings/passthrough/proxy +
+token-usage extraction, `providers/base.py:89,355-459`); streaming
+passthrough without buffering (Part I's T5.2 discipline); secret TTL cache
+(`SecretCache` semantics); budget tracker (in-memory + Redis) with the
+600s-refresh spend query; cost from a vendored litellm price snapshot (D16);
+tracing of gateway calls into the (Rust) tracking store mirroring
+`maybe_traced_gateway_call` so `total_cost` span metrics keep feeding budgets.
+
+### 14.4 Assistant engine
+
+Tokio subprocess management (spawn/kill/PID files), NDJSON→SSE translation
+with the exact event vocabulary, session JSON files with atomic replace +
+UUID path-safety, the OAI-compatible tool loop with the path-confinement
+sandbox ported exactly (resolve-then-`relative_to` checks,
+`tool_executor.py:32-73` — security-critical, needs adversarial tests), and
+the permission pause/resume protocol.
+
+### 14.5 Periodic scheduler
+
+Replaces Huey `periodic_task(crontab)` + `lock_task`: a tokio interval
+scheduler running (a) the online-scoring scheduler every minute
+(read active configs → group by experiment → shuffle → submit trace- and
+session-scorer jobs, `genai/scorers/job.py:430-501`; sampling waterfall
+`online/sampler.py:57`; checkpoint = experiment tag
+`MLFLOW_LATEST_ONLINE_SCORING_TRACE_CHECKPOINT`,
+`online/trace_checkpointer.py:58-67`; constants MAX_LOOKBACK 1h / 500
+traces / 100 sessions per job) and (b) the trace-archival scheduler
+(§12.12). Single-instance locking via the same DB-lock discipline the job
+runner uses.
+
+---
+
+## 15. Compliance strategy (Part II)
+
+1. **Differential replay harness** (`rust/compliance/`) grows genai sections:
+   datasets, scorers CRUD + online configs, issues, label schemas, review
+   queues, prompt-opt CRUD, gateway CRUD, jobs API — all Tier A surfaces are
+   replayable exactly like Part I endpoints. Job-dispatching endpoints
+   (invoke routes) replay with the runner disabled (submission-side parity:
+   response shape, run/tag creation) and separately with a stub worker.
+2. **Existing Python suites** re-pointed at Rust via the Part I
+   `MLFLOW_SERVER_TYPE=rust` switch — the genai suites under `tests/genai/`,
+   `tests/server/jobs/`, gateway tests, and the store-level dataset/scorer/
+   issue/review-queue suites; exact inventory is T15.5's deliverable.
+3. **SSE differential**: a recorder that captures full event streams
+   (gateway + assistant) from both servers against a scripted mock provider /
+   the `dev/dev_stubs` fake `claude`, diffing frame-by-frame — same spirit as
+   the T12.4 corpus but for streams.
+4. **Mock-provider fixture**: a local HTTP server speaking OpenAI/Anthropic/
+   Gemini response shapes (incl. streaming) — the webhook-receiver pattern
+   from T8.3 applied to providers, so provider adapters are testable
+   hermetically.
+5. **Crypto interop**: secrets written by Python decrypt in Rust and vice
+   versa on a shared DB (T15.3 fixtures, like Part I's Fernet/werkzeug tests).
+
+---
+
+## 16. Work breakdown (Phases 15–22)
+
+Same legend as §7: AC = acceptance criteria, VER = verification. Phases 16–18
+are parallelizable once Phase 15 lands; Phase 19 needs 17 (runner) and
+benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
+
+### Phase 15 — Part II foundations
+
+- [ ] **T15.1 Decision pass**: D14–D22 reviewed and recorded in §17 (execution
+      model, litellm strategy, guardrail execution, promptlab writer, queue
+      replacement, auth-gap policy).
+      **AC:** each decision has consequences documented; scope table §11.2
+      approved.
+      **VER:** sign-off recorded in this file.
+- [ ] **T15.2 Proto/routing extension**: compile `datasets.proto`,
+      `issues.proto`, `label_schemas.proto`, `review_queues.proto`,
+      `prompt_optimization.proto` into `mlflow-proto`; the genai RPCs already
+      in `service.proto` flow into the existing route table; shrink the T1.2
+      route-parity allowlist (the 15 genai non-proto routes become in-scope
+      hand-registered routes as their phases land).
+      **AC:** `route_parity.py` accounts for every §12 endpoint.
+      **VER:** parity diff empty modulo not-yet-implemented markers.
+- [ ] **T15.3 Secrets-crypto spike**: Rust AES-256-GCM envelope + PBKDF2 KEK
+      verifying fixtures generated by `mlflow/utils/crypto.py`, both
+      directions, incl. AAD binding, masking rules, and kek_version rotation.
+      **AC:** cross-language fixtures round-trip; wrong-AAD fails closed.
+      **VER:** `rust/spikes/` tests green (Part I T0.4 pattern).
+- [ ] **T15.4 Worker-protocol spike**: Rust spawns a Python subprocess running
+      a trivial allowlisted job function end-to-end (params in, result JSON
+      out, exit-code/error propagation, kill-on-timeout).
+      **AC:** job lifecycle observable in the `jobs` table driven purely from
+      Rust.
+      **VER:** spike test green against a real Python env.
+- [ ] **T15.5 Test + corpus inventory**: enumerate the exact Python suites
+      covering each §12 area (genai, gateway, jobs, assistant, archival) and
+      which are launcher-parametrizable; define the genai differential-corpus
+      sections and the SSE-recorder design.
+      **AC:** written inventory appended to §15 with file paths.
+      **VER:** review.
+
+### Phase 16 — GenAI CRUD (Tier A)
+
+- [ ] **T16.1 Evaluation datasets**: store (3 tables + associations, offset +
+      cursor tokens, input_hash upsert dedup, schema/profile/digest
+      recompute, `SearchEvaluationDatasetsUtils` filter DSL in
+      `mlflow-search`) + all 12 endpoints with the JSON-string field quirks.
+      **AC:** dataset sections of the Python store/REST suites pass against
+      Rust; record-pagination tokens interop with Python-written tokens
+      (legacy offset fallback included).
+      **VER:** Phase 22 runner + differential corpus section.
+- [ ] **T16.2 Scorers CRUD + online configs**: 5 RPCs + 2 config routes;
+      MAX+1 versioning, latest-per-name listing, gateway-endpoint name→ID
+      payload rewrite, decorator-scorer registration rejection (exact error).
+      **AC:** scorer CRUD suites pass; serialized payloads written by either
+      server read identically by the other.
+      **VER:** Phase 22 runner `-k scorer`.
+- [ ] **T16.3 Issues + label schemas**: issues CRUD (4 RPCs, trace_count via
+      the assessments join) and label schemas (6 RPCs, immutable `type`,
+      unique names).
+      **AC/VER:** suites + differential sections; `include_trace_count`
+      parity on a seeded fixture.
+- [ ] **T16.4 Review queues**: 11 RPCs, 4 tables, name_key semantics, soft
+      references, user-queue schema resolution, full auth validator set +
+      integrity hook.
+      **AC/VER:** review-queue suites + multi-user auth differential.
+- [ ] **T16.5 Jobs store + API**: `jobs` table store (states, retries,
+      finalized-immutability) + GET/cancel endpoints; resolve and document
+      the `/mlflow/jobs` vs `/jobs` auth-prefix question (§12.13).
+      **AC:** job rows created by Python readable/cancellable via Rust and
+      vice versa.
+      **VER:** cross-server job-store test.
+- [ ] **T16.6 Prompt-optimization CRUD**: 5 RPCs over the jobs store + runs
+      (entity rebuild from job + run params, optimized-prompt URI from
+      result); submission enqueues per Phase 17 (execution rides Phase 19).
+      **AC/VER:** CRUD parity via corpus; create returns a queued job whose
+      lifecycle matches Python's.
+
+### Phase 17 — Job runner + worker
+
+- [ ] **T17.1 Runner core** per §14.1: DB-claimed queue, state machine,
+      transient-retry with backoff, timeout kill, exclusive-lock CANCELED
+      semantics, per-function max_workers, startup recovery, enable-gate.
+      **AC:** job-lifecycle suite parity incl. the CANCELED-when-locked and
+      TIMEOUT paths; no queue files on disk.
+      **VER:** `rust/tests/job_runner.rs` + Python jobs suites via launcher.
+- [ ] **T17.2 Worker protocol** per §14.2: allowlisted function spawn, env
+      propagation, result/error JSON capture, kill-on-timeout, back-pressure.
+      **AC:** all 6 job functions launch and report through the Rust runner
+      against a real Python env.
+      **VER:** integration test matrix (stub LLM).
+- [ ] **T17.3 Periodic scheduler + online-scoring scheduler**: tokio-based
+      cron with DB locking; port the scheduler logic (config scan, grouping,
+      shuffle, sampler waterfall, checkpoint tags, per-job caps).
+      **AC:** with a seeded config, Rust submits the same jobs Python would
+      for the same trace timeline (deterministic-seed comparison).
+      **VER:** scheduler differential test.
+- [ ] **T17.4 Invoke endpoints**: evaluate-invoke, scorer-invoke,
+      issue-detection-invoke, prompt-opt submission wired to the runner with
+      submission-side byte parity (pre-created runs, tags, response shapes,
+      batching rules).
+      **AC:** invoke responses + created runs/tags byte-match Python with the
+      worker stubbed.
+      **VER:** differential corpus (runner-stub mode).
+
+### Phase 18 — Gateway
+
+- [ ] **T18.1 Gateway CRUD + crypto**: 9 tables, 36 endpoints, envelope
+      crypto (T15.3), secret masking, secret cache, workspace scoping.
+      **AC:** secrets round-trip cross-language; CRUD suites pass.
+      **VER:** Phase 22 runner + corpus `-k gateway`.
+- [ ] **T18.2 Discovery + bridge routes**: 4 ajax discovery routes +
+      `gateway-proxy` with its validation quirks and empty-target behavior.
+      **AC/VER:** corpus section; UI provider-picker renders from Rust.
+- [ ] **T18.3 Runtime core**: unified invocations + `mlflow/v1/chat/
+      completions`, provider trait, native adapters for openai/azure,
+      anthropic, gemini; SSE plumbing with the §12.9 exactness list; timing
+      headers; endpoint-config resolution + cache.
+      **AC:** mock-provider differential streams frame-identical to Python.
+      **VER:** SSE recorder (T15.5 design) + adapter unit tests.
+- [ ] **T18.4 Full provider matrix**: passthrough + raw-proxy routes;
+      bedrock/databricks auth modes; openai-compatible family
+      (groq/deepseek/xai/openrouter/ollama/portkey); litellm-fallback
+      behavior per D16; provider allowlist.
+      **AC:** every provider reachable in Python is reachable in Rust or
+      returns the D16-documented error.
+      **VER:** provider conformance table + mock tests.
+- [ ] **T18.5 Traffic split + fallback**: weighted routing and sequential
+      fallback incl. status propagation and attempt accounting.
+      **AC/VER:** statistical + deterministic tests on mock providers.
+- [ ] **T18.6 Budget enforcement**: policy CRUD already in T18.1; tracker
+      (in-memory + Redis), spend query over span `total_cost`, 429 message
+      byte-parity, ALERT webhooks through the Part I dispatcher, gateway-call
+      tracing so costs keep accruing.
+      **AC:** REJECT/ALERT behaviors match Python on a seeded spend fixture.
+      **VER:** budget differential test.
+- [ ] **T18.7 Guardrails execution** per D17: BEFORE/AFTER orchestration,
+      VALIDATION 400s, SANITIZATION via action endpoint with the bypass
+      header, no-post-guardrails-on-streams rule.
+      **AC:** guardrail matrix (stage × action × violation) parity.
+      **VER:** mock-judge differential.
+
+### Phase 19 — Execution parity (Tier C through the worker)
+
+- [ ] **T19.1 GenAI evaluate end-to-end**: invoke → worker →
+      assessments/metrics/trace-links identical to Python for builtin +
+      judge scorers (LLM stubbed via the gateway mock).
+      **AC:** run + trace state after evaluation diff-clean vs Python.
+      **VER:** end-to-end differential on a seeded trace corpus.
+- [ ] **T19.2 Scorer invoke + online scoring end-to-end**: batch jobs,
+      SCORER_ERROR capture semantics, checkpoint advancement, sampling.
+      **AC/VER:** same-seed scheduler+scorer run produces identical
+      assessments/checkpoints.
+- [ ] **T19.3 Issue detection end-to-end**: detection run, issue rows,
+      issue-assessments on traces (LLM stubbed).
+      **AC/VER:** issue set + trace annotations diff-clean.
+- [ ] **T19.4 Prompt optimization end-to-end**: GEPA + MetaPrompt paths
+      (optimizer LLM stubbed), run params, optimized-prompt registration,
+      job result URI.
+      **AC/VER:** job + run + prompt-registry state diff-clean.
+
+### Phase 20 — Assistant + promptlab
+
+- [ ] **T20.1 Assistant sessions + routes**: session file store (atomic
+      write, UUID validation, PID files), all 9 routes, localhost gate, SSE
+      framing, config + skills + models endpoints; D18 resolution for the
+      stream_url path.
+      **AC:** assistant UI chat works against Rust with the dev stub.
+      **VER:** HTTP tests + `dev/run_dev_server.py --stub-providers claude`
+      smoke against the Rust server.
+- [ ] **T20.2 CLI providers**: claude/codex subprocess spawn (exact flag
+      construction, permission modes), NDJSON parsing, message filtering,
+      usage events, SIGKILL→interrupted, cancellation, health probes with
+      the 501/412/401 mapping.
+      **AC:** stub-CLI streams frame-identical to Python; real-CLI manual
+      smoke.
+      **VER:** SSE recorder vs Python with the stub.
+- [ ] **T20.3 OpenAI-compatible provider + tool executor**: tool loop,
+      permission pause/resume, session-in-session_id encoding + 500 KB
+      trim-by-turn-groups, sandboxed Bash/Read/Write/Edit with the
+      confinement checks ported exactly + adversarial escape tests.
+      **AC:** tool-loop conversation transcripts match; escape suite all
+      negative.
+      **VER:** `rust/tests/assistant_tools.rs` incl. traversal/symlink
+      matrix.
+- [ ] **T20.4 Promptlab** per D19: run creation parity + pyfunc promptlab
+      model artifact + `eval_results_table.json`, loadable by the Python
+      client.
+      **AC:** `mlflow.pyfunc.load_model` on a Rust-created promptlab run
+      predicts through the gateway identically.
+      **VER:** cross-language load test.
+
+### Phase 21 — Trace archival (closes D6)
+
+- [ ] **T21.1 Config + flag**: `--trace-archival-config` /
+      `MLFLOW_TRACE_ARCHIVAL_CONFIG` YAML parsing/validation (incl. repo
+      support constraints and the artifacts-only conflict), 5s-TTL cache
+      with stale tolerance.
+      **AC:** invalid configs fail startup with Python's messages.
+      **VER:** config-parity unit tests.
+- [ ] **T21.2 Store paths**: `archive_traces`, transactional finalize
+      (tag flips + content blank + generation guard), archived-payload
+      deletion on trace delete, ARCHIVE_REPO reads in `getTrace` /
+      `get-trace-artifact` (removing the Part I NOT_IMPLEMENTED stubs from
+      T4.1/T4.5), retention/allowlist resolution.
+      **AC:** archive→read→delete cycle byte-matches Python; D6 closed.
+      **VER:** archival differential on sqlite + postgres.
+- [ ] **T21.3 OTLP payloads**: `traces.pb` writer/reader (single
+      ResourceSpans/ScopeSpans, root-first sort) interoperable with
+      Python-written payloads both directions.
+      **AC/VER:** cross-language payload fixtures.
+- [ ] **T21.4 Scheduler task**: minute tick + interval gate + workspace
+      fairness + per-pass budget on the §14.5 scheduler.
+      **AC/VER:** same-seed scheduling decisions match Python.
+
+### Phase 22 — Compliance & cutover
+
+- [ ] **T22.1 Differential corpus genai sections** for every Tier A surface +
+      invoke submission parity; compliance CI stays a required gate.
+      **AC:** zero non-allowlisted diffs incl. genai sections.
+      **VER:** CI artifact.
+- [ ] **T22.2 Python-suite conformance**: T15.5's inventoried suites green
+      against Rust via the launcher switch on the DB matrix.
+      **AC/VER:** CI logs.
+- [ ] **T22.3 SSE/streaming differential** (gateway + assistant) green
+      frame-by-frame against mocks/stubs.
+      **AC/VER:** recorder CI job.
+- [ ] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
+      phase; final state removes the Python server container from
+      `rust/deploy/docker-compose.yml` (the image remains solely as the
+      worker runtime baked into the Rust container); `smoke.sh` asserts
+      zero `X-MLflow-Backend: python` responses.
+      **AC:** full-stack compose serves everything from Rust; genai UI pages
+      work.
+      **VER:** `smoke.sh` + `smoke_frontend.sh` extended.
+- [ ] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
+      budgets/guardrails), scorers + evaluation runs pages, datasets, issues,
+      review queues, labeling, prompt optimization, assistant panel.
+      **AC/VER:** T11.6-style recorded checklist.
+- [ ] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
+      rotation, worker-runtime deployment (Python env alongside the binary),
+      Redis budget tracker option, assistant CLI prerequisites, archival
+      runbook.
+      **AC/VER:** fresh-operator walkthrough.
+
+---
+
+## 17. Open decisions & risks (Part II)
+
+| ID | Decision/Risk | Notes | Status |
+|---|---|---|---|
+| D14 | **Execution model**: Rust owns wire + storage + queue + scheduling; Tier C payloads execute in per-job Python worker subprocesses running the existing `mlflow.genai` code (the subprocess boundary Python already has). Workers talk back to the Rust server over HTTP. Native-Rust reimplementation of judges/harness is a possible v2, never a v1 gate. | Consequence: the deployment image bundles a Python env with `mlflow` for execution features; without it, invoke/online-scoring/detection/optimization return a clear "job execution disabled" error (mirroring `MLFLOW_SERVER_ENABLE_JOB_EXECUTION` off). | proposed |
+| D15 | **Legacy standalone YAML gateway** (`mlflow gateway start`) stays Python and deprecated; only the DB-backed embedded gateway is ported. | The `gateway-proxy` bridge route IS ported. | proposed |
+| D16 | **litellm coverage**: native adapters for the explicitly-implemented providers; the litellm-fallback path and litellm cost tables need a strategy — (a) vendor a pinned litellm model-price snapshot for cost + return a clear unsupported-provider error for fallback-only providers, or (b) route fallback provider calls through the Python worker. | Cost accuracy feeds budget enforcement — snapshot staleness is user-visible. Lean (a) for v1. | open |
+| D17 | **Guardrail execution**: JudgeGuardrail wraps a Scorer and runs inline in the request path — worker dispatch would add subprocess latency per request. Options: (a) native Rust judge execution for builtin/instructions judges (one templated LLM call via the gateway engine), decorator/third-party scorers as guardrails unsupported (matches OSS scorer restrictions); (b) a persistent (not per-call) Python sidecar for judge evaluation. | Lean (a). | open |
+| D18 | **Assistant `/message` stream_url bug** (`api.py:154` returns `/stream/{id}`, route is `/sessions/{id}/stream`): the frontend builds its own URL, so both forms are dead letters. Propose: emit the correct form, document the deviation, and verify the UI never consumes the field. | Trivial but wire-visible. | proposed |
+| D19 | **Promptlab pyfunc artifact writer**: the MLmodel/requirements/`parameters.yaml` layout must stay loadable by Python. Options: (a) Rust writes the artifact files byte-compatibly (they're static YAML/JSON templated with version + signature); (b) delegate to the Python worker. | Lean (a) — no dynamic Python needed to *write* the layout; add a cross-language load test either way. | open |
+| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. Consequence: the Python job runner and the Rust runner must never run simultaneously against the same DB (double execution) — cutover runbook item; recovery semantics arguably improve (no queue/DB divergence). | | proposed |
+| D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | proposed |
+| D22 | **FastAPI-vs-Flask error-shape split**: gateway/assistant routes emit FastAPI-style errors (`{"detail": ...}`, 422 validation shape) while Flask routes emit MLflow proto-style errors. Rust must keep the per-route split (Part I already did this for OTLP's 422). | | accepted |
+| R4 | **Provider API drift**: 23 provider adapters chase moving upstream APIs. | Mock-provider conformance suite pins today's behavior; pin the supported MLflow version per Rust release (extends D8). | mitigated |
+| R5 | **SSE byte-parity is fragile** across providers/chunk boundaries. | Frame-level recorder + recorded fixtures (T15.5/T22.3); allowlist only documented deviations. | mitigated |
+| R6 | **KEK/secret ops**: AAD immutability means renames brick secrets; wrong passphrase = silent unusable gateway. | Startup probe decrypts a sentinel; runbook coverage (T22.6). | open |
+| R7 | **Worker version skew**: Rust server vs installed `mlflow` Python package must be compatible (job function signatures, serialized-scorer schema). | Worker handshake reports mlflow version; Rust refuses mismatched majors; pin in the image. | open |
+| R8 | **Tool-executor sandbox parity** is security-critical (LLM-driven shell + file ops). | Port confinement checks exactly + adversarial escape suite (T20.3); restricted-mode allowlist default. | mitigated |
+
+---
+
+## 18. Research appendix (Part II — where the facts came from)
+
+- Datasets: `mlflow/protos/{service,datasets}.proto`; handlers
+  `handlers.py:5004-5089,6852-6874,7012-7242`; store
+  `sqlalchemy_store.py:6863-7700`; models `dbmodels/models.py:1554-1848,2052`;
+  eval job `mlflow/genai/evaluation/{job,base,harness}.py`.
+- Scorers/jobs: `service.proto:1790-1867,5105-5210`;
+  `handlers.py:5443-5648,6663-6720,6981-7004`; models
+  `models.py:2125-2371`; store `sqlalchemy_store.py:2561-2888`; scorer
+  serialization `mlflow/genai/scorers/{base,scorer_utils}.py`; jobs framework
+  `mlflow/server/jobs/{__init__,utils,_job_runner,_job_subproc_entry}.py`;
+  job store `mlflow/store/jobs/sqlalchemy_store.py`; online scoring
+  `mlflow/genai/scorers/online/*`, `mlflow/genai/scorers/job.py`.
+- Issues/labels/review-queues/prompt-opt: protos
+  `{issues,label_schemas,review_queues,prompt_optimization}.proto` +
+  `service.proto:1377-1590,2633-3010`; handlers
+  `handlers.py:4428-4771,4925,7359-7647,7763-7784,7854-7858`; models
+  `models.py:1154,3232,3389-3691`; detection
+  `mlflow/genai/discovery/{job,pipeline}.py`; optimization
+  `mlflow/genai/optimize/{job,optimize}.py` + `optimizers/`.
+- Gateway: `mlflow/server/gateway_api.py`, `mlflow/server/fastapi_app.py`;
+  providers `mlflow/gateway/providers/*` (`base.py`, `utils.py`,
+  `provider_registry.py`); schemas `mlflow/gateway/schemas/*`,
+  `mlflow/types/chat.py`; crypto `mlflow/utils/crypto.py`; store mixin
+  `mlflow/store/tracking/gateway/{sqlalchemy_mixin,config_resolver}.py`;
+  budget `mlflow/gateway/budget.py` + `budget_tracker/*`; guardrails
+  `mlflow/gateway/{guardrails,guardrail_utils}.py`; models
+  `models.py:2398-3227`; proto `service.proto:1974-2618,5209+`; legacy app
+  `mlflow/gateway/{app,cli,runner,config}.py`.
+- Assistant/promptlab: `mlflow/server/assistant/{api,session}.py`;
+  `mlflow/assistant/{types,config}.py` + `providers/*`; stubs
+  `dev/dev_stubs/`; promptlab `handlers.py:2340-2404`,
+  `mlflow/utils/promptlab_utils.py`, `mlflow/prompt/promptlab_model.py`.
+- Archival: `mlflow/tracing/{trace_archival_config,trace_archival_service}.py`,
+  `mlflow/tracing/otel/otel_archival.py`, `mlflow/tracing/constant.py:209`;
+  store `sqlalchemy_store.py:4356-4431,5830+,6390-6437`,
+  `store/tracking/utils/trace_archival.py`; repo layer
+  `store/artifact/artifact_repo.py:427-549`; validation
+  `utils/validation.py:197-235`; CLI `mlflow/cli/__init__.py:488-696`.
+- Auth for all areas: `mlflow/server/auth/__init__.py`
+  (`:2527-2641,2593-2610,2562-2566,2196,2726-2729,3566,4479-4483`).
