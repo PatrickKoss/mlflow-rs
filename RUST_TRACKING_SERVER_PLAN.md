@@ -1269,12 +1269,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 9 — Auth & RBAC
 
-- [ ] **T9.1 Auth DB layer**: 4 RBAC tables, `alembic_version_auth` head check
+- [x] **T9.1 Auth DB layer**: 4 RBAC tables, `alembic_version_auth` head check
       (`f1a2b3c4d5e6`), werkzeug-compatible hash verify/generate, read-replica routing,
       admin bootstrap (`create_admin_user` + default-password warning).
       **AC:** Rust authenticates users created by Python and vice versa on a shared
       `basic_auth.db`.
       **VER:** cross-language auth-DB test.
+      *(Done 2026-07-17: `mlflow-auth` crate fleshed out — schema/entities for
+      users/roles/role_permissions/user_role_assignments (legacy per-resource
+      tables ignored per §5.3), `AuthDb` with write pool + optional read
+      replica (sqlalchemy_store.py:111-134 parity incl. same-URI warning),
+      head `f1a2b3c4d5e6`/`alembic_version_auth` refusal with Python wording.
+      `hash.rs` byte-matched to werkzeug 3.1.8: verifies scrypt+pbkdf2
+      (constant-time via subtle), generates scrypt:32768:8:1 dklen=64 with
+      62-char SALT_CHARS salt; RFC 7914 vector + live-Python cross-checks
+      both directions. Bootstrap: admin/password1234 + verbatim warning
+      (auth/__init__.py:3694). Alembic-migrated fixture via
+      `rust/tools/make_auth_test_db.py` (scrypt + pbkdf2 users, seeded RBAC)
+      committed with .gitignore exception. Quirks: authenticate→false not
+      error; >12-chars password rule by code points; sqlite 0/1 bool
+      tolerance; MySQL last_insert_id fallback. 9 unit + 5 cross-language
+      tests.)*
 - [ ] **T9.2 Users API** (§3.16): all 8 endpoints incl. self-service password rules and
       cannot-delete-self; hand-rolled JSON shapes.
       **AC:** `tests/server/auth/test_client.py` user sections pass against Rust.
