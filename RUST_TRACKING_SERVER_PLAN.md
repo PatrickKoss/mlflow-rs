@@ -1,6 +1,18 @@
 # Rust MLflow Server — Implementation Plan (everything except genai)
 
-Status: **in progress (Phase 2 complete except T2.2 CI matrix; Phases 3 + 4 complete — tracking + tracing HTTP APIs landed)** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+Status: **in progress — Phases 3, 4, 5 complete; Phase 7 complete except T7.5;
+Phase 8 T8.1/T8.2 complete; paused before Phase 9 for review (2026-07-15).**
+· Branch: `feature/rust-tracking-server` · Last updated: 2026-07-15
+
+**Paused-state notes (2026-07-15):** T6.1/T6.2 (GraphQL), T8.3 (webhook delivery
+engine), and T7.5 (prompts API validation) were in flight when work paused; their
+agents were stopped mid-task with UNCOMMITTED partial code left in
+`.claude/worktrees/agent-{a7eb52ff0f8515490,a0e3b48480b2c2c0a,aaa45a7022ac4825a}`
+(GraphQL / T8.3 / T7.5 respectively — the first two looked near completion,
+salvage or redo on resume). T8.4 (event triggers) not started; T7.4 left
+`// WEBHOOK SEAM:` markers at every registry trigger site for it. Also open
+pre-Phase-9: T2.2 CI matrix. Phase 9+ (auth/RBAC, workspaces, deployment,
+compliance) not started, pending review.
 
 This document is the master plan for reimplementing the MLflow server in Rust for all
 **non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
@@ -1129,12 +1141,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       replays clean; bring-up caught 2 real bugs (outer-alias reference in
       subquery; positional-bind ordering on sqlite/mysql), both fixed.
       13 behavioral + 2 corpus tests + live pg/mysql smoke (env-gated).)*
-- [ ] **T7.4 Registry REST endpoints** (§3.14, 21 endpoints) incl. the method-overloaded
+- [x] **T7.4 Registry REST endpoints** (§3.14, 21 endpoints) incl. the method-overloaded
       alias route and GET+POST get-latest-versions; store-side max_results limits
       (RM 100/1000, MV 10000/200000).
       **AC:** registry sections of `test_rest_tracking.py` (model version source
       validation tests, lines 1597-2018) pass against Rust.
       **VER:** Phase 12 runner `-k "registered_model or model_version"`.
+      *(Done 2026-07-15: all 21 in `mlflow-server/src/registry.rs` via a
+      `ModelRegistryService` branch in `handler_for`. Method-overloaded alias
+      route falls out naturally: axum 0.8 merges MethodRouters for a repeated
+      path with disjoint methods, one route-table entry each. Full port of
+      createModelVersion source validation
+      (`source_validation.rs`: relative-path/encoded-traversal/%00 rejection,
+      run/model source checks, validation-regex gate; std-only URI/path
+      helpers) with byte-matched errors + traversal negative tests.
+      MV search max_results: raw-request presence check distinguishes omitted
+      (→ store default 10000) from the proto's declared default 200000.
+      Alias-not-found is 400 INVALID_PARAMETER_VALUE (matches
+      sqlalchemy_store.py:1592). `// WEBHOOK SEAM:` markers left at every
+      Python trigger site for T8.4. Deferred: the `model_id` back-link tag
+      Python writes via the tracking store after MV create (cross-store
+      boundary, same as T7.2's logged-model-id note). 21 HTTP + 7 unit tests.)*
 - [ ] **T7.5 Prompts-on-registry validation**: the Prompts UI (list/create/version/alias
       prompt) works against the Rust registry unchanged.
       **AC:** UI smoke: prompts pages function; models pages never show prompts.
