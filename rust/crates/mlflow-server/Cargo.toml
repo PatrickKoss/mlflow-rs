@@ -78,5 +78,7 @@ serde_json = { workspace = true }
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 tempfile = "3.27.0"
 # The T9.3 RBAC HTTP tests build a fresh auth DB (create the four tables +
-# alembic head) over a temp SQLite file before wrapping it in an `AuthStore`.
+# alembic head) over a temp SQLite file before wrapping it in an `AuthStore`;
+# the workspace HTTP tests seed/count root-table rows directly in the SQLite
+# fixture (the store's `Val`/`exec` helpers are crate-private).
 sqlx = { workspace = true }

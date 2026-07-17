@@ -640,10 +640,10 @@ async fn bad_max_results_is_invalid_parameter_value() {
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
     // A route-table RPC that `handler_for` does not yet wire up → 404 (no route
-    // match). Workspaces (`WorkspacesService`, §3.17) are a later phase, so
-    // `listWorkspaces` (`/api/3.0/mlflow/workspaces`) falls through. Was
-    // previously a registry endpoint, but those landed in T7.4.
-    let res = get(&server, "/api/3.0", "/mlflow/workspaces").await;
+    // match). Label schemas (§3.x) are a later phase, so `getLabelSchema`
+    // (`/api/3.0/mlflow/label-schemas/get`) falls through. Was previously
+    // `listWorkspaces`, but workspaces landed in T10.2.
+    let res = get(&server, "/api/3.0", "/mlflow/label-schemas/get").await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     // Route miss, not a JSON error body from a matched handler.
     assert!(res.body.is_empty(), "{}", res.body);

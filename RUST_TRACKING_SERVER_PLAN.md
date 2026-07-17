@@ -1412,10 +1412,17 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       evicted on delete. Trace-archival validation ported except the
       Databricks get_artifact_repository branch (doc-commented, needs the
       Python repo registry). 9 unit + 31 integration tests.)*
-- [ ] **T10.2 Workspace REST endpoints** (§3.17) incl. 201/204 status codes, `?mode=`,
+- [x] **T10.2 Workspace REST endpoints** (§3.17) incl. 201/204 status codes, `?mode=`,
       503-when-disabled.
       **AC:** `tests/server/test_workspace_endpoints.py` passes against Rust.
       **VER:** Phase 12 workspace runner.
+      *(Done: `mlflow-server/src/workspaces_api.rs` — 5 `MlflowService` workspace
+      RPCs wired via `handler_for` in `lib.rs`; `AppState` gains an
+      `Option<Arc<WorkspaceStore>>` (`with_workspace_store`), `main.rs` builds it
+      when `MLFLOW_ENABLE_WORKSPACES` is truthy. Handler-level trace-archival /
+      artifact-root validators reproduce Python's `parameter_name` messages;
+      create=201, delete=204 with `?mode=` (default RESTRICT, unknown → 400),
+      disabled → plain-text 503. 8 unit + 30 integration tests.)*
 - [ ] **T10.3 Request workspace context + scoping**: `X-MLFLOW-WORKSPACE` header
       resolution (skip for server-info), per-request context threaded through tracking
       **and** registry queries (`WHERE workspace = ?` on every scoped model), artifact
