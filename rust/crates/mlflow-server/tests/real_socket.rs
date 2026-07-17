@@ -27,6 +27,7 @@ async fn serves_health_over_real_socket_and_shuts_down_gracefully() {
         allowed_hosts: None,
         cors_allowed_origins: None,
         x_frame_options: "SAMEORIGIN".to_string(),
+        ..Default::default()
     };
     let app = build_app(&config);
 

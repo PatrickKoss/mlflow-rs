@@ -19,12 +19,6 @@ use tracing_subscriber::EnvFilter;
 /// `DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH` (`mlflow/store/tracking/__init__.py:12`).
 const DEFAULT_ARTIFACT_ROOT: &str = "./mlruns";
 
-/// Python's enable signal for the basic-auth app: the `MLFLOW_AUTH_CONFIG_PATH`
-/// env var (set by `mlflow server --app-name basic-auth`). We opt into the auth
-/// API surface when it is present, then parse the referenced `basic_auth.ini`
-/// (or the packaged default when unset) into [`AuthConfig`] (T9.8).
-const MLFLOW_AUTH_CONFIG_PATH_ENV: &str = "MLFLOW_AUTH_CONFIG_PATH";
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -33,6 +27,24 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     let config = ServerConfig::from_cli(cli)?;
+
+    // `--workers` is accepted for deploy-script parity but the Rust server runs
+    // a single async tokio runtime, so there are no worker processes to spawn.
+    if let Some(workers) = config.workers {
+        tracing::info!(
+            workers,
+            "--workers accepted but ignored: the Rust server is async (single tokio runtime)"
+        );
+    }
+    // `--read-replica-backend-store-uri` is accepted and carried in the config,
+    // but the Rust tracking store does not yet split reads onto a replica (SEAM,
+    // see CLI_PARITY.md). Warn so the operator knows reads still hit the primary.
+    if let Some(replica) = &config.read_replica_backend_store_uri {
+        tracing::warn!(
+            replica_uri = %replica,
+            "--read-replica-backend-store-uri accepted but not yet wired: all reads use the primary backend store"
+        );
+    }
 
     // Serve the tracking API when a backend store is configured; otherwise run
     // the ops-only app (health/version/metrics). The store is verified against
@@ -78,19 +90,24 @@ async fn main() -> anyhow::Result<()> {
             .with_webhook_store(webhook_store, webhook_dispatcher);
 
             // Enable the auth/RBAC API (T9.2 users, later T9.3 roles) when the
-            // basic-auth app is configured. See the T9.8 SEAM note above.
-            if let Some(auth_store) = build_auth_store().await? {
-                app_state = app_state.with_auth_store(auth_store);
+            // basic-auth app is configured (`--app-name basic-auth` or
+            // `MLFLOW_AUTH_CONFIG_PATH`; resolved in `ServerConfig`, T11.1).
+            if config.auth_enabled {
+                if let Some(auth_store) = build_auth_store().await? {
+                    app_state = app_state.with_auth_store(auth_store);
+                }
             }
 
-            // Workspace REST endpoints (T10.2) are enabled iff
-            // `MLFLOW_ENABLE_WORKSPACES` is truthy (`MLFLOW_ENABLE_WORKSPACES.get()`,
-            // default False). When on, the workspace store shares the tracking DB
-            // pool; `MLFLOW_WORKSPACE_STORE_URI` (unset → tracking URI) only names
-            // the `mlflow gc` hint. When off, the endpoints return a 503.
-            if workspaces_enabled() {
-                let workspace_uri = std::env::var("MLFLOW_WORKSPACE_STORE_URI")
-                    .ok()
+            // Workspace REST endpoints (T10.2) are enabled iff the resolved
+            // workspaces signal is on (`--enable-workspaces`/`--disable-workspaces`
+            // overriding `MLFLOW_ENABLE_WORKSPACES`, T11.1). When on, the
+            // workspace store shares the tracking DB pool; `--workspace-store-uri`
+            // (unset → tracking URI) only names the `mlflow gc` hint. When off,
+            // the endpoints return a 503.
+            if config.enable_workspaces {
+                let workspace_uri = config
+                    .workspace_store_uri
+                    .clone()
                     .unwrap_or_else(|| uri.clone());
                 let workspace_store = WorkspaceStore::new(db.clone(), workspace_uri);
                 app_state = app_state.with_workspace_store(workspace_store);
@@ -122,17 +139,15 @@ async fn main() -> anyhow::Result<()> {
 /// validators read `default_permission` and the credential cache honours the
 /// `auth_cache_*` fields.
 ///
-/// Unlike the pre-T9.8 seam, this honours **only** `MLFLOW_AUTH_CONFIG_PATH`
-/// (which selects the ini) — the DB URIs come from the ini's `database_uri` /
-/// `read_database_uri`, exactly as Python resolves them, so the same file drives
-/// both servers. Note: Python's `create_app` also requires
-/// `MLFLOW_FLASK_SERVER_SECRET_KEY` for Flask CSRF; per plan D12 the Rust server
-/// owns its own per-process signup-CSRF secret (see `auth_api::signup`), so that
-/// env var is intentionally *not* required here.
+/// The caller gates this on `config.auth_enabled` (`--app-name basic-auth` or
+/// `MLFLOW_AUTH_CONFIG_PATH` present, resolved in `ServerConfig`). The ini file
+/// is selected by `MLFLOW_AUTH_CONFIG_PATH` (unset → packaged `basic_auth.ini`),
+/// and the DB URIs come from the ini's `database_uri` / `read_database_uri`,
+/// exactly as Python resolves them, so the same file drives both servers. Note:
+/// Python's `create_app` also requires `MLFLOW_FLASK_SERVER_SECRET_KEY` for Flask
+/// CSRF; per plan D12 the Rust server owns its own per-process signup-CSRF secret
+/// (see `auth_api::signup`), so that env var is intentionally *not* required here.
 async fn build_auth_store() -> anyhow::Result<Option<AuthStore>> {
-    if std::env::var_os(MLFLOW_AUTH_CONFIG_PATH_ENV).is_none() {
-        return Ok(None);
-    }
     let config = AuthConfig::read()?;
     let auth_db =
         AuthDb::connect_and_verify(&config.database_uri, config.read_database_uri.as_deref())
@@ -151,15 +166,6 @@ async fn build_auth_store() -> anyhow::Result<Option<AuthStore>> {
         "basic-auth app enabled; auth API mounted"
     );
     Ok(Some(store))
-}
-
-/// `MLFLOW_ENABLE_WORKSPACES.get()` (`mlflow/environment_variables.py:116`,
-/// default `False`): truthy iff the env var is `"true"`/`"1"` (case-insensitive).
-fn workspaces_enabled() -> bool {
-    std::env::var("MLFLOW_ENABLE_WORKSPACES")
-        .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1"))
-        .unwrap_or(false)
 }
 
 /// Resolves once SIGINT (Ctrl-C) or SIGTERM is received, so

@@ -9,6 +9,12 @@
 //! | `MLFLOW_SQLALCHEMYSTORE_MAX_OVERFLOW` | extra connections above pool_size | added to `max_connections` |
 //! | `MLFLOW_SQLALCHEMYSTORE_POOL_RECYCLE` | recycle a connection after N seconds | `max_lifetime` |
 //! | `MLFLOW_SQLALCHEMYSTORE_ECHO` | log all SQL | (informational; sqlx logs via `tracing`) |
+//! | `MLFLOW_SQLALCHEMYSTORE_POOLCLASS` | SQLAlchemy `poolclass` (e.g. `NullPool`) | (accepted-noop; sqlx has one pool impl, no analogue) |
+//!
+//! `MLFLOW_SQLALCHEMYSTORE_POOLCLASS` selects a SQLAlchemy pool *class*
+//! (`QueuePool`, `NullPool`, `SingletonThreadPool`, …). sqlx exposes a single
+//! pool implementation with no swappable class, so this var has no faithful
+//! mapping; it is accepted for parity and otherwise ignored. See `CLI_PARITY.md`.
 //!
 //! **Mapping rationale.** SQLAlchemy's `QueuePool` keeps `pool_size` persistent
 //! connections and allows up to `max_overflow` additional transient ones, so the

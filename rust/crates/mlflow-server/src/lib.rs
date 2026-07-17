@@ -87,11 +87,18 @@ pub fn build_app_with_recorder(
 ) -> Router {
     let mut api = Router::new()
         .route("/health", get(routes::health))
-        .route("/version", get(routes::version))
-        .route(
+        .route("/version", get(routes::version));
+
+    // `/metrics` (Prometheus exporter) is gated on `--expose-prometheus`
+    // (env `MLFLOW_EXPOSE_PROMETHEUS`), matching Python: the exporter is only
+    // installed when `PROMETHEUS_EXPORTER_ENV_VAR` is set
+    // (`mlflow/server/__init__.py:90`). When disabled, `/metrics` 404s.
+    if config.expose_prometheus {
+        api = api.route(
             "/metrics",
             get(move || routes::metrics(metrics_handle.clone())),
         );
+    }
 
     // `/signup` (plan T9.7): registered with `app.add_url_rule(rule=SIGNUP,
     // ...)` in Python — a *raw* rule, unlike every other auth-app route,
@@ -103,7 +110,7 @@ pub fn build_app_with_recorder(
     let signup_state = state.clone().filter(AppState::auth_enabled);
 
     if let Some(state) = state {
-        api = api.merge(register_proto_routes(state));
+        api = api.merge(register_proto_routes(state, config.artifacts_only));
     }
 
     let api = api
@@ -187,11 +194,23 @@ pub fn build_app_with_recorder(
 /// (`mlflow/server/__init__.py:135` — the route table only produces the
 /// leading-slash-missing form, §3.4 quirk) and the ajax-only,
 /// non-proto-backed `get-history-bulk` (plan T3.3).
-fn register_proto_routes(state: AppState) -> Router {
+///
+/// When `artifacts_only` is set (`--artifacts-only` / `MLFLOW_ARTIFACTS_ONLY`),
+/// only the artifact-serving surface is registered: the `MlflowArtifactsService`
+/// proxy routes plus the root `/get-artifact` and `/upload-artifact` endpoints
+/// (which Python leaves enabled — they are NOT `@_disable_if_artifacts_only`,
+/// `handlers.py:1519,2408`). Every tracking RPC and the artifacts-only-disabled
+/// endpoints (e.g. `/model-versions/get-artifact`, `handlers.py:3033`) are
+/// omitted, matching Python's 503-on-disabled semantics with an outright 404.
+fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
     use axum::routing::get;
 
     let mut router: Router<AppState> = Router::new();
     for spec in mlflow_proto::ROUTE_TABLE {
+        // In artifacts-only mode, only the artifact proxy service is served.
+        if artifacts_only && spec.service != "MlflowArtifactsService" {
+            continue;
+        }
         let Some(handler) = handler_for(spec.service, spec.method, spec.http_method) else {
             continue;
         };
@@ -199,6 +218,20 @@ fn register_proto_routes(state: AppState) -> Router {
             router = router.route(&to_axum_path(&route.path), handler.clone());
         }
     }
+
+    // `/get-artifact` and `/upload-artifact` are the two artifact-plane
+    // endpoints Python leaves enabled in artifacts-only mode, so they are always
+    // registered. Everything gated behind `!artifacts_only` below is a tracking
+    // endpoint (or an artifacts-only-disabled artifact endpoint).
+    router = router.route("/get-artifact", get(artifacts::get_artifact));
+    router = router.route(
+        "/ajax-api/2.0/mlflow/upload-artifact",
+        axum::routing::post(artifacts::upload_artifact),
+    );
+    if artifacts_only {
+        return register_role_and_auth_layers(router, state);
+    }
+
     router = router.route(
         "/ajax-api/2.0/mlflow/experiments/search-datasets",
         axum::routing::post(datasets::search_datasets),
@@ -224,20 +257,16 @@ fn register_proto_routes(state: AppState) -> Router {
     // `/v1/traces` (`mlflow/tracing/utils/otlp.py:20`); the static-prefix
     // nesting in `build_app_with_recorder` still applies to it.
     router = router.route("/v1/traces", axum::routing::post(otlp::export_traces));
-    // Artifact plane (plan T5.1/T5.3/T5.4, §3.11). `/get-artifact` and
-    // `/model-versions/get-artifact` are served at the root
-    // (`mlflow/server/__init__.py:111,117`), NOT under an api/ajax prefix.
-    router = router.route("/get-artifact", get(artifacts::get_artifact));
+    // Artifact plane (plan T5.1/T5.3/T5.4, §3.11). `/get-artifact` is registered
+    // above (kept in artifacts-only mode); `/model-versions/get-artifact` is a
+    // tracking endpoint disabled in artifacts-only mode (`handlers.py:3033`,
+    // served at the root, `__init__.py:117`), so it lives here.
     router = router.route(
         "/model-versions/get-artifact",
         get(artifacts::get_model_version_artifact),
     );
-    // ajax-only `upload-artifact` (`__init__.py:151`) + logged-model artifact
-    // file download (`__init__.py:166`).
-    router = router.route(
-        "/ajax-api/2.0/mlflow/upload-artifact",
-        axum::routing::post(artifacts::upload_artifact),
-    );
+    // logged-model artifact file download (`__init__.py:166`); `/upload-artifact`
+    // is registered above (kept in artifacts-only mode).
     router = router.route(
         "/ajax-api/2.0/mlflow/logged-models/{model_id}/artifacts/files",
         get(artifacts::get_logged_model_artifact),
@@ -262,6 +291,14 @@ fn register_proto_routes(state: AppState) -> Router {
     );
     // ---- end server-info (T11.5) ----
 
+    register_role_and_auth_layers(router, state)
+}
+
+/// Apply the auth-user routes (T9.2), role/permission routes (T9.3), and the
+/// authorization middleware (T9.4) to `router`, then erase the state type.
+/// Shared between the normal path and the `--artifacts-only` early return so the
+/// auth surface is wired identically regardless of mode.
+fn register_role_and_auth_layers(mut router: Router<AppState>, state: AppState) -> Router {
     // ---- auth API routes (T9.2) ----
     // Hand-rolled JSON endpoints from the `mlflow.server.auth` app
     // (`mlflow/server/auth/__init__.py`), NOT proto ROUTE_TABLE routes. Mounted
@@ -530,10 +567,14 @@ mod tests {
         ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 0,
+            workers: None,
             static_prefix: static_prefix.map(str::to_string),
             backend_store_uri: None,
+            read_replica_backend_store_uri: None,
+            registry_store_uri: None,
             default_artifact_root: None,
             serve_artifacts: true,
+            artifacts_only: false,
             artifacts_destination: None,
             // These ops/routing unit tests issue raw axum requests without a
             // `Host` header (real HTTP clients always send one). Disable host
@@ -543,6 +584,12 @@ mod tests {
             allowed_hosts: Some(vec!["*".to_string()]),
             cors_allowed_origins: None,
             x_frame_options: security::DEFAULT_X_FRAME_OPTIONS.to_string(),
+            // `/metrics` is gated on this; the ops routing tests below include a
+            // metrics-endpoint assertion, so enable it here.
+            expose_prometheus: true,
+            auth_enabled: false,
+            enable_workspaces: false,
+            workspace_store_uri: None,
         }
     }
 
