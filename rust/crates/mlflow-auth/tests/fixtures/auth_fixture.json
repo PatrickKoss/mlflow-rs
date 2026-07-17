@@ -1,0 +1,45 @@
+{
+  "alembic_head": "f1a2b3c4d5e6",
+  "alembic_version_table": "alembic_version_auth",
+  "users": [
+    {
+      "id": 1,
+      "username": "alice_scrypt",
+      "password": "alice-password-123",
+      "password_hash": "scrypt:32768:8:1$546HrX7UIXkdfbqB$0b302bcc2eb7b1d224bc39592a999884c4cef14261f54100dfd13c891e3cfec6434affde5d8fc58a7417af6b07af71dfa132766e0f37cb890364e26c37e7d80b",
+      "is_admin": true,
+      "method": "scrypt"
+    },
+    {
+      "id": 2,
+      "username": "bob_pbkdf2",
+      "password": "bob-password-4567",
+      "password_hash": "pbkdf2:sha256:1000000$nfmfNwk54iji2T4F$9aade0ad89e3378c0689632c1771fc4a4c34bd1f303905577ea9b26cbdd5513b",
+      "is_admin": false,
+      "method": "pbkdf2"
+    }
+  ],
+  "roles": [
+    {
+      "id": 1,
+      "name": "editors",
+      "workspace": "default",
+      "description": "Can edit experiments",
+      "assigned_user_id": 2,
+      "permissions": [
+        {
+          "resource_type": "experiment",
+          "resource_pattern": "*",
+          "permission": "EDIT"
+        },
+        {
+          "resource_type": "registered_model",
+          "resource_pattern": "my-model",
+          "permission": "MANAGE"
+        }
+      ]
+    }
+  ],
+  "rust_roundtrip_plaintext": "rust-generated-secret-9",
+  "rust_generated_hash": null
+}

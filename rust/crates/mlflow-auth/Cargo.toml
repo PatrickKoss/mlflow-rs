@@ -12,5 +12,29 @@ workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+# The auth store reuses `mlflow-store`'s connection/dialect infrastructure
+# (the `Db` pool enum and `Dialect` SQL helpers). Its query-execution helpers
+# (`Val`/`Tx`/`RowLike`) are `pub(crate)`, so — like `mlflow-registry` and
+# `mlflow-webhooks` — a small local copy lives in this crate's `dbutil` module
+# (see its docs) pending consolidation into a shared crate.
+mlflow-store = { workspace = true }
+# The MLflow error model (codes/messages/wire shape); the store returns
+# `MlflowError`s so handler layers surface Python-identical errors.
+mlflow-error = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+# werkzeug-compatible password hashing (`pbkdf2:...`/`scrypt:...` verify +
+# generate). RustCrypto crates; constant-time compare via `subtle`, matching
+# Python's `hmac.compare_digest` (T9.1).
+pbkdf2 = { workspace = true }
+scrypt = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+subtle = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+mlflow-store = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
