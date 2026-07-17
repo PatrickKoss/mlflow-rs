@@ -285,7 +285,7 @@ fn require_non_empty<'a>(value: Option<&'a str>, param: &str) -> Result<&'a str,
 /// Map a store [`Experiment`] entity to the proto message. The proto uses `""`
 /// for an absent artifact location / tag value (proto2 string default), and
 /// timestamps default to `0` when unset (matching `to_mlflow_entity`/`to_proto`).
-fn to_proto_experiment(exp: Experiment) -> pb::Experiment {
+pub(crate) fn to_proto_experiment(exp: Experiment) -> pb::Experiment {
     pb::Experiment {
         experiment_id: Some(exp.experiment_id),
         name: Some(exp.name),

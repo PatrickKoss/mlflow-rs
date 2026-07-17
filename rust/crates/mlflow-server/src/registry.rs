@@ -952,7 +952,7 @@ fn request_has_max_results(parts: &Parts, body: &Bytes) -> Result<bool, MlflowEr
 /// Map a store [`RegisteredModel`] entity to its proto. `user_id` is never
 /// populated (§3.14). `latest_versions`, `tags`, and `aliases` are carried
 /// through exactly as the store populated them.
-fn to_proto_registered_model(model: RegisteredModel) -> pb::RegisteredModel {
+pub(crate) fn to_proto_registered_model(model: RegisteredModel) -> pb::RegisteredModel {
     pb::RegisteredModel {
         name: Some(model.name),
         creation_timestamp: model.creation_timestamp,
@@ -974,7 +974,7 @@ fn to_proto_registered_model(model: RegisteredModel) -> pb::RegisteredModel {
 /// Map a store [`ModelVersion`] entity to its proto. `version` is already a
 /// String in the entity (int-in-DB → string-in-proto). `status` maps the string
 /// stage name to the proto enum.
-fn to_proto_model_version(mv: ModelVersion) -> pb::ModelVersion {
+pub(crate) fn to_proto_model_version(mv: ModelVersion) -> pb::ModelVersion {
     pb::ModelVersion {
         name: Some(mv.name),
         version: Some(mv.version),

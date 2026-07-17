@@ -245,7 +245,7 @@ impl Validator {
 /// `default_permission` — T9.8 SEAM: reads `MLFLOW_AUTH_DEFAULT_PERMISSION`
 /// (default `"READ"`, the packaged `basic_auth.ini` value). The full ini-file
 /// config layer (`read_auth_config`) lands in T9.8.
-fn default_permission() -> &'static Permission {
+pub(crate) fn default_permission() -> &'static Permission {
     // T9.8 SEAM: replace this env fallback with `AuthConfig.default_permission`.
     let name = std::env::var("MLFLOW_AUTH_DEFAULT_PERMISSION").unwrap_or_else(|_| "READ".into());
     // An invalid value falls back to READ rather than panicking (defensive; the

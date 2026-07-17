@@ -1720,3 +1720,30 @@ impl PaginationToken {
 fn invalid_token(token: &str) -> MlflowError {
     MlflowError::invalid_parameter_value(format!("Invalid page token: {token}."))
 }
+
+/// Decode the `offset` from a `SearchLoggedModels` page token. Exposed for the
+/// auth after-request filter (`filter_search_logged_models`), which recomputes
+/// the resume token per Python's index-based math while re-fetching to refill a
+/// page. Returns `None` (offset `0`) semantics via the caller when the token is
+/// empty; an unparsable token is `INVALID_PARAMETER_VALUE`.
+pub fn logged_models_token_offset(token: &str) -> Result<usize, MlflowError> {
+    Ok(PaginationToken::decode(token)?.offset)
+}
+
+/// Encode a `SearchLoggedModels` page token at `offset` with the given request
+/// parameters — the inverse of [`logged_models_token_offset`], mirroring
+/// `SearchLoggedModelsPaginationToken(offset=..., **params).encode()`.
+pub fn logged_models_page_token(
+    offset: usize,
+    experiment_ids: &[String],
+    filter_string: Option<&str>,
+    order_by: &[LoggedModelOrderByInput],
+) -> String {
+    PaginationToken {
+        experiment_ids: experiment_ids.to_vec(),
+        filter_string: filter_string.map(str::to_string),
+        order_by: order_by.to_vec(),
+        offset,
+    }
+    .encode()
+}

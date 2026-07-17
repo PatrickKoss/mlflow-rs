@@ -64,6 +64,41 @@ pub fn parse_start_offset_from_page_token(page_token: Option<&str>) -> Result<i6
     }
 }
 
+/// `SearchUtils.create_page_token`: `base64(json.dumps({"offset": N}))`.
+/// `json.dumps` default separators render `{"offset": N}` (space after colon),
+/// so the emitted token byte-matches the store's own `create_page_token`.
+/// Encoded with the same hand-rolled standard base64 alphabet [`base64_decode`]
+/// reads (no external dependency).
+pub fn create_page_token(offset: i64) -> String {
+    let json = format!("{{\"offset\": {offset}}}");
+    base64_encode(json.as_bytes())
+}
+
+/// Standard base64 encode (with `=` padding), the inverse of [`base64_decode`].
+fn base64_encode(input: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(ALPHABET[((n >> 18) & 0x3f) as usize] as char);
+        out.push(ALPHABET[((n >> 12) & 0x3f) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[((n >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[(n & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 /// Standard base64 decode (the alphabet `json.dumps` output is encoded with).
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

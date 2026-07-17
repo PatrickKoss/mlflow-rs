@@ -24,6 +24,7 @@
 
 use std::sync::OnceLock;
 
+use crate::auth_middleware::after_request::{handler_for, AfterRequestHandler};
 use crate::auth_middleware::validators::Validator;
 
 /// Whether a template segment is a path parameter placeholder (`<name>`),
@@ -418,6 +419,54 @@ pub fn dispatch_request(path: &str, method: &str) -> Dispatched {
     }
 
     Dispatched::Allow
+}
+
+// ---------------------------------------------------------------------------
+// After-request dispatch (T9.5)
+// ---------------------------------------------------------------------------
+
+/// One `(template, method) -> after-request handler` entry.
+struct AfterRoute {
+    matcher: TemplateMatcher,
+    method: &'static str,
+    handler: AfterRequestHandler,
+}
+
+fn after_routes() -> &'static Vec<AfterRoute> {
+    static ROUTES: OnceLock<Vec<AfterRoute>> = OnceLock::new();
+    ROUTES.get_or_init(build_after_routes)
+}
+
+/// Build the after-request route table from the proto `ROUTE_TABLE`, mirroring
+/// `AFTER_REQUEST_HANDLERS` (keyed on the proto request class → its HTTP paths).
+/// Only RPCs with an after-request hook this server serves are wired.
+fn build_after_routes() -> Vec<AfterRoute> {
+    let mut routes = Vec::new();
+    for spec in mlflow_proto::ROUTE_TABLE {
+        let Some(handler) = handler_for(spec.service, spec.method) else {
+            continue;
+        };
+        for route in spec.expand("") {
+            routes.push(AfterRoute {
+                matcher: TemplateMatcher::compile(&route.path),
+                method: spec.http_method,
+                handler,
+            });
+        }
+    }
+    routes
+}
+
+/// Map an incoming `(path, method)` to its after-request handler, mirroring
+/// `AFTER_REQUEST_HANDLERS.get((request.path, request.method))`. Returns `None`
+/// when the route has no after-request hook.
+pub fn dispatch_after_request(path: &str, method: &str) -> Option<AfterRequestHandler> {
+    after_routes().iter().find_map(|r| {
+        if r.method != method {
+            return None;
+        }
+        r.matcher.matches(path).map(|_| r.handler)
+    })
 }
 
 /// The `<path:artifact_path>` tail of a proxy artifact URL: everything after the
