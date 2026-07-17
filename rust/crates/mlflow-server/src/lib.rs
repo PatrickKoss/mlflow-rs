@@ -91,6 +91,15 @@ pub fn build_app_with_recorder(
             get(move || routes::metrics(metrics_handle.clone())),
         );
 
+    // `/signup` (plan T9.7): registered with `app.add_url_rule(rule=SIGNUP,
+    // ...)` in Python — a *raw* rule, unlike every other auth-app route,
+    // which go through `_get_rest_path`/`_get_ajax_path` (both of which call
+    // `_add_static_prefix`). So `/signup` alone is exempt from the
+    // static-prefix nesting below; it is merged onto the outer router after
+    // the `nest` rather than added to `api`. Only mounted when auth is
+    // enabled, matching every other auth-app route.
+    let signup_state = state.clone().filter(AppState::auth_enabled);
+
     if let Some(state) = state {
         api = api.merge(register_proto_routes(state));
     }
@@ -112,9 +121,22 @@ pub fn build_app_with_recorder(
             }),
         );
 
-    match &config.static_prefix {
+    let app = match &config.static_prefix {
         Some(prefix) => Router::new().nest(prefix, api),
         None => api,
+    };
+
+    match signup_state {
+        Some(state) => {
+            let signup_router = Router::new()
+                .route(
+                    auth_api::signup::SIGNUP_PATH,
+                    get(auth_api::signup::signup_page),
+                )
+                .with_state(state);
+            app.merge(signup_router)
+        }
+        None => app,
     }
 }
 
