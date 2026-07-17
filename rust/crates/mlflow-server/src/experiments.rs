@@ -81,7 +81,7 @@ pub async fn get_experiment(
         .await?;
 
     let resp = pb::get_experiment::Response {
-        experiment: Some(to_proto_experiment(exp)),
+        experiment: Some(to_proto_experiment(exp, workspace.name())),
     };
     proto_response(&resp, "mlflow.GetExperiment.Response")
 }
@@ -108,7 +108,7 @@ pub async fn get_experiment_by_name(
         })?;
 
     let resp = pb::get_experiment_by_name::Response {
-        experiment: Some(to_proto_experiment(exp)),
+        experiment: Some(to_proto_experiment(exp, workspace.name())),
     };
     proto_response(&resp, "mlflow.GetExperimentByName.Response")
 }
@@ -146,7 +146,10 @@ pub async fn search_experiments(
         .await?;
 
     let resp = pb::search_experiments::Response {
-        experiments: experiments.into_iter().map(to_proto_experiment).collect(),
+        experiments: experiments
+            .into_iter()
+            .map(|e| to_proto_experiment(e, workspace.name()))
+            .collect(),
         next_page_token,
     };
     proto_response(&resp, "mlflow.SearchExperiments.Response")
@@ -285,7 +288,14 @@ fn require_non_empty<'a>(value: Option<&'a str>, param: &str) -> Result<&'a str,
 /// Map a store [`Experiment`] entity to the proto message. The proto uses `""`
 /// for an absent artifact location / tag value (proto2 string default), and
 /// timestamps default to `0` when unset (matching `to_mlflow_entity`/`to_proto`).
-pub(crate) fn to_proto_experiment(exp: Experiment) -> pb::Experiment {
+/// Serialize a store [`Experiment`] to its proto, stamping the request's
+/// `workspace` (proto field 9). Python's `Experiment.__init__` always runs
+/// `resolve_entity_workspace_name`, so `to_proto` always sets `workspace` —
+/// "Always `default` if workspace is not enabled" (`service.proto:3227`). The
+/// store entity doesn't carry the column back, so the handler passes the
+/// request-scoped workspace name here; pre-T10.4 that always resolves to
+/// `default`, matching the single-tenant Python default.
+pub(crate) fn to_proto_experiment(exp: Experiment, workspace: &str) -> pb::Experiment {
     pb::Experiment {
         experiment_id: Some(exp.experiment_id),
         name: Some(exp.name),
@@ -295,7 +305,7 @@ pub(crate) fn to_proto_experiment(exp: Experiment) -> pb::Experiment {
         creation_time: exp.creation_time,
         tags: exp.tags.into_iter().map(to_proto_tag).collect(),
         effective_trace_archival_retention: None,
-        workspace: None,
+        workspace: Some(workspace.to_string()),
     }
 }
 

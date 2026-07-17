@@ -386,7 +386,7 @@ async fn filter_search_experiments(
         }
         let fetched_len = refetched.len() as i64;
         for exp in refetched {
-            let proto = to_proto_experiment(exp);
+            let proto = to_proto_experiment(exp, ctx.workspace);
             if can_read(&proto) {
                 resp.experiments.push(proto);
             }

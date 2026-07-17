@@ -270,6 +270,57 @@ async fn create_with_tags_and_artifact_location() {
 }
 
 #[tokio::test]
+async fn experiment_response_always_carries_workspace() {
+    // Python's `Experiment.to_proto` always emits `workspace` (proto field 9,
+    // "Always `default` if workspace is not enabled") because
+    // `resolve_entity_workspace_name` defaults it. The Rust response must too —
+    // regression guard for the earlier `workspace: None` drop.
+    let server = TestServer::start("ws_field").await;
+    let id = post(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/create",
+        r#"{"name": "ws-exp"}"#,
+    )
+    .await
+    .json()["experiment_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // get
+    let got = get(
+        &server,
+        "/api/2.0",
+        &format!("/mlflow/experiments/get?experiment_id={id}"),
+    )
+    .await;
+    assert_eq!(got.json()["experiment"]["workspace"], "default");
+
+    // get-by-name
+    let by_name = get(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/get-by-name?experiment_name=ws-exp",
+    )
+    .await;
+    assert_eq!(by_name.json()["experiment"]["workspace"], "default");
+
+    // search
+    let search = get(
+        &server,
+        "/api/2.0",
+        "/mlflow/experiments/search?max_results=100&view_type=ALL",
+    )
+    .await;
+    let experiments = search.json()["experiments"].as_array().unwrap().clone();
+    assert!(
+        experiments.iter().all(|e| e["workspace"] == "default"),
+        "every searched experiment carries workspace=default"
+    );
+}
+
+#[tokio::test]
 async fn search_experiments_post_and_get_agree() {
     let server = TestServer::start("search_agree").await;
 
