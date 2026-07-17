@@ -135,7 +135,7 @@ async fn create_duplicate_name_conflicts() {
         .await
         .unwrap_err();
     assert_eq!(err.error_code, ErrorCode::ResourceAlreadyExists);
-    assert_eq!(err.message, "Registered Model (name=dupe) already exists");
+    assert_eq!(err.message, "Registered Model (name=dupe) already exists.");
 }
 
 #[tokio::test]
