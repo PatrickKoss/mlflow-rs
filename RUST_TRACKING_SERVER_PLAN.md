@@ -1329,12 +1329,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       user-role rows (sqlalchemy_store.py:222-241). 28 HTTP + 1 store tests.
       Deferred: create-ui CSRF/HTML → T9.7; list_users role-visibility
       narrowing → T9.3/T9.4.)*
-- [ ] **T9.3 Roles + permissions APIs**: role CRUD, role-permission CRUD, assignments,
+- [x] **T9.3 Roles + permissions APIs**: role CRUD, role-permission CRUD, assignments,
       per-user grant/revoke/get via **synthetic `__user_<id>__` roles** (SAVEPOINT-safe
       get-or-create, `__user_` prefix rejection), scorer pattern key encoding.
       **AC:** `test_client_rbac.py` + `test_sqlalchemy_store_rbac.py` behaviors pass over
       HTTP.
       **VER:** Phase 12 auth runner.
+      *(Done 2026-07-17: `mlflow-auth/src/{permissions,roles,user_grants}.rs`
+      + `mlflow-server/src/auth_api/roles.rs` — 15 endpoints on /api/3.0 +
+      /ajax-api/3.0 (auth/__init__.py:3001-4058). Python's begin_nested()
+      SAVEPOINT get-or-create reproduced as `INSERT .. ON CONFLICT DO
+      NOTHING` + re-select via Dialect::upsert (12-task race test: exactly
+      one role+assignment); other-assignee collision defense
+      (sqlalchemy_store.py:315-337); `__user_` whole-prefix rejection. Scorer
+      pattern `<exp_id>/<url_quote(name, safe='')>` round-trips. Permission
+      enums READ<USE<EDIT<MANAGE + NO_PERMISSIONS, 8 resource types, tuple-
+      repr error messages byte-matched incl. single-element trailing comma.
+      Quirks: 400 not 409 on exists; unknown resource → deny-by-default
+      allowed=false. Role routes merged post-with_state as a self-contained
+      Router<AuthStore> (orchestrator wired into build; caller-scope
+      filtering of list_user_roles rides T9.4). 37 store + 17 HTTP + 8 unit
+      tests.)*
 - [ ] **T9.4 Permission resolution + enforcement middleware**: tower layer implementing
       authenticate → admin bypass → validator dispatch (exact-path map + regex matchers
       for trace/logged-model/webhook paths + artifact-proxy path inspection with
