@@ -2,8 +2,10 @@
 
 Status: **in progress — Phases 2–8 and 10 complete; Phase 9 complete except
 T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
-Phase 12 T12.1/T12.2/T12.5 done, T12.4 harness landed and being driven to
-green.** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-17
+Phase 12 T12.1/T12.2/T12.5/T12.6 done, T12.4 harness at 23 non-allowlisted
+diffs (9/12 sections clean; the rest hinge on the lenient proto-parse port in
+flight), T12.3 held until that lands (it changes the error texts T12.3 would
+assert).** · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-17
 
 **Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
 T12.4's differential harness was salvaged and landed as foundation, and the two
