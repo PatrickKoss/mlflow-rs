@@ -211,7 +211,16 @@ fn register_proto_routes(state: AppState) -> Router {
     }
     // ---- end auth API routes ----
 
-    router.with_state(state)
+    // ---- role/permission routes (T9.3) ----
+    // `register_role_routes` is self-contained with its own `AuthStore` state
+    // (see `auth_api/roles.rs`), so it merges after `with_state` rather than
+    // joining the `Router<AppState>` block above.
+    let auth_store = state.auth_store().cloned();
+    let mut app = router.with_state(state);
+    if let Some(store) = auth_store {
+        app = app.merge(auth_api::register_role_routes(store));
+    }
+    app
 }
 
 /// Register the T9.2 user-management routes (`/mlflow/users/*`) on both the

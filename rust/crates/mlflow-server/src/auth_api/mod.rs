@@ -26,7 +26,10 @@ use axum::http::request::Parts;
 use base64::Engine;
 use mlflow_auth::AuthStore;
 
+pub mod roles;
 pub mod users;
+
+pub use roles::register_role_routes;
 
 /// The HTTP Basic credentials on a request, if present and well-formed.
 pub struct BasicCredentials {

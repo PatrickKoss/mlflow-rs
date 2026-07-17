@@ -26,9 +26,17 @@
 //! * [`bootstrap`] — `create_admin_user` + the default-admin-password warning,
 //!   reproducing `auth/__init__.py`'s wording.
 //!
-//! The permission-resolution model (`READ < USE < EDIT < MANAGE`, synthetic
-//! `__user_<id>__` roles) and the tower auth middleware are later Phase 9 tasks,
-//! not this one.
+//! The **T9.3 roles + permissions surface** builds on that foundation:
+//!
+//! * [`permissions`] — the `READ < USE < EDIT < MANAGE` (+ `NO_PERMISSIONS`)
+//!   levels, the eight resource types, and their validators (byte-faithful to
+//!   `auth/permissions.py`).
+//! * [`roles`] — role / role-permission / user-role-assignment CRUD plus the
+//!   role-based permission resolver and workspace-admin helpers.
+//! * [`user_grants`] — per-user grant/revoke via synthetic `__user_<id>__`
+//!   roles (SAVEPOINT-safe get-or-create) and scorer pattern-key encoding.
+//!
+//! The tower auth middleware (authenticate -> validator dispatch) is T9.4.
 //!
 //! ## Reuse of `mlflow-store`
 //!
@@ -43,8 +51,11 @@ pub mod bootstrap;
 pub mod db;
 pub mod entities;
 pub mod hash;
+pub mod permissions;
+pub mod roles;
 pub mod schema;
 pub mod store;
+pub mod user_grants;
 
 pub use bootstrap::{
     create_admin_user, warn_if_default_admin_password, DEFAULT_ADMIN_PASSWORD,
@@ -55,4 +66,6 @@ pub use db::{
 };
 pub use entities::{Role, RolePermission, User, UserRoleAssignment};
 pub use hash::{check_password_hash, generate_password_hash, HashError};
+pub use permissions::{Permission, EDIT, MANAGE, NO_PERMISSIONS, READ, USE, VALID_RESOURCE_TYPES};
 pub use store::AuthStore;
+pub use user_grants::DEFAULT_WORKSPACE_NAME;

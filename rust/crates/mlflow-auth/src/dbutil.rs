@@ -22,6 +22,9 @@ pub(crate) enum Val {
     Text(String),
     Int(i64),
     Bool(bool),
+    /// A SQL `NULL` bound as an absent `Option<String>` — used for the nullable
+    /// `roles.description` column on inserts/updates.
+    Null,
 }
 
 macro_rules! bind_val {
@@ -30,6 +33,7 @@ macro_rules! bind_val {
             Val::Text(s) => $q.bind(s.clone()),
             Val::Int(i) => $q.bind(*i),
             Val::Bool(b) => $q.bind(*b),
+            Val::Null => $q.bind(Option::<String>::None),
         }
     }};
 }
