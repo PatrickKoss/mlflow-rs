@@ -1311,10 +1311,24 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       error; >12-chars password rule by code points; sqlite 0/1 bool
       tolerance; MySQL last_insert_id fallback. 9 unit + 5 cross-language
       tests.)*
-- [ ] **T9.2 Users API** (§3.16): all 8 endpoints incl. self-service password rules and
+- [x] **T9.2 Users API** (§3.16): all 8 endpoints incl. self-service password rules and
       cannot-delete-self; hand-rolled JSON shapes.
       **AC:** `tests/server/auth/test_client.py` user sections pass against Rust.
       **VER:** Phase 12 auth runner.
+      *(Done 2026-07-17: `mlflow-server/src/auth_api/{mod,users}.rs` — all 8
+      endpoints under /api/2.0 + /ajax-api/2.0, mounted only when
+      `MLFLOW_AUTH_CONFIG_PATH` is set (absent → 404, matching the Python
+      auth app). Hand-rolled shapes: `{"user":{id,username,is_admin}}`, list
+      includes role objects, `/users/current` adds `is_basic_auth: true`.
+      Handler-level checks ported (self-service current_password rules,
+      cannot-delete-self, >12-code-point password, duplicate → 400 not 409
+      per ERROR_CODE_TO_HTTP_STATUS, first-colon Basic-cred split like
+      werkzeug); authorization gating deferred to T9.4 behind
+      `// AUTH SEAM (T9.4):` markers; ini parsing/bootstrap behind
+      `// T9.8 SEAM:`. `AuthStore::delete_user` cascades the synthetic
+      user-role rows (sqlalchemy_store.py:222-241). 28 HTTP + 1 store tests.
+      Deferred: create-ui CSRF/HTML → T9.7; list_users role-visibility
+      narrowing → T9.3/T9.4.)*
 - [ ] **T9.3 Roles + permissions APIs**: role CRUD, role-permission CRUD, assignments,
       per-user grant/revoke/get via **synthetic `__user_<id>__` roles** (SAVEPOINT-safe
       get-or-create, `__user_` prefix rejection), scorer pattern key encoding.
