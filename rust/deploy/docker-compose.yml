@@ -1,0 +1,124 @@
+# MLflow reference deployment (RUST_TRACKING_SERVER_PLAN.md T11.3).
+#
+# Service graph and startup ordering:
+#
+#   postgres (healthcheck: pg_isready)
+#      |
+#      v  (service_healthy)
+#   migrate  --  one-shot `mlflow db upgrade` that brings the empty Postgres DB
+#      |         to the current Alembic head, then EXITS. The Rust server refuses
+#      |         to start against an unmigrated DB (`Db::connect_and_verify`), so
+#      |         this init step MUST complete before `rust` boots.
+#      v  (service_completed_successfully)
+#   rust  +  python   --  both wait on `migrate` finishing; they share the one
+#      |                  migrated Postgres DB and the `artifacts` volume.
+#      v  (service_healthy on both)
+#   nginx  --  reverse proxy on :80 implementing the §2.2 routing split.
+#
+# The single Alembic-migrated Postgres DB backs BOTH servers (parity with a real
+# split deployment: Rust owns tracking/registry writes, Python is only hit for
+# the genai/gateway surface, but they read the same schema).
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # No host port published; only the compose network needs it.
+
+  # One-shot: migrate the empty DB to the Alembic head, then exit 0.
+  migrate:
+    image: ghcr.io/mlflow/mlflow:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - mlflow
+      - db
+      - upgrade
+      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+    restart: "no"
+
+  rust:
+    build:
+      # Repo root so `build.rs` can read `mlflow/version.py`; `.dockerignore`
+      # keeps the transferred context small (only `rust/` + `mlflow/version.py`).
+      context: ../..
+      dockerfile: rust/deploy/Dockerfile.rust
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # Rust pool / logging.
+      RUST_LOG: info
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination
+      - /mlartifacts
+      - --default-artifact-root
+      - /mlartifacts
+    volumes:
+      - artifacts:/mlartifacts
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  python:
+    image: ghcr.io/mlflow/mlflow:latest
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5001"
+      - --backend-store-uri
+      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination
+      - /mlartifacts
+      - --default-artifact-root
+      - /mlartifacts
+    volumes:
+      - artifacts:/mlartifacts
+    healthcheck:
+      # The mlflow image has no `curl`; use the bundled Python instead.
+      test:
+        - CMD-SHELL
+        - python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5001/health').status==200 else 1)"
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      rust:
+        condition: service_healthy
+      python:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  artifacts:
