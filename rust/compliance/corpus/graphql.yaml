@@ -1,0 +1,43 @@
+# Section 3.12 - GraphQL. A few queries exercising resolver parity. GraphQL
+# always returns HTTP 200 with errors in the body, so we compare normalized
+# bodies (ids erased).
+cases:
+  - name: gql_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: gql_exp}
+    bind:
+      - {bind: gql_exp, from: "$.experiment_id"}
+
+  - name: gql_setup_run
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "${gql_exp}", start_time: 1000, tags: [{key: mlflow.runName, value: gqlrun}]}
+    bind:
+      - {bind: gql_run, from: "$.run.info.run_id"}
+
+  - name: gql_get_experiment
+    method: POST
+    path: /graphql
+    body:
+      query: "query($id:String!){ mlflowGetExperiment(input:{experimentId:$id}){ apiError{code message} experiment{ experimentId name lifecycleStage } } }"
+      variables: {id: "${gql_exp}"}
+
+  - name: gql_get_run
+    method: POST
+    path: /graphql
+    body:
+      query: "query($id:String!){ mlflowGetRun(input:{runId:$id}){ apiError{code} run{ info{ runName status } } } }"
+      variables: {id: "${gql_run}"}
+
+  - name: gql_get_experiment_missing
+    method: POST
+    path: /graphql
+    body:
+      query: "query{ mlflowGetExperiment(input:{experimentId:\"99999\"}){ apiError{code} experiment{ experimentId } } }"
+
+  - name: gql_search_model_versions
+    method: POST
+    path: /graphql
+    body:
+      query: "query{ mlflowSearchModelVersions(input:{maxResults:10}){ apiError{code} modelVersions{ name version } } }"

@@ -1,0 +1,112 @@
+# Section 3.1 - Experiments. CRUD, search (POST + GET), pagination walk, tags,
+# and error cases. Cases run in order; ids captured via bind, erased by
+# normalization at compare time.
+cases:
+  - name: experiment_create_basic
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: exp_alpha, tags: [{key: team, value: rust}]}
+    bind:
+      - {bind: exp_alpha, from: "$.experiment_id"}
+
+  - name: experiment_create_second
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: exp_beta}
+    bind:
+      - {bind: exp_beta, from: "$.experiment_id"}
+
+  - name: experiment_get
+    method: GET
+    path: /api/2.0/mlflow/experiments/get
+    query: {experiment_id: "${exp_alpha}"}
+
+  - name: experiment_get_by_name
+    method: GET
+    path: /api/2.0/mlflow/experiments/get-by-name
+    query: {experiment_name: exp_alpha}
+
+  - name: experiment_search_post
+    method: POST
+    path: /api/2.0/mlflow/experiments/search
+    body: {max_results: 100, order_by: ["name ASC"]}
+
+  - name: experiment_search_get
+    method: GET
+    path: /api/2.0/mlflow/experiments/search
+    query: {max_results: 100, order_by: "name ASC"}
+
+  - name: experiment_search_paginated_walk
+    method: POST
+    path: /api/2.0/mlflow/experiments/search
+    body: {max_results: 1, order_by: ["name ASC"]}
+    walk:
+      token_field: next_page_token
+      token_param: page_token
+      max_pages: 10
+
+  - name: experiment_set_tag
+    method: POST
+    path: /api/2.0/mlflow/experiments/set-experiment-tag
+    body: {experiment_id: "${exp_alpha}", key: phase, value: prod}
+
+  - name: experiment_get_after_tag
+    method: GET
+    path: /api/2.0/mlflow/experiments/get
+    query: {experiment_id: "${exp_alpha}"}
+
+  - name: experiment_delete_tag
+    method: POST
+    path: /api/2.0/mlflow/experiments/delete-experiment-tag
+    body: {experiment_id: "${exp_alpha}", key: phase}
+
+  - name: experiment_update
+    method: POST
+    path: /api/2.0/mlflow/experiments/update
+    body: {experiment_id: "${exp_beta}", new_name: exp_beta_renamed}
+
+  - name: experiment_delete
+    method: POST
+    path: /api/2.0/mlflow/experiments/delete
+    body: {experiment_id: "${exp_beta}"}
+
+  - name: experiment_get_deleted_still_visible
+    method: GET
+    path: /api/2.0/mlflow/experiments/get
+    query: {experiment_id: "${exp_beta}"}
+
+  - name: experiment_restore
+    method: POST
+    path: /api/2.0/mlflow/experiments/restore
+    body: {experiment_id: "${exp_beta}"}
+
+  # ---- Errors ----
+  - name: experiment_get_missing
+    method: GET
+    path: /api/2.0/mlflow/experiments/get
+    query: {experiment_id: "99999"}
+    expect_status: 404
+
+  - name: experiment_get_by_name_missing
+    method: GET
+    path: /api/2.0/mlflow/experiments/get-by-name
+    query: {experiment_name: does_not_exist}
+    expect_status: 404
+
+  - name: experiment_create_int_name_error
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: 123}
+    expect_status: 400
+
+  - name: experiment_create_duplicate
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: exp_alpha}
+    expect_status: 400
+
+  - name: experiment_create_missing_name
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {}
+    expect_status: 400

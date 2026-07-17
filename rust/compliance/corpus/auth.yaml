@@ -1,0 +1,66 @@
+# Section 3.16 - Auth & RBAC. This section boots BOTH servers with basic-auth
+# enabled (MLFLOW_AUTH_CONFIG_PATH). Admin + a non-admin "alice" are seeded
+# before the corpus runs. Cases assert 401/403/200 parity across the two
+# servers. `auth: admin|user|null` selects credentials (null = no auth header).
+cases:
+  - name: auth_no_credentials_401
+    method: GET
+    path: /api/2.0/mlflow/experiments/search
+    query: {max_results: 10}
+    auth: null
+    compare_body: false
+    expect_status: 401
+
+  - name: auth_bad_credentials_401
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: should_fail}
+    auth: null
+    headers: {Authorization: "Basic bm9wZTpub3Bl"}
+    compare_body: false
+    expect_status: 401
+
+  - name: auth_current_user_admin
+    method: GET
+    path: /api/2.0/mlflow/users/current
+    auth: admin
+    compare_body: false
+    expect_status: 200
+
+  - name: auth_admin_can_create_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: admin_created_exp}
+    auth: admin
+    compare_body: false
+    expect_status: 200
+
+  - name: auth_nonadmin_read_default_ok
+    method: GET
+    path: /api/2.0/mlflow/experiments/search
+    query: {max_results: 10}
+    auth: user
+    compare_body: false
+    expect_status: 200
+
+  - name: auth_nonadmin_create_experiment_ok_or_403
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: user_created_exp}
+    auth: user
+    compare_body: false
+
+  - name: auth_nonadmin_admin_route_forbidden
+    method: GET
+    path: /api/2.0/mlflow/users/get
+    query: {username: admin}
+    auth: user
+    compare_body: false
+    expect_status: 403
+
+  - name: auth_webhooks_admin_only_for_user
+    method: GET
+    path: /api/2.0/mlflow/webhooks
+    auth: user
+    compare_body: false
+    expect_status: 403

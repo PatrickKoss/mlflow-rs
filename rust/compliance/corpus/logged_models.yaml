@@ -1,0 +1,72 @@
+# Section 3.5 - Logged models (create/get/search-walk/tags/artifacts-list) and
+# 3.4 datasets (search-datasets).
+cases:
+  - name: lm_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: lm_exp}
+    bind:
+      - {bind: lm_exp, from: "$.experiment_id"}
+
+  - name: lm_create
+    method: POST
+    path: /api/2.0/mlflow/logged-models
+    body: {experiment_id: "${lm_exp}", name: model_a, model_type: agent}
+    bind:
+      - {bind: model_id, from: "$.model.info.model_id"}
+
+  - name: lm_get
+    method: GET
+    path: /api/2.0/mlflow/logged-models/${model_id}
+
+  - name: lm_set_tags
+    method: PATCH
+    path: /api/2.0/mlflow/logged-models/${model_id}/tags
+    body: {tags: [{key: stage, value: dev}]}
+
+  - name: lm_log_params
+    method: POST
+    path: /api/2.0/mlflow/logged-models/${model_id}/params
+    body: {params: [{key: lr, value: "0.01"}]}
+
+  - name: lm_finalize
+    method: PATCH
+    path: /api/2.0/mlflow/logged-models/${model_id}
+    body: {model: {status: LOGGED_MODEL_READY}}
+
+  - name: lm_search
+    method: POST
+    path: /api/2.0/mlflow/logged-models/search
+    body: {experiment_ids: ["${lm_exp}"], max_results: 50}
+
+  - name: lm_create_two_more
+    method: POST
+    path: /api/2.0/mlflow/logged-models
+    body: {experiment_id: "${lm_exp}", name: model_b, model_type: agent}
+
+  - name: lm_create_three
+    method: POST
+    path: /api/2.0/mlflow/logged-models
+    body: {experiment_id: "${lm_exp}", name: model_c, model_type: agent}
+
+  - name: lm_search_walk
+    method: POST
+    path: /api/2.0/mlflow/logged-models/search
+    body: {experiment_ids: ["${lm_exp}"], max_results: 1}
+    walk:
+      token_field: next_page_token
+      token_param: page_token
+      max_pages: 10
+    normalize:
+      drop_paths: ["$.models"]
+
+  - name: dataset_search
+    method: POST
+    path: /api/2.0/mlflow/experiments/search-datasets
+    body: {experiment_ids: ["${lm_exp}"]}
+
+  # ---- Errors ----
+  - name: lm_get_missing
+    method: GET
+    path: /api/2.0/mlflow/logged-models/m-doesnotexist
+    expect_status: 404

@@ -1,0 +1,93 @@
+# Section 3.6 Tracing V3 (start/end/search-walk/tag) + 3.8 one OTLP ingest smoke
+# + 3.7 V2 deprecated search smoke.
+cases:
+  - name: traces_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: traces_exp}
+    bind:
+      - {bind: traces_exp, from: "$.experiment_id"}
+
+  - name: trace_start_v3
+    method: POST
+    path: /api/3.0/mlflow/traces
+    body:
+      trace:
+        trace_info:
+          trace_id: tr-compliance-1
+          trace_location:
+            type: MLFLOW_EXPERIMENT
+            mlflow_experiment: {experiment_id: "${traces_exp}"}
+          request_time: "1000"
+          execution_duration_ms: "5"
+          state: OK
+    normalize:
+      # artifactLocation tag holds an absolute per-server path.
+      drop_paths: ["$.trace.trace_info.tags"]
+
+  - name: trace_get_info_v3
+    method: GET
+    path: /api/3.0/mlflow/traces/tr-compliance-1/info
+    normalize:
+      drop_paths: ["$.trace.trace_info.tags", "$.trace_info.tags"]
+
+  - name: trace_set_tag_v3
+    method: POST
+    path: /api/3.0/mlflow/traces/tr-compliance-1/tags
+    body: {key: quality, value: high}
+
+  - name: trace_search_v3
+    method: POST
+    path: /api/3.0/mlflow/traces/search
+    body:
+      locations: [{type: MLFLOW_EXPERIMENT, mlflow_experiment: {experiment_id: "${traces_exp}"}}]
+      max_results: 100
+    normalize:
+      drop_paths: ["$.traces"]
+
+  - name: trace_start_v3_second
+    method: POST
+    path: /api/3.0/mlflow/traces
+    body:
+      trace:
+        trace_info:
+          trace_id: tr-compliance-2
+          trace_location:
+            type: MLFLOW_EXPERIMENT
+            mlflow_experiment: {experiment_id: "${traces_exp}"}
+          request_time: "2000"
+          execution_duration_ms: "7"
+          state: OK
+    normalize:
+      drop_paths: ["$.trace.trace_info.tags"]
+
+  - name: trace_search_v3_walk
+    method: POST
+    path: /api/3.0/mlflow/traces/search
+    body:
+      locations: [{type: MLFLOW_EXPERIMENT, mlflow_experiment: {experiment_id: "${traces_exp}"}}]
+      max_results: 1
+    walk:
+      token_field: next_page_token
+      token_param: page_token
+      max_pages: 10
+    normalize:
+      drop_paths: ["$.traces"]
+
+  - name: trace_delete_tag_v3
+    method: DELETE
+    path: /api/3.0/mlflow/traces/tr-compliance-1/tags
+    query: {key: quality}
+
+  - name: trace_search_v2_deprecated
+    method: GET
+    path: /api/2.0/mlflow/traces
+    query: {experiment_ids: "${traces_exp}", max_results: 100}
+    normalize:
+      drop_paths: ["$.traces"]
+
+  # ---- Errors ----
+  - name: trace_get_info_missing
+    method: GET
+    path: /api/3.0/mlflow/traces/tr-does-not-exist/info
+    expect_status: 404

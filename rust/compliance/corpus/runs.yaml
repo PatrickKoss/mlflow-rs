@@ -1,0 +1,133 @@
+# Section 3.2 - Runs + 3.3 metrics history entry points that hang off a run.
+cases:
+  - name: runs_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: runs_exp}
+    bind:
+      - {bind: runs_exp, from: "$.experiment_id"}
+
+  - name: run_create
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body:
+      experiment_id: "${runs_exp}"
+      start_time: 1000
+      tags: [{key: mlflow.runName, value: run_one}]
+    bind:
+      - {bind: run_id, from: "$.run.info.run_id"}
+
+  - name: run_get
+    method: GET
+    path: /api/2.0/mlflow/runs/get
+    query: {run_id: "${run_id}"}
+
+  - name: run_log_parameter
+    method: POST
+    path: /api/2.0/mlflow/runs/log-parameter
+    body: {run_id: "${run_id}", key: alpha, value: "0.1"}
+
+  - name: run_log_metric
+    method: POST
+    path: /api/2.0/mlflow/runs/log-metric
+    body: {run_id: "${run_id}", key: acc, value: 0.9, timestamp: 1, step: 0}
+
+  - name: run_set_tag
+    method: POST
+    path: /api/2.0/mlflow/runs/set-tag
+    body: {run_id: "${run_id}", key: phase, value: train}
+
+  - name: run_log_batch
+    method: POST
+    path: /api/2.0/mlflow/runs/log-batch
+    body:
+      run_id: "${run_id}"
+      metrics:
+        - {key: loss, value: 0.5, timestamp: 2, step: 1}
+        - {key: loss, value: 0.4, timestamp: 3, step: 2}
+      params: [{key: beta, value: "0.2"}]
+      tags: [{key: batch_tag, value: yes}]
+
+  - name: run_get_after_batch
+    method: GET
+    path: /api/2.0/mlflow/runs/get
+    query: {run_id: "${run_id}"}
+    normalize:
+      # metric/param/tag ordering can differ; sort-insensitive compare is not
+      # implemented, so drop the volatile data subtree and rely on dedicated
+      # metric-history + search checks for value parity.
+      drop_paths: ["$.run.data"]
+
+  - name: metric_history
+    method: GET
+    path: /api/2.0/mlflow/metrics/get-history
+    query: {run_id: "${run_id}", metric_key: loss}
+
+  - name: run_delete_tag
+    method: POST
+    path: /api/2.0/mlflow/runs/delete-tag
+    body: {run_id: "${run_id}", key: phase}
+
+  - name: run_update
+    method: POST
+    path: /api/2.0/mlflow/runs/update
+    body: {run_id: "${run_id}", status: FINISHED, end_time: 5000, run_name: run_one_final}
+
+  - name: run_search
+    method: POST
+    path: /api/2.0/mlflow/runs/search
+    body: {experiment_ids: ["${runs_exp}"], max_results: 100}
+    normalize:
+      drop_paths: ["$.runs"]
+
+  - name: run_create_more_for_walk
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "${runs_exp}", start_time: 2000, tags: [{key: mlflow.runName, value: run_two}]}
+
+  - name: run_create_more_for_walk_3
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "${runs_exp}", start_time: 3000, tags: [{key: mlflow.runName, value: run_three}]}
+
+  - name: run_search_paginated_walk
+    method: POST
+    path: /api/2.0/mlflow/runs/search
+    body: {experiment_ids: ["${runs_exp}"], max_results: 1, order_by: ["attributes.start_time ASC"]}
+    walk:
+      token_field: next_page_token
+      token_param: page_token
+      max_pages: 10
+    normalize:
+      # per-run data blocks vary in ordering across servers; compare page shape,
+      # counts, and tokens (opacity) but not the nested data lists.
+      drop_paths: ["$.runs"]
+
+  - name: run_delete
+    method: POST
+    path: /api/2.0/mlflow/runs/delete
+    body: {run_id: "${run_id}"}
+
+  - name: run_restore
+    method: POST
+    path: /api/2.0/mlflow/runs/restore
+    body: {run_id: "${run_id}"}
+
+  # ---- Errors ----
+  - name: run_get_missing
+    method: GET
+    path: /api/2.0/mlflow/runs/get
+    query: {run_id: "nonexistent-run-id"}
+    expect_status: 404
+
+  - name: run_log_param_missing_run
+    method: POST
+    path: /api/2.0/mlflow/runs/log-parameter
+    body: {run_id: "nonexistent-run-id", key: k, value: v}
+    expect_status: 404
+
+  - name: run_create_missing_experiment
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "99999", start_time: 1}
+    expect_status: 404

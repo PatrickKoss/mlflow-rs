@@ -1,0 +1,18 @@
+# Section 3.13 - Misc boot/info endpoints.
+cases:
+  - name: health
+    method: GET
+    path: /health
+    compare_body: false
+    expect_status: 200
+
+  - name: version
+    method: GET
+    path: /version
+    compare_body: false
+    expect_status: 200
+
+  - name: server_info
+    method: GET
+    path: /api/3.0/mlflow/server-info
+    expect_status: 200

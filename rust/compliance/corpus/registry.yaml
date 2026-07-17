@@ -1,0 +1,153 @@
+# Section 3.14 - Model Registry: RM + MV CRUD, search-walk, stages, aliases,
+# get-download-uri, errors. Uses a run's model source so create MV resolves.
+cases:
+  - name: reg_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: reg_exp}
+    bind:
+      - {bind: reg_exp, from: "$.experiment_id"}
+
+  - name: reg_setup_run
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "${reg_exp}", start_time: 1000, tags: [{key: mlflow.runName, value: regrun}]}
+    bind:
+      - {bind: reg_run, from: "$.run.info.run_id"}
+      - {bind: reg_run_artifact, from: "$.run.info.artifact_uri"}
+
+  # ---- Registered models ----
+  - name: rm_create
+    method: POST
+    path: /api/2.0/mlflow/registered-models/create
+    body: {name: model_reg_a, tags: [{key: owner, value: rust}]}
+
+  - name: rm_get
+    method: GET
+    path: /api/2.0/mlflow/registered-models/get
+    query: {name: model_reg_a}
+
+  - name: rm_set_tag
+    method: POST
+    path: /api/2.0/mlflow/registered-models/set-tag
+    body: {name: model_reg_a, key: stage, value: prod}
+
+  - name: rm_delete_tag
+    method: DELETE
+    path: /api/2.0/mlflow/registered-models/delete-tag
+    query: {name: model_reg_a, key: stage}
+
+  - name: rm_update
+    method: PATCH
+    path: /api/2.0/mlflow/registered-models/update
+    body: {name: model_reg_a, description: "a registered model"}
+
+  - name: rm_rename
+    method: POST
+    path: /api/2.0/mlflow/registered-models/rename
+    body: {name: model_reg_a, new_name: model_reg_a2}
+
+  - name: rm_search
+    method: GET
+    path: /api/2.0/mlflow/registered-models/search
+    query: {max_results: 100, order_by: "name ASC"}
+    normalize:
+      drop_paths: ["$.registered_models"]
+
+  - name: rm_get_latest_versions_post
+    method: POST
+    path: /api/2.0/mlflow/registered-models/get-latest-versions
+    body: {name: model_reg_a2}
+
+  # ---- Model versions ----
+  - name: mv_create
+    method: POST
+    path: /api/2.0/mlflow/model-versions/create
+    body: {name: model_reg_a2, source: "${reg_run_artifact}", run_id: "${reg_run}"}
+    bind:
+      - {bind: mv_version, from: "$.model_version.version"}
+
+  - name: mv_get
+    method: GET
+    path: /api/2.0/mlflow/model-versions/get
+    query: {name: model_reg_a2, version: "${mv_version}"}
+
+  - name: mv_update
+    method: PATCH
+    path: /api/2.0/mlflow/model-versions/update
+    body: {name: model_reg_a2, version: "${mv_version}", description: "v desc"}
+
+  - name: mv_set_tag
+    method: POST
+    path: /api/2.0/mlflow/model-versions/set-tag
+    body: {name: model_reg_a2, version: "${mv_version}", key: validated, value: "true"}
+
+  - name: mv_transition_stage
+    method: POST
+    path: /api/2.0/mlflow/model-versions/transition-stage
+    body: {name: model_reg_a2, version: "${mv_version}", stage: Staging, archive_existing_versions: false}
+
+  - name: mv_get_download_uri
+    method: GET
+    path: /api/2.0/mlflow/model-versions/get-download-uri
+    query: {name: model_reg_a2, version: "${mv_version}"}
+    normalize:
+      normalize_paths: true
+
+  - name: mv_search
+    method: GET
+    path: /api/2.0/mlflow/model-versions/search
+    query: {max_results: 100}
+    normalize:
+      drop_paths: ["$.model_versions"]
+
+  # ---- Aliases (method-overloaded /alias) ----
+  - name: alias_set
+    method: POST
+    path: /api/2.0/mlflow/registered-models/alias
+    body: {name: model_reg_a2, alias: champion, version: "${mv_version}"}
+
+  - name: alias_get_by_alias
+    method: GET
+    path: /api/2.0/mlflow/registered-models/alias
+    query: {name: model_reg_a2, alias: champion}
+
+  - name: alias_delete
+    method: DELETE
+    path: /api/2.0/mlflow/registered-models/alias
+    query: {name: model_reg_a2, alias: champion}
+
+  - name: mv_delete
+    method: DELETE
+    path: /api/2.0/mlflow/model-versions/delete
+    query: {name: model_reg_a2, version: "${mv_version}"}
+
+  - name: rm_delete
+    method: DELETE
+    path: /api/2.0/mlflow/registered-models/delete
+    query: {name: model_reg_a2}
+
+  # ---- Errors ----
+  - name: rm_get_missing
+    method: GET
+    path: /api/2.0/mlflow/registered-models/get
+    query: {name: no_such_model}
+    expect_status: 404
+
+  - name: mv_get_missing
+    method: GET
+    path: /api/2.0/mlflow/model-versions/get
+    query: {name: no_such_model, version: "1"}
+    expect_status: 404
+
+  - name: rm_create_duplicate
+    method: POST
+    path: /api/2.0/mlflow/registered-models/create
+    body: {name: dup_model}
+    bind: []
+
+  - name: rm_create_duplicate2
+    method: POST
+    path: /api/2.0/mlflow/registered-models/create
+    body: {name: dup_model}
+    expect_status: 400

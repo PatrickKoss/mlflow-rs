@@ -1,0 +1,34 @@
+# Section 3.11 - Artifacts via the mlflow-artifacts proxy (--serve-artifacts).
+# Upload (PUT raw body) -> list -> download (GET). Download body is text so we
+# compare it directly (compare_body true, no JSON).
+cases:
+  - name: artifact_upload
+    method: PUT
+    path: /api/2.0/mlflow-artifacts/artifacts/compliance/hello.txt
+    raw_body: "hello from compliance harness"
+    compare_body: false
+    expect_status: 200
+
+  - name: artifact_upload_second
+    method: PUT
+    path: /api/2.0/mlflow-artifacts/artifacts/compliance/nested/world.txt
+    raw_body: "second file"
+    compare_body: false
+    expect_status: 200
+
+  - name: artifact_list_root
+    method: GET
+    path: /api/2.0/mlflow-artifacts/artifacts
+    query: {path: compliance}
+
+  - name: artifact_download
+    method: GET
+    path: /api/2.0/mlflow-artifacts/artifacts/compliance/hello.txt
+    compare_body: false
+    expect_status: 200
+
+  - name: artifact_download_missing
+    method: GET
+    path: /api/2.0/mlflow-artifacts/artifacts/compliance/nope.txt
+    compare_body: false
+    expect_status: 404

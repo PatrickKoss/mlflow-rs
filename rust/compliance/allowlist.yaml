@@ -1,0 +1,29 @@
+# T12.4 differential-replay allowlist.
+#
+# Each entry tolerates ONE known, understood normalized diff between the Python
+# and Rust servers. The runner reports any diff NOT matched here as a failure.
+#
+# Matching: `case_or_path` matches a case's name, path, section, or "*" (any).
+# `json_pointer` matches the diff's pointer exactly, "*" (any pointer), or a
+# trailing "*" prefix-match.
+#
+# Entries tagged "PARITY BUG - needs fix" are genuine Rust<->Python divergences
+# that could not be safely fixed inside this task; they are backlog items. Keep
+# them prominently enumerated in the run report.
+
+entries:
+  # ---- Seeded from the T12.1 parity backlog ------------------------------
+  - case_or_path: experiment_create_int_name_error
+    json_pointer: /message
+    reason: >-
+      PARITY BUG - needs fix. serde type-mismatch validation surfaces
+      "failed to parse JSON: invalid type: integer ... expected a string" instead
+      of Python's "Invalid value 123 for parameter 'name' supplied ...". Error
+      code + HTTP status match; only the human message text differs. Backlog #1
+      from the T12.1 parity backlog.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.1
+
+  # HTTP reason-phrase casing ("Bad Request" vs Python's "BAD REQUEST"): the
+  # harness compares STATUS CODES only, never reason phrases, so backlog item #2
+  # is moot by construction. No entry is required; documented here so the choice
+  # is explicit rather than silent.

@@ -1,0 +1,46 @@
+# Section 3.15 - Webhooks CRUD + test. The /test endpoint attempts a real
+# delivery to a local receiver; both servers SSRF-guard and will fail to reach
+# an unroutable host identically, so we assert status parity only (no receiver
+# stood up here - documented as deferred to a follow-up with a local receiver).
+cases:
+  - name: webhook_create
+    method: POST
+    path: /api/2.0/mlflow/webhooks
+    body:
+      name: wh_compliance
+      url: "http://127.0.0.1:9/hook"
+      events: [{entity: REGISTERED_MODEL, action: CREATED}]
+      description: "compliance webhook"
+    bind:
+      - {bind: webhook_id, from: "$.webhook.webhook_id"}
+
+  - name: webhook_get
+    method: GET
+    path: /api/2.0/mlflow/webhooks/${webhook_id}
+
+  - name: webhook_list
+    method: GET
+    path: /api/2.0/mlflow/webhooks
+    normalize:
+      drop_paths: ["$.webhooks"]
+
+  - name: webhook_update
+    method: PATCH
+    path: /api/2.0/mlflow/webhooks/${webhook_id}
+    body: {description: "updated description", status: DISABLED}
+
+  - name: webhook_delete
+    method: DELETE
+    path: /api/2.0/mlflow/webhooks/${webhook_id}
+
+  # ---- Errors ----
+  - name: webhook_get_missing
+    method: GET
+    path: /api/2.0/mlflow/webhooks/wh-does-not-exist
+    expect_status: 404
+
+  - name: webhook_create_bad_event
+    method: POST
+    path: /api/2.0/mlflow/webhooks
+    body: {name: bad, url: "http://127.0.0.1:9/x", events: [{entity: NOPE, action: CREATED}]}
+    expect_status: 400

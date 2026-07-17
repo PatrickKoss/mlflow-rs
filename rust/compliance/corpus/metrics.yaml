@@ -1,0 +1,59 @@
+# Section 3.3 - Metrics history endpoints (proto get-history +
+# get-history-bulk-interval, ajax get-history-bulk). Builds its own run so the
+# section is self-contained regardless of order relative to runs.yaml.
+cases:
+  - name: metrics_setup_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    body: {name: metrics_exp}
+    bind:
+      - {bind: metrics_exp, from: "$.experiment_id"}
+
+  - name: metrics_setup_run
+    method: POST
+    path: /api/2.0/mlflow/runs/create
+    body: {experiment_id: "${metrics_exp}", start_time: 1000, tags: [{key: mlflow.runName, value: mrun}]}
+    bind:
+      - {bind: metrics_run, from: "$.run.info.run_id"}
+
+  - name: metrics_log_batch_series
+    method: POST
+    path: /api/2.0/mlflow/runs/log-batch
+    body:
+      run_id: "${metrics_run}"
+      metrics:
+        - {key: loss, value: 1.0, timestamp: 100, step: 0}
+        - {key: loss, value: 0.8, timestamp: 200, step: 1}
+        - {key: loss, value: 0.6, timestamp: 300, step: 2}
+        - {key: loss, value: 0.5, timestamp: 400, step: 3}
+
+  - name: metric_get_history
+    method: GET
+    path: /api/2.0/mlflow/metrics/get-history
+    query: {run_id: "${metrics_run}", metric_key: loss}
+
+  - name: metric_get_history_paginated
+    method: GET
+    path: /api/2.0/mlflow/metrics/get-history
+    query: {run_id: "${metrics_run}", metric_key: loss, max_results: 2}
+    walk:
+      token_field: next_page_token
+      token_param: page_token
+      max_pages: 10
+
+  - name: metric_get_history_bulk_interval
+    method: GET
+    path: /ajax-api/2.0/mlflow/metrics/get-history-bulk-interval
+    query: {run_ids: "${metrics_run}", metric_key: loss, max_results: 100}
+
+  - name: metric_get_history_bulk_ajax
+    method: GET
+    path: /ajax-api/2.0/mlflow/metrics/get-history-bulk
+    query: {run_id: "${metrics_run}", metric_key: loss}
+
+  # ---- Errors ----
+  - name: metric_get_history_missing_run
+    method: GET
+    path: /api/2.0/mlflow/metrics/get-history
+    query: {run_id: "nonexistent", metric_key: loss}
+    expect_status: 404

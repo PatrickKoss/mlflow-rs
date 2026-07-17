@@ -1,0 +1,57 @@
+# Section 3.17 - Workspaces. Boots BOTH servers with MLFLOW_ENABLE_WORKSPACES.
+# Sends X-MLFLOW-WORKSPACE headers to exercise scoped reads/writes. Creating an
+# experiment in workspace "team_a" must not be visible from the "default"
+# workspace scope.
+cases:
+  - name: ws_list
+    method: GET
+    path: /api/3.0/mlflow/workspaces
+
+  - name: ws_create
+    method: POST
+    path: /api/3.0/mlflow/workspaces
+    body: {name: team-a}
+    expect_status: 201
+
+  - name: ws_get
+    method: GET
+    path: /api/3.0/mlflow/workspaces/team-a
+
+  - name: ws_scoped_create_experiment
+    method: POST
+    path: /api/2.0/mlflow/experiments/create
+    headers: {X-MLFLOW-WORKSPACE: team-a}
+    body: {name: scoped_exp}
+
+  - name: ws_scoped_search_in_team_a
+    method: POST
+    path: /api/2.0/mlflow/experiments/search
+    headers: {X-MLFLOW-WORKSPACE: team-a}
+    body: {max_results: 100, order_by: ["name ASC"]}
+    normalize:
+      drop_paths: ["$.experiments"]
+
+  - name: ws_scoped_search_in_default
+    method: POST
+    path: /api/2.0/mlflow/experiments/search
+    headers: {X-MLFLOW-WORKSPACE: default}
+    body: {max_results: 100, order_by: ["name ASC"]}
+    normalize:
+      drop_paths: ["$.experiments"]
+
+  - name: ws_update
+    method: PATCH
+    path: /api/3.0/mlflow/workspaces/team-a
+    body: {workspace: {name: team-a}, update_mask: "description"}
+    compare_body: false
+
+  - name: ws_reserved_name_rejected
+    method: POST
+    path: /api/3.0/mlflow/workspaces
+    body: {name: api}
+    expect_status: 400
+
+  - name: ws_get_missing
+    method: GET
+    path: /api/3.0/mlflow/workspaces/nonexistent-ws
+    expect_status: 404

@@ -402,6 +402,9 @@ ignore = [
 "examples/*" = ["T20", "RET504", "E501"]
 "docs/*" = ["T20", "RET504", "E501"]
 "mlflow/*" = ["PT018"]
+# The Rust differential-replay harness (T12.4) is a dev/CI CLI that prints its
+# progress and section listing to stdout.
+"rust/compliance/*" = ["T201"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = false
