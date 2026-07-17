@@ -336,7 +336,7 @@ pub async fn list_logged_model_artifacts(
 ///   resolved destination path, then rewrite each entry's path to its basename
 ///   re-joined under `relative_path` (Python's
 ///   `posixpath.join(relative_path, basename)`).
-async fn list_artifacts_at(
+pub(crate) async fn list_artifacts_at(
     state: &AppState,
     artifact_root: &str,
     relative_path: Option<&str>,

@@ -48,6 +48,13 @@ flate2 = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 
+# GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the
+# no-batching/query-safety guard and hand-written resolution against the fixed,
+# closed MLflow schema. Declared here (not in [workspace.dependencies]) to avoid
+# a concurrent-edit conflict on the root Cargo.toml with parallel-phase agents.
+# `0.4.1` is the crate's latest release (2022), well past the 7-day cooldown.
+graphql-parser = "0.4.1"
+
 # Metrics: `metrics` facade + Prometheus exporter, not in [workspace.dependencies]
 # yet (declared here directly per task instructions to avoid a concurrent-edit
 # conflict on the root Cargo.toml).

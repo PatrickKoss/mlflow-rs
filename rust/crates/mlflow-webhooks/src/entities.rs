@@ -41,6 +41,12 @@ impl WebhookStatus {
         }
     }
 
+    /// `WebhookStatus.is_active()` (`mlflow/entities/webhook.py:33`): only
+    /// active webhooks receive deliveries (`delivery.py:300`).
+    pub fn is_active(self) -> bool {
+        matches!(self, WebhookStatus::Active)
+    }
+
     /// The proto enum value (`WebhookStatus`: ACTIVE=1, DISABLED=2).
     pub fn to_proto_i32(self) -> i32 {
         match self {

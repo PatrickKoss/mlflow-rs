@@ -17,6 +17,7 @@ pub mod assessments;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
+pub mod graphql;
 pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
@@ -187,6 +188,13 @@ fn register_proto_routes(state: AppState) -> Router {
         "/ajax-api/2.0/mlflow/logged-models/{model_id}/artifacts/files",
         get(artifacts::get_logged_model_artifact),
     );
+    // GraphQL (plan T6.1/T6.2, §3.12) — served at `/graphql` (root, under the
+    // static prefix via the app-level `nest`), for GET **and** POST, exactly as
+    // Python registers it (`handlers.py:6795`,
+    // `_add_static_prefix("/graphql"), ["GET", "POST"]`). Both methods parse the
+    // JSON body (content-type validated for POST only), so a single handler
+    // covers both.
+    router = router.route("/graphql", get(graphql::graphql).post(graphql::graphql));
     router.with_state(state)
 }
 
