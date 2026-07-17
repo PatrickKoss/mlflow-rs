@@ -252,7 +252,9 @@ impl Validator {
 /// [`resolve_registered_model_permission`]. The config validator guarantees
 /// the name is a known permission, so the lookup is defensively clamped to
 /// `READ` only in the never-taken invalid branch.
-fn default_permission(auth_store: &AuthStore) -> &'static Permission {
+///
+/// `pub(crate)` so the after-request read predicate (T9.5) reads the same floor.
+pub(crate) fn default_permission(auth_store: &AuthStore) -> &'static Permission {
     let name = auth_store.config().default_permission.as_str();
     if ALL_PERMISSIONS.iter().any(|p| p.name == name) {
         get_permission(name)

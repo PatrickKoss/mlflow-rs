@@ -368,7 +368,7 @@ fn to_store_kv_tag(t: &pb::LoggedModelTag) -> LoggedModelKv {
 /// (`LoggedModelInfo` + `LoggedModelData`). `registrations` is always empty:
 /// the store doesn't track Model Registry promotions on the logged-model row
 /// (out of scope for this task; the Model Registry phase would populate it).
-fn to_proto_logged_model(model: LoggedModel) -> pb::LoggedModel {
+pub(crate) fn to_proto_logged_model(model: LoggedModel) -> pb::LoggedModel {
     let info = pb::LoggedModelInfo {
         model_id: Some(model.model_id),
         experiment_id: Some(model.experiment_id),

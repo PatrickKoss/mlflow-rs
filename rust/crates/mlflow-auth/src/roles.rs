@@ -316,6 +316,123 @@ impl AuthStore {
         Ok(())
     }
 
+    /// `delete_grants_for_resource` (`sqlalchemy_store.py:519`): delete every
+    /// synthetic-role grant matching `(resource_type, resource_pattern)`.
+    /// `workspace_scoped` restricts the sweep to the given workspace — used for
+    /// resources (e.g. registered-model names) whose pattern can collide across
+    /// workspaces. Admin-created roles are never touched (synthetic roles only).
+    pub async fn delete_grants_for_resource(
+        &self,
+        resource_type: &str,
+        resource_pattern: &str,
+        workspace: Option<&str>,
+    ) -> Result<(), MlflowError> {
+        let role_ids = self.synthetic_role_ids(workspace).await?;
+        if role_ids.is_empty() {
+            return Ok(());
+        }
+        let dialect = self.db().writer().dialect();
+        let in_list = role_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "DELETE FROM {ROLE_PERMISSIONS} \
+             WHERE role_id IN ({in_list}) AND resource_type = {} AND resource_pattern = {}",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+        );
+        self.db()
+            .writer()
+            .exec(
+                &sql,
+                &[
+                    Val::Text(resource_type.to_string()),
+                    Val::Text(resource_pattern.to_string()),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        Ok(())
+    }
+
+    /// `rename_grants_for_resource` (`sqlalchemy_store.py:543`): rewrite every
+    /// synthetic-role grant on `(resource_type, old_pattern)` to
+    /// `(resource_type, new_pattern)`. Used for resources whose pattern is the
+    /// primary key and can change (registered-model rename).
+    pub async fn rename_grants_for_resource(
+        &self,
+        resource_type: &str,
+        old_pattern: &str,
+        new_pattern: &str,
+        workspace: Option<&str>,
+    ) -> Result<(), MlflowError> {
+        let role_ids = self.synthetic_role_ids(workspace).await?;
+        if role_ids.is_empty() {
+            return Ok(());
+        }
+        let dialect = self.db().writer().dialect();
+        let in_list = role_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "UPDATE {ROLE_PERMISSIONS} SET resource_pattern = {} \
+             WHERE role_id IN ({in_list}) AND resource_type = {} AND resource_pattern = {}",
+            dialect.placeholder(1),
+            dialect.placeholder(2),
+            dialect.placeholder(3),
+        );
+        self.db()
+            .writer()
+            .exec(
+                &sql,
+                &[
+                    Val::Text(new_pattern.to_string()),
+                    Val::Text(resource_type.to_string()),
+                    Val::Text(old_pattern.to_string()),
+                ],
+            )
+            .await
+            .map_err(internal)?;
+        Ok(())
+    }
+
+    /// `_synthetic_role_ids` (`sqlalchemy_store.py:357`): ids of synthetic
+    /// `__user_<id>__` roles, optionally scoped to `workspace`. Bulk
+    /// cleanup/rename helpers route through this so they never touch
+    /// admin-created roles that happen to share a grant. The synthetic-name
+    /// match is done in Rust (mirroring Python's regex filter) rather than a
+    /// dialect-specific SQL `LIKE`, whose `_` is a wildcard.
+    async fn synthetic_role_ids(&self, workspace: Option<&str>) -> Result<Vec<i64>, MlflowError> {
+        let dialect = self.db().reader().dialect();
+        let (sql, vals) = match workspace {
+            None => (format!("SELECT id, name FROM {ROLES}"), vec![]),
+            Some(ws) => (
+                format!(
+                    "SELECT id, name FROM {ROLES} WHERE workspace = {}",
+                    dialect.placeholder(1)
+                ),
+                vec![Val::Text(ws.to_string())],
+            ),
+        };
+        let rows = self
+            .db()
+            .reader()
+            .fetch_all(&sql, &vals, |row: &dyn RowLike| {
+                Ok((row.get_i64("id")?, row.get_string("name")?))
+            })
+            .await
+            .map_err(internal)?;
+        Ok(rows
+            .into_iter()
+            .filter(|(_, name)| is_synthetic_role_name(name))
+            .map(|(id, _)| id)
+            .collect())
+    }
+
     // ---- RolePermission CRUD ----
 
     /// `add_role_permission` (`sqlalchemy_store.py:1813`): validate the
@@ -903,6 +1020,18 @@ pub(crate) fn reject_synthetic_role_name(name: &str) -> Result<(), MlflowError> 
         )));
     }
     Ok(())
+}
+
+/// `_is_synthetic_role_name` (`sqlalchemy_store.py:265`): matches the strict
+/// `^__user_\d+__$` synthetic pattern (prefix + all-digit id + `__` suffix).
+fn is_synthetic_role_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix(SYNTHETIC_ROLE_PREFIX) else {
+        return false;
+    };
+    let Some(digits) = rest.strip_suffix("__") else {
+        return false;
+    };
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn fold_max<'a>(best: Option<&'a str>, candidate: &'a str) -> &'a str {

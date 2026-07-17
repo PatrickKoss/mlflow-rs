@@ -1,15 +1,18 @@
-//! The tower auth middleware (plan T9.4, §3.16): authenticate → admin bypass →
-//! validator dispatch → permission enforcement, mirroring `_before_request`
-//! (`mlflow/server/auth/__init__.py:2913`) and the FastAPI OTLP middleware
-//! (`add_fastapi_permission_middleware`, `:4488`).
+//! The tower auth middleware (plan T9.4 + T9.5, §3.16): authenticate → admin
+//! bypass → validator dispatch → permission enforcement → after-request hook,
+//! mirroring `_before_request` (`mlflow/server/auth/__init__.py:2913`), the
+//! FastAPI OTLP middleware (`add_fastapi_permission_middleware`, `:4488`), and
+//! `_after_request` (`:3651`).
 //!
 //! Applied at the top of the app router by [`layer`] (only when auth is
-//! enabled). It runs before every handler and:
+//! enabled). It runs before *and* after every handler and:
 //!
 //! 1. Lets unprotected routes through ([`is_unprotected_route`]).
 //! 2. Authenticates HTTP Basic credentials against the [`AuthStore`]; a
 //!    missing/invalid credential returns the byte-matched 401 challenge.
-//! 3. Bypasses admins entirely (`sender_is_admin`).
+//! 3. Bypasses the before-request validators for admins (`sender_is_admin`);
+//!    the after-request hook still runs for them (creator grants apply, filters
+//!    skip internally).
 //! 4. Dispatches to a [`validators::Validator`] ([`path_matchers::dispatch_request`]),
 //!    running it against the request context. A `false` result is the
 //!    byte-matched 403 `Permission denied`. A [`path_matchers::Dispatched::Deny`]
@@ -17,13 +20,13 @@
 //! 5. Buffers the request body so validators that read it (MV create, trace
 //!    search v3, start-trace v3, batch-get, delete-user, update-password, …) see
 //!    the JSON, then reconstructs the request for the downstream handler.
-//!
-//! ## After-request hooks (T9.5 seam)
-//!
-//! Python's `_after_request` attaches creator grants and filters list
-//! responses. That is T9.5; this middleware only runs the *before-request*
-//! authorization. See the `// T9.5 SEAM:` marker below.
+//! 6. After the handler runs, dispatches the after-request hook
+//!    ([`path_matchers::dispatch_after_request`] → [`after_request::run`]) on a
+//!    successful (`2xx`/`3xx`) response: creator MANAGE grants, search-response
+//!    filtering (with page-fill), and the registered-model delete/rename grant
+//!    cascade. See [`after_request`].
 
+pub mod after_request;
 pub mod path_matchers;
 pub mod validators;
 
@@ -37,7 +40,8 @@ use serde_json::Value;
 
 use crate::state::AppState;
 use crate::workspace::{resolve_workspace, WORKSPACE_HEADER_NAME};
-use path_matchers::{dispatch_request, Dispatched};
+use after_request::AfterCtx;
+use path_matchers::{dispatch_after_request, dispatch_request, Dispatched};
 use validators::RequestCtx;
 
 /// The authenticated identity for the current request, attached to the request
@@ -192,22 +196,24 @@ pub async fn authorize(
         return unauthenticated_response();
     };
 
-    // 3. Admin bypass (`sender_is_admin`). Stamp the authenticated identity
-    //    onto the request extensions first so a downstream handler that runs
-    //    its own in-band authorization (the `/graphql` executor, T9.6) can read
-    //    it — this mirrors Python, where the graphene auth middleware
-    //    re-derives username + `is_admin` per request.
-    //    `authenticate_and_get_user` already resolved the user (T9.8's cached
-    //    `_authenticate_cached` path), so no second `get_user` query runs here.
+    // 3. Admin flag (`sender_is_admin`). Admins bypass the before-request
+    //    validators, but `_after_request` still runs for them (creator grants
+    //    apply to admin-created resources; the filters short-circuit on
+    //    `sender_is_admin` internally), so we record the flag rather than
+    //    early-returning here. `authenticate_and_get_user` already resolved the
+    //    user (T9.8's cached `_authenticate_cached` path), so no second
+    //    `get_user` query runs.
+    //
+    //    Stamp the authenticated identity onto the request extensions so a
+    //    downstream handler that runs its own in-band authorization (the
+    //    `/graphql` executor, T9.6) can read it — mirroring Python, where the
+    //    graphene auth middleware re-derives username + `is_admin` per request.
+    let is_admin = user.is_admin;
     req.extensions_mut().insert(AuthContext {
         username: username.clone(),
-        is_admin: user.is_admin,
+        is_admin,
     });
-    if user.is_admin {
-        return next.run(req).await;
-    }
 
-    // 4. Dispatch to the validator.
     let method = req.method().as_str().to_string();
     let query = parse_query(req.uri().query());
     let experiment_id_header = req
@@ -221,19 +227,29 @@ pub async fn authorize(
             .and_then(|v| v.to_str().ok()),
     );
 
-    let dispatched = dispatch_request(&path, &method);
-    let validator = match dispatched {
-        Dispatched::Allow => {
-            // No gate — but the request is authenticated, so forward it.
-            return next.run(req).await;
-        }
-        Dispatched::Deny => return forbidden_response(),
-        Dispatched::Validator(v, params) => (v, params),
-    };
-    let (validator, path_params) = validator;
+    // The after-request hook (if any) for this route. `_after_request` runs for
+    // both admins and non-admins.
+    let after_handler = dispatch_after_request(&path, &method);
 
-    // Buffer the body so body-reading validators can inspect the JSON and the
-    // downstream handler still receives it.
+    // 4. Before-request validator dispatch (skipped entirely for admins).
+    let validator = if is_admin {
+        None
+    } else {
+        match dispatch_request(&path, &method) {
+            Dispatched::Allow => None,
+            Dispatched::Deny => return forbidden_response(),
+            Dispatched::Validator(v, params) => Some((v, params)),
+        }
+    };
+
+    // Fast path: no validator and no after-request hook — forward untouched.
+    if validator.is_none() && after_handler.is_none() {
+        return next.run(req).await;
+    }
+
+    // Buffer the request body so body-reading validators can inspect the JSON,
+    // the after-request hook can re-parse the search request, and the downstream
+    // handler still receives it.
     let (parts, body) = req.into_parts();
     let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
         Ok(b) => b,
@@ -241,29 +257,72 @@ pub async fn authorize(
     };
     let json_body: Option<Value> = serde_json::from_slice(&body_bytes).ok();
 
-    let ctx = RequestCtx {
-        username: &username,
-        method: &method,
-        workspace: workspace.name(),
-        path_params: &path_params,
-        query: &query,
-        json_body: json_body.as_ref(),
-        experiment_id_header: experiment_id_header.as_deref(),
-        auth_store,
-        tracking_store: state.tracking_store(),
-    };
-
-    match validator.check(&ctx).await {
-        Ok(true) => {}
-        Ok(false) => return forbidden_response(),
-        Err(e) => return error_response(&e),
+    if let Some((validator, path_params)) = validator {
+        let ctx = RequestCtx {
+            username: &username,
+            method: &method,
+            workspace: workspace.name(),
+            path_params: &path_params,
+            query: &query,
+            json_body: json_body.as_ref(),
+            experiment_id_header: experiment_id_header.as_deref(),
+            auth_store,
+            tracking_store: state.tracking_store(),
+        };
+        match validator.check(&ctx).await {
+            Ok(true) => {}
+            Ok(false) => return forbidden_response(),
+            Err(e) => return error_response(&e),
+        }
     }
 
-    // T9.5 SEAM: `_after_request` (creator grants + list-response filtering)
-    // attaches here around `next.run(...)`. Not part of T9.4.
+    // Capture the raw query string (owned) before rebuilding the request — the
+    // after-request re-parse needs it, and `http::request::Parts` (its
+    // `Extensions` field) is `!Send`, so we must not hold `parts` across the
+    // downstream `await`.
+    let request_query: Option<String> = parts.uri.query().map(str::to_string);
 
-    let rebuilt = Request::from_parts(parts, Body::from(body_bytes));
-    next.run(rebuilt).await
+    // Run the downstream handler with the reconstructed request (consumes `parts`).
+    let rebuilt = Request::from_parts(parts, Body::from(body_bytes.clone()));
+    let resp = next.run(rebuilt).await;
+
+    // 5. After-request hook (`_after_request`, T9.5). Only on a successful
+    //    (`2xx`/`3xx`) response, mirroring the `400 <= status < 600` skip.
+    let Some(after_handler) = after_handler else {
+        return resp;
+    };
+    if resp.status().is_client_error() || resp.status().is_server_error() {
+        return resp;
+    }
+
+    // Buffer the response body only when the handler needs it
+    // ([`AfterRequestHandler::needs_response_body`]) — mirroring Python reading
+    // `resp.json` only for the creator-grant / filter hooks.
+    let (resp, resp_body) = if after_handler.needs_response_body() {
+        let (rparts, rbody) = resp.into_parts();
+        let bytes = match axum::body::to_bytes(rbody, usize::MAX).await {
+            Ok(b) => b,
+            Err(_) => Bytes::new(),
+        };
+        (
+            Response::from_parts(rparts, Body::from(bytes.clone())),
+            Some(bytes),
+        )
+    } else {
+        (resp, None)
+    };
+
+    let ctx = AfterCtx {
+        username: &username,
+        workspace: workspace.name(),
+        is_admin,
+        method: &method,
+        query: request_query.as_deref(),
+        request_body: &body_bytes,
+        request_json: json_body.as_ref(),
+        state: &state,
+    };
+    after_request::run(after_handler, &ctx, resp, resp_body).await
 }
 
 /// Render an `MlflowError` raised inside a validator as the same JSON error

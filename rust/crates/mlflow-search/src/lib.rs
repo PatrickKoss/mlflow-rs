@@ -37,7 +37,7 @@ mod token;
 
 pub use ast::{Comparison, OrderBy, Value};
 pub use error::{ErrorCode, Result, SearchError};
-pub use page_token::parse_start_offset_from_page_token;
+pub use page_token::{create_page_token, parse_start_offset_from_page_token};
 
 pub use domains::logged_models::{
     AscendingValue, LoggedModelOrderBy, OrderByInput as LoggedModelOrderByInput, SqlaComparison,

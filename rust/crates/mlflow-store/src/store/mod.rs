@@ -62,9 +62,9 @@ pub use entities::{
 };
 pub use experiments::ViewType;
 pub use logged_models::{
-    DatasetFilter, LoggedModel, LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput,
-    LoggedModelOrderByInput, LoggedModelStatus, LoggedModelsPage,
-    SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT,
+    logged_models_page_token, logged_models_token_offset, DatasetFilter, LoggedModel,
+    LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
+    LoggedModelStatus, LoggedModelsPage, SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT,
 };
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
