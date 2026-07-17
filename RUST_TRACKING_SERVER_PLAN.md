@@ -1467,11 +1467,21 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       `yarn build`, cache headers (28-day hashed assets, no-cache `index.html`).
       **AC:** UI fully loads with the Python container stopped, except genai pages.
       **VER:** compose smoke with Python paused.
-- [ ] **T11.5 `server-info` in Rust** (D5): serve
+- [x] **T11.5 `server-info` in Rust** (D5): serve
       `/(api|ajax-api)/3.0/mlflow/server-info` with flags consistent with the deployment
       (workspaces on/off, auth on/off); verify `useServerInfo` consumers behave.
       **AC:** UI boots with no console errors; feature gates render correctly.
       **VER:** browser console check in UI smoke.
+      *(Done 2026-07-17: `mlflow-server/src/server_info.rs`, hand-registered
+      like /graphql (handlers.py:6799 — GET only; the plan prose saying
+      GET/POST was wrong). Exactly Python's 3 fields (handlers.py:6612-6616 /
+      useServerInfo.tsx:9-13): store_type always "SqlStore" (Rust has no
+      FileStore), workspaces_enabled from AppState, trace_archival_enabled
+      hardcoded false (no archival in Rust yet). There is NO auth_enabled
+      wire field in Python — D5's "auth on/off" is deployment intent, not a
+      field. Reachable unauthenticated + carved out of the workspace-header
+      gate like Python. 7 HTTP tests incl. byte-exact body. Browser check
+      rides T11.6.)*
 - [ ] **T11.6 UI smoke checklist** (manual or playwright): experiment list, runs table
       (Load more), run detail (GraphQL), charts (bulk-interval), compare runs, metric
       page, artifact browser, traces tab (list, span tree, attachments, assessments),
@@ -1483,7 +1493,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 12 — Compliance harness & CI
 
-- [ ] **T12.1 Server-launch integration**: extend
+- [x] **T12.1 Server-launch integration**: extend
       `tests/tracking/integration_test_utils.py` `_init_server` with
       `server_type="rust"`; parametrize `mlflow_client` fixture in
       `test_rest_tracking.py`; point `tests/server/auth/auth_test_utils.py` launcher at
@@ -1491,6 +1501,20 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       **AC:** `pytest tests/tracking/test_rest_tracking.py` and `tests/server/auth/`
       runnable against Rust via a switch.
       **VER:** local runs; failures triaged into a parity backlog issue.
+      *(Done 2026-07-17: switch `MLFLOW_SERVER_TYPE=rust` (+
+      `MLFLOW_RUST_SERVER_BIN` override, auto-cargo-build) drives both the
+      tracking `mlflow_client` fixture (subprocess `_init_server` path; file
+      store variants skip) and `test_auth.py::client` via
+      `resolve_auth_server_launch()` (init_db + admin seed through the real
+      Python auth store; ini's database_uri → MLFLOW_AUTH_DATABASE_URI).
+      Python default paths unchanged/verified. First smoke: experiments
+      subset 7/8 PASS against Rust. **Parity backlog opened:** (1)
+      type-mismatch validation errors surface serde text instead of
+      Python's "Invalid value 123 for parameter 'name'"; (2) auth
+      enforcement absent pre-T9.4 (unauth requests succeed) — expected to
+      close when T9.4 merges; (3) HTTP reason-phrase casing "Bad Request" vs
+      Python's "BAD REQUEST". Remaining auth fixtures (test_client*.py,
+      fastapi_*) still flask-only — extend during T12.3.)*
 - [ ] **T12.2 `MLFLOW_RUST_STORE_TESTING` flag** mirroring the Go flag; every use links a
       justification.
       **AC:** flag exists; zero unexplained uses.
