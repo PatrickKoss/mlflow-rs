@@ -1388,11 +1388,26 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       **AC:** a non-admin user sees exactly the same filtered search results from Rust
       and Python on a seeded permission fixture, including page-fill behavior.
       **VER:** differential test with multi-user fixtures.
-- [ ] **T9.6 GraphQL auth middleware**: per-field READ checks, experiment-id narrowing
+- [x] **T9.6 GraphQL auth middleware**: per-field READ checks, experiment-id narrowing
       for searchRuns, post-filter for searchModelVersions, admin bypass,
       `MLFLOW_SERVER_ENABLE_GRAPHQL_AUTH` toggle.
       **AC:** GraphQL requests by non-admin users match Python results/errors.
       **VER:** auth GraphQL tests in Phase 12.
+      *(Done 2026-07-17: `graphql/auth.rs` mirroring
+      GraphQLAuthorizationMiddleware (auth/__init__.py:4139, applied
+      handlers.py:3671). Toggle default ON (anything but false/0); checks
+      skipped when auth app off. /graphql: authenticated-but-no-validator at
+      request level (Dispatched::Allow, matches Python), fine-grained checks
+      in execution: PROTECTED_FIELDS map (get-experiment/run/artifacts/
+      metric-history-bulk-interval → experiment READ incl. parent lookup;
+      searchRuns/searchDatasets → id narrowing with empty-list allow +
+      none-readable deny; searchModelVersions → in-place drop, NO page-fill).
+      Denied field → null with NO errors entry (graphene resolve None);
+      MlflowException during resolution swallowed to deny. AuthContext
+      stamped on request extensions by the T9.4 layer; T9.4 permission
+      helpers extracted as pub(crate) free functions, not duplicated.
+      Toggle-off case in its own test binary (env is process-global).
+      10 + 1 HTTP tests; graphql_http (24) still green.)*
 - [x] **T9.7 Signup UI + CSRF**: `/signup` server-rendered form (port template), CSRF
       token validation on `create-user-ui`, flash-alert redirect behavior.
       **AC:** browser signup flow works; CSRF-less POST rejected.
