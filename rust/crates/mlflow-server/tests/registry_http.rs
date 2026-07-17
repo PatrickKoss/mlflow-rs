@@ -16,7 +16,14 @@
 //! * aliases via all three methods (POST/DELETE/GET) on the one path;
 //! * `createModelVersion` source validation negative cases (local-path escape,
 //!   run mismatch, traversal) with byte-matched errors;
-//! * copy-model-version flow (`models:/{src}/{ver}` source end-to-end).
+//! * copy-model-version flow (`models:/{src}/{ver}` source end-to-end);
+//! * prompts-on-registry (T7.5): the Prompts UI's exact REST call shapes
+//!   (`mlflow/server/js/src/experiment-tracking/pages/prompts/api.ts`) —
+//!   create prompt (RM tagged `mlflow.prompt.is_prompt=true`), create prompt
+//!   version (`model-versions/create` with `source: "dummy-source"`), tag
+//!   set/delete on both, alias set, and the `search` filter clauses the UI
+//!   sends (`tags.\`mlflow.prompt.is_prompt\` = 'true'`) — plus the model/prompt
+//!   name-collision rejection (`handle_resource_already_exist_error`).
 
 use std::path::{Path, PathBuf};
 
@@ -231,6 +238,24 @@ async fn patch(server: &TestServer, path: &str, body: &Value) -> HttpResponse {
 }
 async fn delete(server: &TestServer, path: &str, body: &Value) -> HttpResponse {
     send(server, Method::DELETE, path, Some(body)).await
+}
+
+/// Minimal query-string percent-encoding for filter clauses in GET URLs (the
+/// existing tests hand-encode a handful of characters inline; the prompt
+/// filters below need backticks/`=`/quotes too, so a small general helper
+/// avoids repeating ad hoc `%XX` literals).
+fn qs_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push('+'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 fn uniq() -> u64 {
@@ -1012,4 +1037,289 @@ async fn copy_model_version_flow() {
     .await;
     assert_eq!(res.status, StatusCode::OK, "{}", res.text());
     assert_eq!(res.json()["artifact_uri"], "mlflow-artifacts:/base/loc");
+}
+
+// ===========================================================================
+// Prompts-on-registry (T7.5): the Prompts UI is unmodified RegisteredModel /
+// ModelVersion REST traffic with `mlflow.prompt.is_prompt=true` tags — see
+// `mlflow/server/js/src/experiment-tracking/pages/prompts/api.ts`. These
+// tests drive that exact call shape end-to-end and confirm models pages never
+// surface prompts (the T7.3 anti-join, exercised here at the HTTP layer).
+// ===========================================================================
+
+const IS_PROMPT_TAG: &str = "mlflow.prompt.is_prompt";
+
+#[tokio::test]
+async fn prompt_lifecycle_over_http() {
+    let server = TestServer::start("prompt_lifecycle").await;
+    let name = format!("pr_{}", uniq());
+
+    // `createRegisteredPrompt`: registered-models/create with the is_prompt tag.
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({
+            "name": name,
+            "tags": [{"key": IS_PROMPT_TAG, "value": "true"}],
+        }),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let rm = &res.json()["registered_model"];
+    assert_eq!(rm["name"], name);
+    assert!(
+        rm["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["key"] == IS_PROMPT_TAG && t["value"] == "true"),
+        "{rm}"
+    );
+
+    // `createRegisteredPromptVersion`: model-versions/create, placeholder
+    // "dummy-source" (accepted for prompts; see source_validation's
+    // is_prompt branch), tagged with the prompt template text.
+    let res = post(
+        &server,
+        &format!("{API}/model-versions/create"),
+        &json!({
+            "name": name,
+            "source": "dummy-source",
+            "tags": [
+                {"key": IS_PROMPT_TAG, "value": "true"},
+                {"key": "mlflow.prompt.text", "value": "Hello {{name}}"},
+            ],
+        }),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let mv = &res.json()["model_version"];
+    assert_eq!(mv["name"], name);
+    assert_eq!(mv["version"], "1");
+
+    // `setRegisteredPromptTag` / `deleteRegisteredPromptTag`.
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/set-tag"),
+        &json!({"name": name, "key": "owner", "value": "alice"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let res = delete(
+        &server,
+        &format!("{API}/registered-models/delete-tag"),
+        &json!({"name": name, "key": "owner"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+
+    // `setRegisteredPromptVersionTag` / `deleteRegisteredPromptVersionTag`.
+    let res = post(
+        &server,
+        &format!("{API}/model-versions/set-tag"),
+        &json!({"name": name, "version": "1", "key": "lang", "value": "en"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let res = delete(
+        &server,
+        &format!("{API}/model-versions/delete-tag"),
+        &json!({"name": name, "version": "1", "key": "lang"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+
+    // Set alias on the prompt version (shared alias route; the Prompts UI
+    // itself does not call this today, but prompts and models share the same
+    // registry surface, so aliasing a prompt version must work identically).
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/alias"),
+        &json!({"name": name, "alias": "production", "version": "1"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let res = get(
+        &server,
+        &format!("{API}/registered-models/alias?name={name}&alias=production"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    assert_eq!(res.json()["model_version"]["version"], "1");
+
+    // `listRegisteredPrompts`: registered-models/search with the exact filter
+    // clause the Prompts UI sends (backtick-quoted tag key, `= 'true'`).
+    let filter = qs_encode(&format!("tags.`{IS_PROMPT_TAG}` = 'true'"));
+    let res = get(
+        &server,
+        &format!("{API}/registered-models/search?filter={filter}"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let body = res.json();
+    let names: Vec<&str> = body["registered_models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&name.as_str()), "{names:?}");
+
+    // `getPromptVersions`: model-versions/search with `name='x' AND
+    // tags.`is_prompt` = 'true'`.
+    let mv_filter = qs_encode(&format!(
+        "name='{name}' AND tags.`{IS_PROMPT_TAG}` = 'true'"
+    ));
+    let res = get(
+        &server,
+        &format!("{API}/model-versions/search?filter={mv_filter}"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let versions = res.json()["model_versions"].as_array().unwrap().clone();
+    assert_eq!(versions.len(), 1, "{versions:?}");
+    assert_eq!(versions[0]["version"], "1");
+
+    // `deleteRegisteredPromptVersion` / `deleteRegisteredPrompt`.
+    let res = delete(
+        &server,
+        &format!("{API}/model-versions/delete"),
+        &json!({"name": name, "version": "1"}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let res = delete(
+        &server,
+        &format!("{API}/registered-models/delete"),
+        &json!({"name": name}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+}
+
+#[tokio::test]
+async fn prompts_excluded_from_default_model_search() {
+    let server = TestServer::start("prompt_hidden").await;
+    let prefix = format!("ph_{}", uniq());
+    let model_name = format!("{prefix}_model");
+    let prompt_name = format!("{prefix}_prompt");
+
+    post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": model_name}),
+    )
+    .await;
+    post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": prompt_name, "tags": [{"key": IS_PROMPT_TAG, "value": "true"}]}),
+    )
+    .await;
+
+    // Default (no filter): the Models UI's plain listing — prompts must never
+    // appear.
+    let filter = qs_encode(&format!("name LIKE '{prefix}%'"));
+    let res = get(
+        &server,
+        &format!("{API}/registered-models/search?filter={filter}"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let body = res.json();
+    let names: Vec<&str> = body["registered_models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&model_name.as_str()), "{names:?}");
+    assert!(!names.contains(&prompt_name.as_str()), "{names:?}");
+
+    // The prompts-only filter is the inverse: only the prompt appears.
+    let prompt_filter = qs_encode(&format!(
+        "name LIKE '{prefix}%' AND tags.`{IS_PROMPT_TAG}` = 'true'"
+    ));
+    let res = get(
+        &server,
+        &format!("{API}/registered-models/search?filter={prompt_filter}"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    let body = res.json();
+    let names: Vec<&str> = body["registered_models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec![prompt_name.as_str()], "{names:?}");
+}
+
+#[tokio::test]
+async fn prompt_and_model_name_collision_error_messages() {
+    let server = TestServer::start("prompt_collision").await;
+    let name = format!("coll_{}", uniq());
+
+    // Existing plain model, then a same-name prompt create attempt: the
+    // cross-type message (`registry_utils.py:280-285`).
+    post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": name}),
+    )
+    .await;
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": name, "tags": [{"key": IS_PROMPT_TAG, "value": "true"}]}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.text());
+    assert_eq!(
+        res.json()["message"],
+        format!(
+            "Tried to create a prompt with name '{name}', but the name is already taken by a \
+             registered model. MLflow does not allow creating a model and a prompt with the \
+             same name."
+        )
+    );
+
+    // Existing prompt, then a same-name plain model create attempt: the
+    // symmetric cross-type message.
+    let name2 = format!("coll2_{}", uniq());
+    post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": name2, "tags": [{"key": IS_PROMPT_TAG, "value": "true"}]}),
+    )
+    .await;
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": name2}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.text());
+    assert_eq!(
+        res.json()["message"],
+        format!(
+            "Tried to create a registered model with name '{name2}', but the name is already \
+             taken by a prompt. MLflow does not allow creating a model and a prompt with the \
+             same name."
+        )
+    );
+
+    // Same-type collision keeps the plain "already exists." message.
+    let res = post(
+        &server,
+        &format!("{API}/registered-models/create"),
+        &json!({"name": name}),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.text());
+    assert_eq!(
+        res.json()["message"],
+        format!("Registered Model (name={name}) already exists.")
+    );
 }

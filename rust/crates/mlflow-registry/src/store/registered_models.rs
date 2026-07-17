@@ -51,7 +51,15 @@ impl RegistryStore {
         ];
         if let Err(e) = tx.exec(&insert_sql, &insert_vals).await {
             if is_unique_violation(&e) {
-                return Err(already_exists(name));
+                drop(tx);
+                let is_new_prompt = tags
+                    .iter()
+                    .any(|(k, v)| *k == IS_PROMPT_TAG_KEY && *v == "true");
+                let existing_tags = self.fetch_registered_model_tags(workspace, name).await?;
+                let is_existing_prompt = existing_tags
+                    .iter()
+                    .any(|t| t.key == IS_PROMPT_TAG_KEY && t.value.as_deref() == Some("true"));
+                return Err(already_exists(name, is_existing_prompt, is_new_prompt));
             }
             return Err(internal(e));
         }
@@ -502,10 +510,62 @@ pub(crate) fn map_model_version_row(r: &dyn RowLike) -> Result<ModelVersionRow, 
     })
 }
 
-/// `handle_resource_already_exist_error` (non-prompt path):
-/// `Registered Model (name={name}) already exists`.
-fn already_exists(name: &str) -> MlflowError {
-    MlflowError::resource_already_exists(format!("Registered Model (name={name}) already exists"))
+/// `mlflow.prompt.is_prompt` (`mlflow/prompt/constants.py:4`). A registered
+/// model / model version carrying this tag with value `"true"` is a prompt,
+/// not a model — `create_prompt`/`create_prompt_version` are thin wrappers
+/// over `create_registered_model`/`create_model_version` that just add this
+/// tag (`abstract_store.py:540`, `:787`), so prompts and models share the same
+/// REST surface and the same name collision path.
+const IS_PROMPT_TAG_KEY: &str = "mlflow.prompt.is_prompt";
+
+/// `handle_resource_already_exist_error` (`mlflow/prompt/registry_utils.py:264-290`):
+/// on a name collision, pick the message based on whether the pre-existing and
+/// the about-to-be-created entities are prompts or plain registered models —
+/// "model already exists" / "prompt already exists" / the cross-type message
+/// explaining a prompt and a model cannot share a name.
+fn already_exists(name: &str, is_existing_prompt: bool, is_new_prompt: bool) -> MlflowError {
+    let old_entity = if is_existing_prompt {
+        "Prompt"
+    } else {
+        "Registered Model"
+    };
+    let new_entity = if is_new_prompt {
+        "Prompt"
+    } else {
+        "Registered Model"
+    };
+
+    if old_entity != new_entity {
+        return MlflowError::resource_already_exists(format!(
+            "Tried to create a {} with name {}, but the name is already taken by a {}. \
+             MLflow does not allow creating a model and a prompt with the same name.",
+            new_entity.to_lowercase(),
+            python_repr_str(name),
+            old_entity.to_lowercase(),
+        ));
+    }
+
+    // NB: the same-type branch keeps the trailing period Python's f-string has
+    // (`registry_utils.py:288`); the pre-existing `already_exists` caller path
+    // for plain (non-prompt) collisions did not have one — see `git blame` on
+    // this line before this change — but `handle_resource_already_exist_error`
+    // is the single source of truth for this message in Python and always
+    // appends a period, so both branches route through it now.
+    MlflowError::resource_already_exists(format!("{new_entity} (name={name}) already exists."))
+}
+
+/// Python's `repr()` for a `str`: single-quoted, unless the string contains a
+/// single quote (and no double quote), in which case double-quoted. Model
+/// names may contain apostrophes (`_validate_model_name` only rejects `/` and
+/// `:`), so this distinction is reachable via `{name!r}` in
+/// `registry_utils.py:281`.
+fn python_repr_str(s: &str) -> String {
+    let quote = if s.contains('\'') && !s.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    format!("{quote}{s}{quote}")
 }
 
 /// The rename-collision error mirrors Python's
