@@ -424,6 +424,50 @@ async fn disabled_webhook_is_not_delivered() {
     assert_eq!(server.hit_count(), 0);
 }
 
+#[tokio::test]
+async fn fire_is_fire_and_forget_and_swallows_delivery_errors() {
+    // `fire` (the true fire-and-forget path T8.4 calls) must never propagate a
+    // delivery failure to the caller: `_send_webhook_with_error_handling` logs
+    // and swallows. Point the webhook at a port with nothing listening so every
+    // attempt fails at connect; `fire` must still return `()` promptly.
+    allow_http_scheme();
+    let (store, _db) = store("fire_swallows").await;
+    // A port we never bind → connection refused on every attempt.
+    let dead_port = {
+        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        l.local_addr().unwrap().port()
+        // `l` dropped here, freeing the port with nothing listening.
+    };
+    store
+        .create_webhook(
+            WS,
+            "hook",
+            &format!("http://webhook.test:{dead_port}/hook"),
+            &[model_created()],
+            None,
+            Some("topsecret"),
+            Some(WebhookStatus::Active),
+        )
+        .await
+        .unwrap();
+
+    let dispatcher =
+        WebhookDispatcher::with_config(store, WS, resolver_to(&["127.0.0.1"]), test_config(0));
+
+    // The unit return type is the fire-and-forget contract: no error surfaces.
+    // Awaiting the detached handles confirms the spawned task also does not
+    // panic on the connect failure.
+    let () = dispatcher
+        .fire(model_created(), serde_json::json!({}))
+        .await;
+    for h in dispatcher
+        .fire_handles(model_created(), serde_json::json!({}))
+        .await
+    {
+        h.await.expect("delivery task must not panic on failure");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Retry behavior
 // ---------------------------------------------------------------------------
