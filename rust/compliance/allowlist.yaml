@@ -34,6 +34,13 @@ entries:
     json_pointer: /__raw_text__
     reason: Flask default HTML 405 page vs empty axum body; status matches.
     link: RUST_TRACKING_SERVER_PLAN.md#T12.4
+  - case_or_path: dataset_search
+    json_pointer: /__raw_text__
+    # NOT made obsolete by T16.1: this case hits the legacy 2.0
+    # experiments/search-datasets path, not the 3.0 evaluation-datasets
+    # API. Both servers 404 it; only the 404 body differs.
+    reason: Flask default HTML 404 page vs empty axum body on an unmatched route; status matches.
+    link: RUST_TRACKING_SERVER_PLAN.md#T12.4
 
   # ---- Irreproducible Python error text -----------------------------------
   - case_or_path: experiment_create_duplicate
