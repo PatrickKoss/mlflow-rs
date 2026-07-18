@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
     // Serve the tracking API when a backend store is configured; otherwise run
     // the ops-only app (health/version/metrics). The store is verified against
     // the expected Alembic head at connect time.
+    let mut online_scoring_scheduler = None;
     let app = match &config.backend_store_uri {
         Some(uri) => {
             let db = Db::connect_and_verify_with(uri, PoolConfig::from_env()).await?;
@@ -128,6 +129,14 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .await?;
             }
+            if config.job_execution_enabled {
+                online_scoring_scheduler = Some(
+                    mlflow_server::online_scoring_scheduler::OnlineScoringScheduler::new(
+                        app_state.tracking_store().clone(),
+                        app_state.workspace_store().cloned(),
+                    ),
+                );
+            }
             build_app_with_state(&config, app_state)
         }
         None => build_app(&config),
@@ -137,9 +146,15 @@ async fn main() -> anyhow::Result<()> {
     let local_addr = listener.local_addr()?;
     tracing::info!(address = %local_addr, static_prefix = ?config.static_prefix, "mlflow-server listening");
 
-    axum::serve(listener, app)
+    let scheduler_task =
+        online_scoring_scheduler.map(|scheduler| tokio::spawn(scheduler.run_periodic()));
+    let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
-        .await?;
+        .await;
+    if let Some(task) = scheduler_task {
+        task.abort();
+    }
+    serve_result?;
 
     tracing::info!("mlflow-server shut down");
     Ok(())

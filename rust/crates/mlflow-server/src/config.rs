@@ -26,7 +26,7 @@ pub const MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR: &str = "MLFLOW_SERVER_CORS
 pub const MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR: &str = "MLFLOW_SERVER_X_FRAME_OPTIONS";
 pub const MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR: &str =
     "MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE";
-/// Python's job-runner enable gate (default `True`).
+/// Python's job-execution and periodic-scheduler enable gate (default `True`).
 pub const MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR: &str = "MLFLOW_SERVER_ENABLE_JOB_EXECUTION";
 
 /// `MLFLOW_ENABLE_WORKSPACES` (`environment_variables.py`, default `False`).
@@ -230,8 +230,8 @@ pub struct ServerConfig {
     /// Whether the basic-auth app is enabled (`--app-name basic-auth`, or
     /// `MLFLOW_AUTH_CONFIG_PATH` present).
     pub auth_enabled: bool,
-    /// Whether the DB-backed job runner may start. Python defaults this gate to
-    /// enabled and disables it only for `false`/`0`.
+    /// Whether DB-backed jobs and their periodic submitters may start. Python
+    /// defaults this gate to enabled and disables it only for `false`/`0`.
     pub job_execution_enabled: bool,
     /// Resolved workspaces-enabled signal (flags override
     /// `MLFLOW_ENABLE_WORKSPACES`).
