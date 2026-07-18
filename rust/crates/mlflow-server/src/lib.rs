@@ -190,15 +190,19 @@ pub fn build_app_with_recorder(
     // a disallowed Host is rejected with a 403 before authentication runs (no
     // 401 challenge). Uses `.layer()` on the composed router (not `.merge()`),
     // preserving the T9.4 fallback-wrapping lesson.
-    let security_config = security::SecurityConfig::from_parts(
-        config.allowed_hosts.clone(),
-        config.cors_allowed_origins.clone(),
-        &config.x_frame_options,
-    );
-    app.layer(middleware::from_fn_with_state(
-        security_config,
-        security::security_middleware,
-    ))
+    if config.disable_security_middleware {
+        app
+    } else {
+        let security_config = security::SecurityConfig::from_parts(
+            config.allowed_hosts.clone(),
+            config.cors_allowed_origins.clone(),
+            &config.x_frame_options,
+        );
+        app.layer(middleware::from_fn_with_state(
+            security_config,
+            security::security_middleware,
+        ))
+    }
 }
 
 /// Build a `Router` of the implemented proto-backed endpoints, registered on
@@ -249,9 +253,17 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
     // registered. Everything gated behind `!artifacts_only` below is a tracking
     // endpoint (or an artifacts-only-disabled artifact endpoint).
     router = router.route("/get-artifact", get(artifacts::get_artifact));
+    // The `upload_artifact` handler enforces the 10 MB cap itself and returns a
+    // 400 ("Artifact size is too large. ...") on overflow, mirroring
+    // `handlers.py:2424-2439`. axum's `Bytes` extractor otherwise rejects bodies
+    // over its 2 MB default with a bare 413 before the handler runs, so raise the
+    // per-route body limit just past the cap: the handler still sees a 10 MB + 1
+    // body and produces Python's 400, while absurdly larger bodies short-circuit.
     router = router.route(
         "/ajax-api/2.0/mlflow/upload-artifact",
-        axum::routing::post(artifacts::upload_artifact),
+        axum::routing::post(artifacts::upload_artifact).layer(
+            axum::extract::DefaultBodyLimit::max(artifacts::MAX_UPLOAD_ARTIFACT_BYTES + 1024),
+        ),
     );
     if artifacts_only {
         return register_role_and_auth_layers(router, state);
@@ -609,6 +621,7 @@ mod tests {
             allowed_hosts: Some(vec!["*".to_string()]),
             cors_allowed_origins: None,
             x_frame_options: security::DEFAULT_X_FRAME_OPTIONS.to_string(),
+            disable_security_middleware: false,
             // `/metrics` is gated on this; the ops routing tests below include a
             // metrics-endpoint assertion, so enable it here.
             expose_prometheus: true,

@@ -30,6 +30,7 @@ use mlflow_store::{
     RunStatus, RunsPage, ViewType,
 };
 
+use crate::auth_middleware::{validators::resolve_experiment_permission, AuthContext};
 use crate::proto_http::{parse_request, parse_request_lenient, proto_response};
 use crate::schema_validation::{missing_required_error, SchemaEntry, Validator};
 use crate::state::AppState;
@@ -108,6 +109,75 @@ const LOG_BATCH_SCHEMA: &[SchemaEntry] = &[
             Validator::Array,
             Validator::Custom(assert_tags_fields_present),
         ],
+    },
+];
+
+/// `_log_metric`'s schema (`handlers.py:1743-1752`). Field order matches Python's
+/// dict so the first failing param surfaces the same message.
+const LOG_METRIC_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "run_id",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "key",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "value",
+        validators: &[Validator::Required, Validator::FloatLike],
+    },
+    SchemaEntry {
+        param: "timestamp",
+        validators: &[Validator::IntLike, Validator::Required],
+    },
+    SchemaEntry {
+        param: "step",
+        validators: &[Validator::IntLike],
+    },
+    SchemaEntry {
+        param: "model_id",
+        validators: &[Validator::String],
+    },
+    SchemaEntry {
+        param: "dataset_name",
+        validators: &[Validator::String],
+    },
+    SchemaEntry {
+        param: "dataset_digest",
+        validators: &[Validator::String],
+    },
+];
+
+/// `_log_param`'s schema (`handlers.py:1777-1781`).
+const LOG_PARAM_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "run_id",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "key",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "value",
+        validators: &[Validator::String],
+    },
+];
+
+/// `_set_tag`'s schema (`handlers.py:1881-1885`).
+const SET_TAG_SCHEMA: &[SchemaEntry] = &[
+    SchemaEntry {
+        param: "run_id",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "key",
+        validators: &[Validator::Required, Validator::String],
+    },
+    SchemaEntry {
+        param: "value",
+        validators: &[Validator::String],
     },
 ];
 
@@ -293,6 +363,34 @@ pub async fn search_runs(
     let filter = req.filter.as_deref().filter(|s| !s.is_empty());
     let page_token = req.page_token.as_deref().filter(|s| !s.is_empty());
 
+    // `search_runs_impl` calls `auth.filter_experiment_ids` before querying the
+    // store (`handlers.py:1961-1968`). Apply the same filter when basic auth is
+    // active; filtering before pagination is essential so page tokens walk only
+    // the readable run stream.
+    let mut experiment_ids = req.experiment_ids.clone();
+    if let (Some(auth), Some(auth_store)) =
+        (parts.extensions.get::<AuthContext>(), state.auth_store())
+    {
+        if !auth.is_admin {
+            let mut readable = Vec::with_capacity(experiment_ids.len());
+            for experiment_id in experiment_ids {
+                if resolve_experiment_permission(
+                    auth_store,
+                    &auth.username,
+                    workspace.name(),
+                    state.workspace_store().is_some(),
+                    &experiment_id,
+                )
+                .await?
+                .can_read
+                {
+                    readable.push(experiment_id);
+                }
+            }
+            experiment_ids = readable;
+        }
+    }
+
     let RunsPage {
         runs,
         next_page_token,
@@ -300,7 +398,7 @@ pub async fn search_runs(
         .tracking_store()
         .search_runs(
             workspace.name(),
-            &req.experiment_ids,
+            &experiment_ids,
             filter,
             run_view_type,
             Some(max_results),
@@ -323,11 +421,9 @@ pub async fn log_metric(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::LogMetric = parse_request(&parts, &body, "mlflow.LogMetric")?;
+    let req: pb::LogMetric =
+        parse_request_lenient(&parts, &body, "mlflow.LogMetric", LOG_METRIC_SCHEMA)?;
     let run_id = require_run_id(req.run_id.as_deref(), req.run_uuid.as_deref())?;
-    require_non_empty(req.key.as_deref(), "key")?;
-    require_present(req.value.is_some(), "value")?;
-    require_present(req.timestamp.is_some(), "timestamp")?;
 
     let metric = MetricInput {
         key: req.key.clone().unwrap_or_default(),
@@ -355,9 +451,9 @@ pub async fn log_param(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::LogParam = parse_request(&parts, &body, "mlflow.LogParam")?;
+    let req: pb::LogParam =
+        parse_request_lenient(&parts, &body, "mlflow.LogParam", LOG_PARAM_SCHEMA)?;
     let run_id = require_run_id(req.run_id.as_deref(), req.run_uuid.as_deref())?;
-    require_non_empty(req.key.as_deref(), "key")?;
     let value = req.value.as_deref().unwrap_or("");
 
     state
@@ -380,9 +476,8 @@ pub async fn set_tag(
     parts: Parts,
     body: Bytes,
 ) -> Result<Response, MlflowError> {
-    let req: pb::SetTag = parse_request(&parts, &body, "mlflow.SetTag")?;
+    let req: pb::SetTag = parse_request_lenient(&parts, &body, "mlflow.SetTag", SET_TAG_SCHEMA)?;
     let run_id = require_run_id(req.run_id.as_deref(), req.run_uuid.as_deref())?;
-    require_non_empty(req.key.as_deref(), "key")?;
     let value = req.value.as_deref().unwrap_or("");
 
     state
@@ -606,15 +701,6 @@ fn require_non_empty<'a>(value: Option<&'a str>, param: &str) -> Result<&'a str,
     match value {
         Some(v) if !v.is_empty() => Ok(v),
         _ => Err(missing_required(param)),
-    }
-}
-
-/// Enforce a required scalar (non-string) field's presence.
-fn require_present(present: bool, param: &str) -> Result<(), MlflowError> {
-    if present {
-        Ok(())
-    } else {
-        Err(missing_required(param))
     }
 }
 

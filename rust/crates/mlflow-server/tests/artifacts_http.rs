@@ -321,7 +321,7 @@ async fn get_artifact_streams_run_file() {
     assert_eq!(res.content_type.as_deref(), Some("text/plain"));
     assert_eq!(
         res.content_disposition.as_deref(),
-        Some("attachment; filename=\"output.txt\"")
+        Some("attachment; filename=output.txt")
     );
 }
 

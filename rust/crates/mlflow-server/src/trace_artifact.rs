@@ -289,7 +289,7 @@ async fn collect(dl: mlflow_artifacts::ArtifactDownload) -> Result<Vec<u8>, Mlfl
 /// "application/octet-stream")` then `_response_with_file_attachment_headers`
 /// overwrites content-type via `_guess_mime_type("traces.json")` → `text/plain`
 /// (the `json` extension is in MLflow's text-extension allowlist) and sets
-/// `Content-Disposition: attachment; filename="traces.json"` +
+/// `Content-Disposition: attachment; filename=traces.json` +
 /// `X-Content-Type-Options: nosniff`. Body is `json.dumps(trace_data)` — the
 /// *default* separator style, not `mlflow-proto`'s `indent=2` proto codec.
 fn spans_json_response(trace_data: &serde_json::Value) -> Response {

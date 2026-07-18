@@ -21,6 +21,7 @@ CREATE TABLE budget_policies (
 	CONSTRAINT budget_policies_pk PRIMARY KEY (budget_policy_id)
 )
 
+CREATE INDEX idx_budget_policies_workspace ON budget_policies (workspace)
 
 CREATE TABLE entity_associations (
 	association_id VARCHAR(36) NOT NULL,
@@ -32,6 +33,8 @@ CREATE TABLE entity_associations (
 	CONSTRAINT entity_associations_pk PRIMARY KEY (source_type, source_id, destination_type, destination_id)
 )
 
+CREATE INDEX index_entity_associations_association_id ON entity_associations (association_id)
+CREATE INDEX index_entity_associations_reverse_lookup ON entity_associations (destination_type, destination_id, source_type, source_id)
 
 CREATE TABLE evaluation_datasets (
 	dataset_id VARCHAR(36) NOT NULL,
@@ -47,6 +50,9 @@ CREATE TABLE evaluation_datasets (
 	CONSTRAINT evaluation_datasets_pk PRIMARY KEY (dataset_id)
 )
 
+CREATE INDEX idx_evaluation_datasets_workspace ON evaluation_datasets (workspace)
+CREATE INDEX index_evaluation_datasets_created_time ON evaluation_datasets (created_time)
+CREATE INDEX index_evaluation_datasets_name ON evaluation_datasets (name)
 
 CREATE TABLE experiments (
 	experiment_id INTEGER NOT NULL,
@@ -61,6 +67,8 @@ CREATE TABLE experiments (
 	CONSTRAINT experiments_lifecycle_stage CHECK (lifecycle_stage IN ('active', 'deleted'))
 )
 
+CREATE INDEX idx_experiments_workspace ON experiments (workspace)
+CREATE INDEX idx_experiments_workspace_creation_time ON experiments (workspace, creation_time)
 
 CREATE TABLE input_tags (
 	input_uuid VARCHAR(36) NOT NULL,
@@ -80,6 +88,9 @@ CREATE TABLE inputs (
 	CONSTRAINT inputs_pk PRIMARY KEY (source_type, source_id, destination_type, destination_id)
 )
 
+CREATE INDEX index_inputs_destination_type_destination_id_source_type ON inputs (destination_type, destination_id, source_type)
+CREATE INDEX index_inputs_input_uuid ON inputs (input_uuid)
+CREATE INDEX index_inputs_source_id ON inputs (source_id)
 
 CREATE TABLE jobs (
 	id VARCHAR(36) NOT NULL,
@@ -96,6 +107,7 @@ CREATE TABLE jobs (
 	CONSTRAINT jobs_pk PRIMARY KEY (id)
 )
 
+CREATE INDEX index_jobs_name_status_creation_time ON jobs (job_name, workspace, status, creation_time)
 
 CREATE TABLE registered_models (
 	name VARCHAR(256) NOT NULL,
@@ -106,6 +118,7 @@ CREATE TABLE registered_models (
 	CONSTRAINT registered_model_pk PRIMARY KEY (workspace, name)
 )
 
+CREATE INDEX idx_registered_models_workspace ON registered_models (workspace)
 
 CREATE TABLE secrets (
 	secret_id VARCHAR(36) NOT NULL,
@@ -126,6 +139,7 @@ CREATE TABLE secrets (
 	CONSTRAINT uq_secrets_workspace_secret_name UNIQUE (workspace, secret_name)
 )
 
+CREATE INDEX idx_secrets_workspace ON secrets (workspace)
 
 CREATE TABLE webhooks (
 	webhook_id VARCHAR(256) NOT NULL,
@@ -141,6 +155,9 @@ CREATE TABLE webhooks (
 	CONSTRAINT webhook_pk PRIMARY KEY (webhook_id)
 )
 
+CREATE INDEX idx_webhooks_name ON webhooks (name)
+CREATE INDEX idx_webhooks_status ON webhooks (status)
+CREATE INDEX idx_webhooks_workspace ON webhooks (workspace)
 
 CREATE TABLE workspaces (
 	name VARCHAR(63) NOT NULL,
@@ -165,6 +182,8 @@ CREATE TABLE datasets (
 	CONSTRAINT fk_datasets_experiment_id_experiments FOREIGN KEY(experiment_id) REFERENCES experiments (experiment_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_datasets_dataset_uuid ON datasets (dataset_uuid)
+CREATE INDEX index_datasets_experiment_id_dataset_source_type ON datasets (experiment_id, dataset_source_type)
 
 CREATE TABLE endpoints (
 	endpoint_id VARCHAR(36) NOT NULL,
@@ -183,6 +202,7 @@ CREATE TABLE endpoints (
 	CONSTRAINT uq_endpoints_workspace_name UNIQUE (workspace, name)
 )
 
+CREATE INDEX idx_endpoints_workspace ON endpoints (workspace)
 
 CREATE TABLE evaluation_dataset_records (
 	dataset_record_id VARCHAR(36) NOT NULL,
@@ -204,6 +224,7 @@ CREATE TABLE evaluation_dataset_records (
 	CONSTRAINT unique_dataset_input UNIQUE (dataset_id, input_hash)
 )
 
+CREATE INDEX index_evaluation_dataset_records_dataset_id ON evaluation_dataset_records (dataset_id)
 
 CREATE TABLE evaluation_dataset_tags (
 	dataset_id VARCHAR(36) NOT NULL,
@@ -213,6 +234,7 @@ CREATE TABLE evaluation_dataset_tags (
 	CONSTRAINT fk_evaluation_dataset_tags_dataset_id FOREIGN KEY(dataset_id) REFERENCES evaluation_datasets (dataset_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_evaluation_dataset_tags_dataset_id ON evaluation_dataset_tags (dataset_id)
 
 CREATE TABLE experiment_tags (
 	key VARCHAR(250) NOT NULL,
@@ -241,6 +263,7 @@ CREATE TABLE label_schemas (
 	CONSTRAINT uq_label_schemas_exp_name UNIQUE (experiment_id, name)
 )
 
+CREATE INDEX index_label_schemas_experiment_id ON label_schemas (experiment_id)
 
 CREATE TABLE logged_models (
 	model_id VARCHAR(36) NOT NULL,
@@ -259,6 +282,7 @@ CREATE TABLE logged_models (
 	CONSTRAINT logged_models_lifecycle_stage_check CHECK (lifecycle_stage IN ('active', 'deleted'))
 )
 
+CREATE INDEX index_logged_models_experiment_id ON logged_models (experiment_id)
 
 CREATE TABLE model_definitions (
 	model_definition_id VARCHAR(36) NOT NULL,
@@ -276,6 +300,9 @@ CREATE TABLE model_definitions (
 	CONSTRAINT uq_model_definitions_workspace_name UNIQUE (workspace, name)
 )
 
+CREATE INDEX idx_model_definitions_workspace ON model_definitions (workspace)
+CREATE INDEX index_model_definitions_provider ON model_definitions (provider)
+CREATE INDEX index_model_definitions_secret_id ON model_definitions (secret_id)
 
 CREATE TABLE model_versions (
 	name VARCHAR(256) NOT NULL,
@@ -296,6 +323,8 @@ CREATE TABLE model_versions (
 	CONSTRAINT fk_model_versions_registered_models FOREIGN KEY(workspace, name) REFERENCES registered_models (workspace, name) ON UPDATE CASCADE
 )
 
+CREATE INDEX index_model_versions_current_stage ON model_versions (current_stage)
+CREATE INDEX index_model_versions_run_id ON model_versions (run_id)
 
 CREATE TABLE registered_model_aliases (
 	alias VARCHAR(256) NOT NULL,
@@ -316,6 +345,7 @@ CREATE TABLE registered_model_tags (
 	CONSTRAINT fk_registered_model_tags_registered_models FOREIGN KEY(workspace, name) REFERENCES registered_models (workspace, name) ON UPDATE CASCADE
 )
 
+CREATE INDEX idx_registered_model_tags_workspace_name ON registered_model_tags (workspace, name)
 
 CREATE TABLE review_queues (
 	queue_id VARCHAR(36) NOT NULL,
@@ -331,6 +361,7 @@ CREATE TABLE review_queues (
 	CONSTRAINT uq_review_queues_experiment_name_key UNIQUE (experiment_id, name_key)
 )
 
+CREATE INDEX index_review_queues_experiment_id ON review_queues (experiment_id)
 
 CREATE TABLE runs (
 	run_uuid VARCHAR(32) NOT NULL,
@@ -354,6 +385,7 @@ CREATE TABLE runs (
 	CHECK (status IN ('SCHEDULED', 'FAILED', 'FINISHED', 'RUNNING', 'KILLED'))
 )
 
+CREATE INDEX index_runs_experiment_id_lifecycle_stage_start_time ON runs (experiment_id, lifecycle_stage, start_time)
 
 CREATE TABLE scorers (
 	experiment_id INTEGER NOT NULL,
@@ -363,6 +395,7 @@ CREATE TABLE scorers (
 	CONSTRAINT fk_scorers_experiment_id FOREIGN KEY(experiment_id) REFERENCES experiments (experiment_id) ON DELETE CASCADE
 )
 
+CREATE UNIQUE INDEX index_scorers_experiment_id_scorer_name ON scorers (experiment_id, scorer_name)
 
 CREATE TABLE trace_info (
 	request_id VARCHAR(50) NOT NULL,
@@ -378,6 +411,7 @@ CREATE TABLE trace_info (
 	CONSTRAINT fk_trace_info_experiment_id FOREIGN KEY(experiment_id) REFERENCES experiments (experiment_id)
 )
 
+CREATE INDEX index_trace_info_experiment_id_timestamp_ms ON trace_info (experiment_id, timestamp_ms)
 
 CREATE TABLE webhook_events (
 	webhook_id VARCHAR(256) NOT NULL,
@@ -387,6 +421,9 @@ CREATE TABLE webhook_events (
 	FOREIGN KEY(webhook_id) REFERENCES webhooks (webhook_id) ON DELETE CASCADE
 )
 
+CREATE INDEX idx_webhook_events_action ON webhook_events (action)
+CREATE INDEX idx_webhook_events_entity ON webhook_events (entity)
+CREATE INDEX idx_webhook_events_entity_action ON webhook_events (entity, action)
 
 CREATE TABLE assessments (
 	assessment_id VARCHAR(50) NOT NULL,
@@ -409,6 +446,10 @@ CREATE TABLE assessments (
 	CONSTRAINT fk_assessments_trace_id FOREIGN KEY(trace_id) REFERENCES trace_info (request_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_assessments_assessment_type ON assessments (assessment_type)
+CREATE INDEX index_assessments_last_updated_timestamp ON assessments (last_updated_timestamp)
+CREATE INDEX index_assessments_run_id_created_timestamp ON assessments (run_id, created_timestamp)
+CREATE INDEX index_assessments_trace_id_created_timestamp ON assessments (trace_id, created_timestamp)
 
 CREATE TABLE endpoint_bindings (
 	endpoint_id VARCHAR(36) NOT NULL,
@@ -438,6 +479,9 @@ CREATE TABLE endpoint_model_mappings (
 	CONSTRAINT fk_endpoint_model_mappings_model_definition_id FOREIGN KEY(model_definition_id) REFERENCES model_definitions (model_definition_id)
 )
 
+CREATE INDEX index_endpoint_model_mappings_endpoint_id ON endpoint_model_mappings (endpoint_id)
+CREATE INDEX index_endpoint_model_mappings_model_definition_id ON endpoint_model_mappings (model_definition_id)
+CREATE UNIQUE INDEX unique_endpoint_model_linkage_mapping ON endpoint_model_mappings (endpoint_id, model_definition_id, linkage_type)
 
 CREATE TABLE endpoint_tags (
 	key VARCHAR(250) NOT NULL,
@@ -447,6 +491,7 @@ CREATE TABLE endpoint_tags (
 	CONSTRAINT fk_endpoint_tags_endpoint_id FOREIGN KEY(endpoint_id) REFERENCES endpoints (endpoint_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_endpoint_tags_endpoint_id ON endpoint_tags (endpoint_id)
 
 CREATE TABLE issues (
 	issue_id VARCHAR(36) NOT NULL,
@@ -466,6 +511,9 @@ CREATE TABLE issues (
 	CONSTRAINT fk_issues_source_run_id FOREIGN KEY(source_run_id) REFERENCES runs (run_uuid) ON DELETE SET NULL
 )
 
+CREATE INDEX index_issues_experiment_id ON issues (experiment_id)
+CREATE INDEX index_issues_source_run_id ON issues (source_run_id)
+CREATE INDEX index_issues_status ON issues (status)
 
 CREATE TABLE latest_metrics (
 	key VARCHAR(250) NOT NULL,
@@ -479,6 +527,7 @@ CREATE TABLE latest_metrics (
 	CHECK (is_nan IN (0, 1))
 )
 
+CREATE INDEX index_latest_metrics_run_uuid ON latest_metrics (run_uuid)
 
 CREATE TABLE logged_model_metrics (
 	model_id VARCHAR(36) NOT NULL,
@@ -497,6 +546,7 @@ CREATE TABLE logged_model_metrics (
 	CONSTRAINT fk_logged_model_metrics_run_id FOREIGN KEY(run_id) REFERENCES runs (run_uuid) ON DELETE CASCADE
 )
 
+CREATE INDEX index_logged_model_metrics_model_id ON logged_model_metrics (model_id)
 
 CREATE TABLE logged_model_params (
 	model_id VARCHAR(36) NOT NULL,
@@ -532,6 +582,8 @@ CREATE TABLE metrics (
 	CHECK (is_nan IN (0, 1))
 )
 
+CREATE INDEX index_metrics_run_uuid ON metrics (run_uuid)
+CREATE INDEX index_metrics_run_uuid_key_step ON metrics (run_uuid, key, step)
 
 CREATE TABLE model_version_tags (
 	key VARCHAR(250) NOT NULL,
@@ -543,6 +595,7 @@ CREATE TABLE model_version_tags (
 	CONSTRAINT fk_model_version_tags_model_versions FOREIGN KEY(workspace, name, version) REFERENCES model_versions (workspace, name, version) ON UPDATE CASCADE
 )
 
+CREATE INDEX idx_model_version_tags_workspace_name_version ON model_version_tags (workspace, name, version)
 
 CREATE TABLE online_scoring_configs (
 	online_scoring_config_id VARCHAR(36) NOT NULL,
@@ -564,6 +617,7 @@ CREATE TABLE params (
 	FOREIGN KEY(run_uuid) REFERENCES runs (run_uuid)
 )
 
+CREATE INDEX index_params_run_uuid ON params (run_uuid)
 
 CREATE TABLE review_queue_items (
 	queue_id VARCHAR(36) NOT NULL,
@@ -578,6 +632,8 @@ CREATE TABLE review_queue_items (
 	CONSTRAINT fk_review_queue_items_queue_id FOREIGN KEY(queue_id) REFERENCES review_queues (queue_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_review_queue_items_item_id ON review_queue_items (item_id)
+CREATE INDEX index_review_queue_items_queue_id_status ON review_queue_items (queue_id, status)
 
 CREATE TABLE review_queue_label_schemas (
 	queue_id VARCHAR(36) NOT NULL,
@@ -586,6 +642,7 @@ CREATE TABLE review_queue_label_schemas (
 	CONSTRAINT fk_review_queue_label_schemas_queue_id FOREIGN KEY(queue_id) REFERENCES review_queues (queue_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_review_queue_label_schemas_schema_id ON review_queue_label_schemas (schema_id)
 
 CREATE TABLE review_queue_users (
 	queue_id VARCHAR(36) NOT NULL,
@@ -594,6 +651,7 @@ CREATE TABLE review_queue_users (
 	CONSTRAINT fk_review_queue_users_queue_id FOREIGN KEY(queue_id) REFERENCES review_queues (queue_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_review_queue_users_user_id ON review_queue_users (user_id)
 
 CREATE TABLE scorer_versions (
 	scorer_id VARCHAR(36) NOT NULL,
@@ -604,6 +662,7 @@ CREATE TABLE scorer_versions (
 	CONSTRAINT fk_scorer_versions_scorer_id FOREIGN KEY(scorer_id) REFERENCES scorers (scorer_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_scorer_versions_scorer_id ON scorer_versions (scorer_id)
 
 CREATE TABLE spans (
 	trace_id VARCHAR(50) NOT NULL,
@@ -623,6 +682,10 @@ CREATE TABLE spans (
 	CONSTRAINT fk_spans_experiment_id FOREIGN KEY(experiment_id) REFERENCES experiments (experiment_id)
 )
 
+CREATE INDEX index_spans_experiment_id ON spans (experiment_id)
+CREATE INDEX index_spans_experiment_id_duration ON spans (experiment_id, duration_ns)
+CREATE INDEX index_spans_experiment_id_status_type ON spans (experiment_id, status, type)
+CREATE INDEX index_spans_experiment_id_type_status ON spans (experiment_id, type, status)
 
 CREATE TABLE tags (
 	key VARCHAR(250) NOT NULL,
@@ -632,6 +695,7 @@ CREATE TABLE tags (
 	FOREIGN KEY(run_uuid) REFERENCES runs (run_uuid)
 )
 
+CREATE INDEX index_tags_run_uuid ON tags (run_uuid)
 
 CREATE TABLE trace_metrics (
 	request_id VARCHAR(50) NOT NULL,
@@ -641,6 +705,7 @@ CREATE TABLE trace_metrics (
 	CONSTRAINT fk_trace_metrics_request_id FOREIGN KEY(request_id) REFERENCES trace_info (request_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_trace_metrics_request_id ON trace_metrics (request_id)
 
 CREATE TABLE trace_request_metadata (
 	key VARCHAR(250) NOT NULL,
@@ -650,6 +715,7 @@ CREATE TABLE trace_request_metadata (
 	CONSTRAINT fk_trace_request_metadata_request_id FOREIGN KEY(request_id) REFERENCES trace_info (request_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_trace_request_metadata_request_id ON trace_request_metadata (request_id)
 
 CREATE TABLE trace_tags (
 	key VARCHAR(250) NOT NULL,
@@ -659,6 +725,7 @@ CREATE TABLE trace_tags (
 	CONSTRAINT fk_trace_tags_request_id FOREIGN KEY(request_id) REFERENCES trace_info (request_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_trace_tags_request_id ON trace_tags (request_id)
 
 CREATE TABLE guardrails (
 	guardrail_id VARCHAR(36) NOT NULL,
@@ -678,6 +745,20 @@ CREATE TABLE guardrails (
 	CONSTRAINT fk_guardrails_action_endpoint_id FOREIGN KEY(action_endpoint_id) REFERENCES endpoints (endpoint_id) ON DELETE SET NULL
 )
 
+CREATE INDEX idx_guardrails_scorer ON guardrails (scorer_id, scorer_version)
+CREATE INDEX idx_guardrails_workspace ON guardrails (workspace)
+
+CREATE TABLE span_attributes (
+	trace_id VARCHAR(50) NOT NULL,
+	span_id VARCHAR(50) NOT NULL,
+	key VARCHAR(250) NOT NULL,
+	value VARCHAR(500) NOT NULL,
+	value_truncated BOOLEAN DEFAULT 0 NOT NULL,
+	CONSTRAINT span_attributes_pk PRIMARY KEY (trace_id, span_id, key),
+	CONSTRAINT fk_span_attributes_span FOREIGN KEY(trace_id, span_id) REFERENCES spans (trace_id, span_id) ON DELETE CASCADE
+)
+
+CREATE INDEX index_span_attributes_key_value ON span_attributes (key, value)
 
 CREATE TABLE span_metrics (
 	trace_id VARCHAR(50) NOT NULL,
@@ -688,6 +769,7 @@ CREATE TABLE span_metrics (
 	CONSTRAINT fk_span_metrics_span FOREIGN KEY(trace_id, span_id) REFERENCES spans (trace_id, span_id) ON DELETE CASCADE
 )
 
+CREATE INDEX index_span_metrics_trace_id_span_id ON span_metrics (trace_id, span_id)
 
 CREATE TABLE guardrail_configs (
 	endpoint_id VARCHAR(36) NOT NULL,
@@ -701,3 +783,5 @@ CREATE TABLE guardrail_configs (
 	CONSTRAINT fk_guardrail_configs_guardrail_id FOREIGN KEY(guardrail_id) REFERENCES guardrails (guardrail_id) ON DELETE CASCADE
 )
 
+CREATE INDEX idx_guardrail_configs_endpoint_id ON guardrail_configs (endpoint_id)
+CREATE INDEX idx_guardrail_configs_guardrail_id ON guardrail_configs (guardrail_id)

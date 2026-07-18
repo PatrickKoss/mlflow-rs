@@ -50,7 +50,7 @@ use crate::workspace::Workspace;
 
 /// Cap for the ajax `upload-artifact` body (`10 * 1024 * 1024`,
 /// `handlers.py:2424`).
-const MAX_UPLOAD_ARTIFACT_BYTES: usize = 10 * 1024 * 1024;
+pub(crate) const MAX_UPLOAD_ARTIFACT_BYTES: usize = 10 * 1024 * 1024;
 
 /// Cap for the proxy multipart control-message bodies (create/complete/abort).
 /// Artifact bytes never pass through here — they stream via `proxy_upload`.

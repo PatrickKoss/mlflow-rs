@@ -327,6 +327,65 @@ fn build_dispatch() -> Dispatch {
         }
     }
 
+    // Hand-registered RBAC routes (`BEFORE_REQUEST_VALIDATORS.update`,
+    // `auth/__init__.py:2669-2720`). Super admins bypass these upstream; the
+    // validators below implement workspace-admin, self, and resource-MANAGE
+    // delegation for non-admin callers.
+    for (tail, method, validator) in [
+        ("/mlflow/roles/create", "POST", Validator::ManageRoles),
+        ("/mlflow/roles/get", "GET", Validator::ViewRoles),
+        ("/mlflow/roles/list", "GET", Validator::ListRoles),
+        ("/mlflow/roles/update", "PATCH", Validator::ManageRoles),
+        ("/mlflow/roles/delete", "DELETE", Validator::ManageRoles),
+        (
+            "/mlflow/roles/permissions/add",
+            "POST",
+            Validator::ManageRoles,
+        ),
+        (
+            "/mlflow/roles/permissions/remove",
+            "DELETE",
+            Validator::ManageRoles,
+        ),
+        (
+            "/mlflow/roles/permissions/list",
+            "GET",
+            Validator::ViewRoles,
+        ),
+        (
+            "/mlflow/roles/permissions/update",
+            "PATCH",
+            Validator::ManageRoles,
+        ),
+        ("/mlflow/roles/assign", "POST", Validator::ManageRoles),
+        ("/mlflow/roles/unassign", "DELETE", Validator::ManageRoles),
+        ("/mlflow/users/roles/list", "GET", Validator::ViewUserRoles),
+        ("/mlflow/roles/users/list", "GET", Validator::ManageRoles),
+        (
+            "/mlflow/users/permissions/grant",
+            "POST",
+            Validator::ManageResource,
+        ),
+        (
+            "/mlflow/users/permissions/revoke",
+            "POST",
+            Validator::ManageResource,
+        ),
+        (
+            "/mlflow/users/permissions/get",
+            "GET",
+            Validator::GetUserPermission,
+        ),
+    ] {
+        for prefix in ["/api/3.0", "/ajax-api/3.0"] {
+            d.exact.push(Route {
+                matcher: TemplateMatcher::compile(&format!("{prefix}{tail}")),
+                method,
+                validator,
+            });
+        }
+    }
+
     // The logged-model AJAX artifact-file download is a plain route with a path
     // parameter, mirroring the extra `LOGGED_MODEL_BEFORE_REQUEST_VALIDATORS`
     // entry Python adds (`__init__.py:2765`). Only the ajax prefix.

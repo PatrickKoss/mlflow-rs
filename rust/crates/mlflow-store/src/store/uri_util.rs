@@ -36,6 +36,84 @@ pub(crate) fn append_to_uri_path(uri: &str, segments: &[&str]) -> String {
     format!("{path}{suffix}")
 }
 
+/// Split a URI into its scheme and the remainder (everything after `scheme:`),
+/// mirroring Python's `urllib.parse.urlsplit` scheme detection. Returns
+/// `("", uri)` when there is no valid scheme. A scheme must start with an ASCII
+/// letter and contain only letters, digits, `+`, `-`, `.` before the `:`.
+fn split_scheme(uri: &str) -> (&str, &str) {
+    let Some(colon) = uri.find(':') else {
+        return ("", uri);
+    };
+    let candidate = &uri[..colon];
+    let mut chars = candidate.chars();
+    let valid = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    if valid {
+        (candidate, &uri[colon + 1..])
+    } else {
+        ("", uri)
+    }
+}
+
+/// Whether `uri` refers to a local filesystem path, mirroring
+/// `mlflow.utils.uri.is_local_uri` for the non-Windows server case: an empty
+/// scheme is local, a `file` scheme is local, everything else is remote.
+fn is_local_uri(uri: &str) -> bool {
+    matches!(split_scheme(uri).0, "" | "file")
+}
+
+/// Convert a `file:`-schemed URI to its filesystem path, mirroring
+/// `local_file_uri_to_path` for the shapes an artifact-location argument takes:
+/// `file:///abs`, `file://host/abs`, `file:rel`, `file:/abs`. Non-`file` inputs
+/// are returned unchanged.
+fn local_file_uri_to_path(uri: &str) -> &str {
+    let (scheme, rest) = split_scheme(uri);
+    if scheme != "file" {
+        return uri;
+    }
+    // Strip a leading `//authority` if present, keeping the path.
+    match rest.strip_prefix("//") {
+        Some(after) => match after.find('/') {
+            Some(slash) => &after[slash..],
+            None => "",
+        },
+        None => rest,
+    }
+}
+
+/// Resolve a relative local `artifact_location` to an absolute path relative to
+/// the process working directory, mirroring `mlflow.utils.uri.resolve_uri_if_local`
+/// for the non-Windows server path (`create_experiment` applies this before
+/// persisting, `sqlalchemy_store.py:554`). Absolute paths, remote URIs, and
+/// `None` pass through unchanged; a relative bare path becomes an absolute POSIX
+/// path, and a relative `<scheme>:` URI keeps its scheme with an absolutized path.
+pub(crate) fn resolve_uri_if_local(local_uri: Option<&str>) -> Option<String> {
+    let uri = local_uri?;
+    if !is_local_uri(uri) {
+        return Some(uri.to_string());
+    }
+    let (scheme, _) = split_scheme(uri);
+    let local_path = local_file_uri_to_path(uri);
+    if std::path::Path::new(local_path).is_absolute() {
+        return Some(uri.to_string());
+    }
+    let cwd = std::env::current_dir().ok()?;
+    let joined = cwd.join(local_path);
+    let joined = joined.to_string_lossy().replace('\\', "/");
+    if scheme.is_empty() {
+        Some(joined)
+    } else {
+        // `is_local_uri` only admits the empty scheme (handled above) or `file`,
+        // which is in Python's `uses_netloc`, so `urlunsplit` emits `file://` +
+        // the absolute path (`file:///abs`). Preserve any query/fragment.
+        let suffix = match uri.find(['?', '#']) {
+            Some(i) => &uri[i..],
+            None => "",
+        };
+        Some(format!("{scheme}://{joined}{suffix}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,6 +152,40 @@ mod tests {
         assert_eq!(
             append_to_uri_path("s3://bucket/root/", &["/7/"]),
             "s3://bucket/root/7"
+        );
+    }
+
+    #[test]
+    fn resolve_passthrough_for_absolute_and_remote() {
+        assert_eq!(resolve_uri_if_local(None), None);
+        assert_eq!(
+            resolve_uri_if_local(Some("/abs/path")),
+            Some("/abs/path".to_string())
+        );
+        assert_eq!(
+            resolve_uri_if_local(Some("file:///abs/path")),
+            Some("file:///abs/path".to_string())
+        );
+        assert_eq!(
+            resolve_uri_if_local(Some("s3://bucket/root")),
+            Some("s3://bucket/root".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_bare_relative_becomes_absolute() {
+        let cwd = std::env::current_dir().unwrap();
+        let expected = cwd.join("my_location").to_string_lossy().replace('\\', "/");
+        assert_eq!(resolve_uri_if_local(Some("my_location")), Some(expected));
+    }
+
+    #[test]
+    fn resolve_file_scheme_relative_becomes_absolute_file_uri() {
+        let cwd = std::env::current_dir().unwrap();
+        let joined = cwd.join("rel/loc").to_string_lossy().replace('\\', "/");
+        assert_eq!(
+            resolve_uri_if_local(Some("file:rel/loc")),
+            Some(format!("file://{joined}"))
         );
     }
 }

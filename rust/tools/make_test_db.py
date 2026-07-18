@@ -8,7 +8,7 @@ Produces (by default):
     rust/crates/mlflow-store/tests/fixtures/tracking.db
 
 The fixture is a fully migrated MLflow tracking database at the current Alembic
-head (see RUST_TRACKING_SERVER_PLAN.md §5.4, head ``b7e4c1a90f23``). It is
+head (see RUST_TRACKING_SERVER_PLAN.md §5.4, head ``c4a9b7d3e812``). It is
 created by pointing the MLflow client at a fresh SQLite file and creating an
 experiment, which triggers ``_initialize_tables`` -> ``_upgrade_db`` and runs
 the whole migration chain. A little data is written so the Rust tests exercise

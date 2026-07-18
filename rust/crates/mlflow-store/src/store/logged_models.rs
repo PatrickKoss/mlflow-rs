@@ -152,6 +152,9 @@ pub struct LoggedModelMetric {
     pub timestamp: i64,
     pub step: i64,
     pub run_id: String,
+    /// The owning model's id, carried onto the entity's `model_id`
+    /// (`SqlLoggedModelMetric.to_mlflow_entity`, `models.py:1458`).
+    pub model_id: String,
     pub dataset_name: Option<String>,
     pub dataset_digest: Option<String>,
 }
@@ -650,6 +653,56 @@ impl TrackingStore {
         self.get_logged_model(workspace, model_id, true).await
     }
 
+    /// `AbstractStore.set_model_versions_tags(name, version, model_id)`
+    /// (`abstract_store.py:1260-1276`): append `{"name": name, "version": version}`
+    /// to the model's `mlflow.modelVersions` tag (a JSON array), skipping an entry
+    /// that is already present, then upsert the tag. Serialized with the same
+    /// `json.dumps([{"name": ..., "version": ...}])` shape (keys in insertion
+    /// order, `", "`/`": "` separators) the Python default emits, so the wire tag
+    /// round-trips byte-for-byte.
+    pub async fn set_model_versions_tags(
+        &self,
+        workspace: &str,
+        model_id: &str,
+        name: &str,
+        version: &str,
+    ) -> Result<(), MlflowError> {
+        const MLFLOW_MODEL_VERSIONS: &str = "mlflow.modelVersions";
+        let model = self.get_logged_model(workspace, model_id, false).await?;
+        let existing = model
+            .tags
+            .iter()
+            .find(|t| t.key == MLFLOW_MODEL_VERSIONS)
+            .map(|t| t.value.clone());
+
+        // version is a numeric string on the wire; store it as a JSON number to
+        // match `{"name": name, "version": <int>}` from Python's `model_version.version`.
+        let version_num: serde_json::Value = version
+            .parse::<i64>()
+            .map(serde_json::Value::from)
+            .unwrap_or_else(|_| serde_json::Value::String(version.to_string()));
+        let new_entry = serde_json::json!({"name": name, "version": version_num});
+
+        let mut entries: Vec<serde_json::Value> = match existing {
+            Some(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            None => Vec::new(),
+        };
+        if !entries.contains(&new_entry) {
+            entries.push(new_entry);
+        }
+        let value = model_versions_tag_json(&entries);
+
+        self.set_logged_model_tags(
+            workspace,
+            model_id,
+            &[LoggedModelKv {
+                key: MLFLOW_MODEL_VERSIONS.to_string(),
+                value,
+            }],
+        )
+        .await
+    }
+
     /// `set_logged_model_tags` (upsert per tag).
     pub async fn set_logged_model_tags(
         &self,
@@ -990,6 +1043,7 @@ impl TrackingStore {
                     timestamp: r.get_i64("metric_timestamp_ms")?,
                     step: r.get_i64("metric_step")?,
                     run_id: r.get_string("run_id")?,
+                    model_id: model_id.to_string(),
                     dataset_name: r.get_opt_string("dataset_name")?,
                     dataset_digest: r.get_opt_string("dataset_digest")?,
                 })
@@ -1474,6 +1528,29 @@ fn value_predicate_num(
     let p = ph.next();
     binds.push(Val::Float(value));
     format!("{column} {comparator} {p}")
+}
+
+/// Serialize the `mlflow.modelVersions` tag array with Python's `json.dumps`
+/// default separators (`", "` between items, `": "` after keys — the spaced
+/// form), so the stored/returned tag matches `set_model_versions_tags` exactly
+/// (`abstract_store.py:1275`). Each entry is `{"name": ..., "version": ...}` in
+/// that field order (Python builds the dict `{"name": name, "version": version}`
+/// and never sorts keys); `serde_json::to_string` would both drop the separator
+/// spaces and (without `preserve_order`) reorder keys, diverging byte-for-byte.
+fn model_versions_tag_json(entries: &[serde_json::Value]) -> String {
+    let items: Vec<String> = entries
+        .iter()
+        .map(|e| {
+            let name = e.get("name").cloned().unwrap_or(serde_json::Value::Null);
+            let version = e.get("version").cloned().unwrap_or(serde_json::Value::Null);
+            format!(
+                "{{\"name\": {}, \"version\": {}}}",
+                serde_json::to_string(&name).unwrap_or_default(),
+                serde_json::to_string(&version).unwrap_or_default()
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(", "))
 }
 
 fn as_str(value: &SqlaValue) -> Result<String, MlflowError> {

@@ -466,7 +466,9 @@ fn to_proto_metric(m: mlflow_store::LoggedModelMetric) -> pb::Metric {
         step: Some(m.step),
         dataset_name: m.dataset_name,
         dataset_digest: m.dataset_digest,
-        model_id: None,
+        // `SqlLoggedModelMetric.to_mlflow_entity` sets `model_id=self.model_id`
+        // (`models.py:1458`), so the returned metric carries its owning model id.
+        model_id: Some(m.model_id),
         run_id: Some(m.run_id),
     }
 }

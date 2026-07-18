@@ -600,9 +600,58 @@ fn build_span_condition(
     binds: &mut Vec<Val>,
 ) -> Result<String, MlflowError> {
     if let Some(attr) = key.strip_prefix("attributes.") {
-        // Search within the content JSON (LIKE/ILIKE only; parser enforces).
         let val = as_str(value)?;
         let pattern = format!("%\"{attr}\"{val}%");
+        if comparator == "RLIKE" {
+            // Python applies the regular expression to serialized JSON and
+            // wraps anchors around the JSON-encoded string value.
+            let mut transformed = val.as_str();
+            let search_prefix = if let Some(rest) = transformed.strip_prefix('^') {
+                transformed = rest;
+                "\"\\\\\""
+            } else {
+                "\"\\\\\".*"
+            };
+            let search_suffix = if let Some(rest) = transformed.strip_suffix('$') {
+                transformed = rest;
+                "\\\\\""
+            } else {
+                ""
+            };
+            let regex = format!("\"{attr}\": {search_prefix}{transformed}{search_suffix}");
+            let regex_ph = ph.next(binds, Val::Text(regex));
+            return Ok(match dialect {
+                Dialect::Sqlite => format!("s.content REGEXP {regex_ph}"),
+                Dialect::Postgres => format!("s.content ~ {regex_ph}"),
+                Dialect::MySql => {
+                    format!("CAST(s.content AS BINARY) REGEXP BINARY {regex_ph}")
+                }
+            });
+        }
+        // ILIKE makes the attribute name itself case-insensitive in Python's
+        // content scan. Attribute names containing SQL wildcard/escape syntax
+        // have similarly loose semantics. Keep the content predicate for those
+        // cases; the common case-sensitive LIKE path uses the extraction table.
+        let can_use_extraction = comparator == "LIKE"
+            && attr.chars().count() <= 250
+            && !attr.chars().any(|c| matches!(c, '%' | '_' | '"' | '\\'));
+        if can_use_extraction {
+            let key_ph = ph.next(binds, Val::Text(attr.to_string()));
+            let content_like = {
+                let idx = ph.like(binds, pattern);
+                dialect.case_sensitive_like("s.content", idx)
+            };
+            // Keep the original content predicate as a residual after the
+            // indexed key lookup. This preserves Python's loose suffix match:
+            // a value in a later attribute can satisfy the pattern after the
+            // requested key. The table narrows the scan to spans that actually
+            // carry the top-level key without normalizing JSON escaping.
+            return Ok(format!(
+                "EXISTS (SELECT 1 FROM span_attributes sa WHERE sa.trace_id = s.trace_id \
+                 AND sa.span_id = s.span_id AND sa.\"key\" = {key_ph} AND \
+                 {content_like})",
+            ));
+        }
         return match comparator {
             "LIKE" => {
                 let idx = ph.like(binds, pattern);

@@ -162,6 +162,7 @@ from mlflow.store.tracking.dbmodels.models import (
     SqlScorer,
     SqlScorerVersion,
     SqlSpan,
+    SqlSpanAttribute,
     SqlSpanMetrics,
     SqlTag,
     SqlTraceInfo,
@@ -5004,6 +5005,7 @@ class SqlAlchemyStore(SqlAlchemyGatewayStoreMixin, AbstractStore):
         trace_aggregates: dict[str, _TraceAggregate] = {}
         all_span_rows = []
         all_metric_rows = []
+        all_span_attribute_rows = []
         for trace_id, trace_spans in spans_by_trace.items():
             min_start_ms = min(s.start_time_ns for s in trace_spans) // 1_000_000
             end_times = [s.end_time_ns for s in trace_spans if s.end_time_ns is not None]
@@ -5067,6 +5069,9 @@ class SqlAlchemyStore(SqlAlchemyGatewayStoreMixin, AbstractStore):
                     "content": content_json,
                     "dimension_attributes": dimension_attributes or None,
                 })
+                all_span_attribute_rows.extend(
+                    _extract_span_attribute_rows(span.trace_id, span.span_id, span_attributes)
+                )
 
                 if span_cost:
                     span_cost = json.loads(span_cost)
@@ -5183,6 +5188,9 @@ class SqlAlchemyStore(SqlAlchemyGatewayStoreMixin, AbstractStore):
                 all_metric_rows = [
                     r for r in all_metric_rows if r["trace_id"] not in missing_trace_ids
                 ]
+                all_span_attribute_rows = [
+                    r for r in all_span_attribute_rows if r["trace_id"] not in missing_trace_ids
+                ]
 
             # Keep downstream per-trace updates aligned with the surviving span/metric rows.
             all_trace_ids = [trace_id for trace_id in all_trace_ids if trace_id in existing_traces]
@@ -5191,8 +5199,24 @@ class SqlAlchemyStore(SqlAlchemyGatewayStoreMixin, AbstractStore):
             for row in all_span_rows:
                 row["experiment_id"] = existing_traces[row["trace_id"]].experiment_id
 
-            # --- Phase 3: Bulk upsert all spans and metrics (2 queries) ---
+            # --- Phase 3: Bulk upsert spans, extracted attributes, and metrics ---
             _bulk_upsert(session, SqlSpan, all_span_rows)
+            incoming_span_ids = list({(r["trace_id"], r["span_id"]) for r in all_span_rows})
+            for offset in range(0, len(incoming_span_ids), 100):
+                span_id_filters = [
+                    sqlalchemy.and_(
+                        SqlSpanAttribute.trace_id == trace_id,
+                        SqlSpanAttribute.span_id == span_id,
+                    )
+                    for trace_id, span_id in incoming_span_ids[offset : offset + 100]
+                ]
+                (
+                    session
+                    .query(SqlSpanAttribute)
+                    .filter(sqlalchemy.or_(*span_id_filters))
+                    .delete(synchronize_session=False)
+                )
+            _bulk_upsert(session, SqlSpanAttribute, all_span_attribute_rows)
             _bulk_upsert(session, SqlSpanMetrics, all_metric_rows)
 
             # --- Phase 4: Batch-fetch existing metadata records (up to 3 queries) ---
@@ -6420,6 +6444,12 @@ class SqlAlchemyStore(SqlAlchemyGatewayStoreMixin, AbstractStore):
                 .query(SqlSpan)
                 .filter(SqlSpan.trace_id == trace_id)
                 .update({SqlSpan.content: ""}, synchronize_session=False)
+            )
+            (
+                session
+                .query(SqlSpanAttribute)
+                .filter(SqlSpanAttribute.trace_id == trace_id)
+                .delete(synchronize_session=False)
             )
             session.merge(
                 SqlTraceTag(
@@ -9778,6 +9808,29 @@ class _TraceAggregate:
 # re-fetch before retrying. 10 attempts reduces span drops in high-concurrency
 # scenarios without significant backend load increase (log_spans runs async).
 _LOG_SPANS_MAX_TRACE_CREATE_RETRIES = 10
+
+_MAX_SPAN_ATTRIBUTE_KEY_LENGTH = 250
+_MAX_SPAN_ATTRIBUTE_VALUE_LENGTH = 500
+
+
+def _extract_span_attribute_rows(
+    trace_id: str, span_id: str, attributes: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Extract the bounded search representation of top-level span attributes."""
+    rows = []
+    for key, value in attributes.items():
+        if not isinstance(key, str) or len(key) > _MAX_SPAN_ATTRIBUTE_KEY_LENGTH:
+            continue
+        if not isinstance(value, str):
+            continue
+        rows.append({
+            "trace_id": trace_id,
+            "span_id": span_id,
+            "key": key,
+            "value": value[:_MAX_SPAN_ATTRIBUTE_VALUE_LENGTH],
+            "value_truncated": len(value) > _MAX_SPAN_ATTRIBUTE_VALUE_LENGTH,
+        })
+    return rows
 
 
 def _bulk_upsert(session: Session, model_class: type, rows: list[dict[str, Any]]) -> None:

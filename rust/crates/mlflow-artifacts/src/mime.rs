@@ -123,18 +123,33 @@ const RFC5987_SAFE: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-/// Port of `_content_disposition_attachment(filename)`. For ASCII filenames,
-/// emits `attachment; filename="<name>"`. For non-ASCII names, emits an ASCII
-/// fallback plus an RFC 5987 `filename*=UTF-8''<pct-encoded>` parameter.
-///
-/// The ASCII fast path uses a quoted-string form; Python's `quote_header_value`
-/// only wraps in quotes when the value contains non-token chars, but MLflow's
-/// artifact names are attacker-influenced, so we always quote (a superset that
-/// browsers accept identically). The non-ASCII path matches Python's structure.
+/// Whether `c` is a werkzeug HTTP token character (`werkzeug.http._token_chars`):
+/// alphanumerics plus `!#$%&'*+-.^_`|~`. A value made entirely of these is
+/// emitted by `quote_header_value(allow_token=True)` without surrounding quotes.
+fn is_token_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(c)
+}
+
+/// `werkzeug.http.quote_header_value(value, allow_token=True)`: an all-token,
+/// non-empty value is returned unchanged; otherwise it is wrapped in double
+/// quotes with `\` and `"` backslash-escaped.
+fn quote_header_value(value: &str) -> String {
+    if !value.is_empty() && value.chars().all(is_token_char) {
+        return value.to_string();
+    }
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Port of `_content_disposition_attachment(filename)` (`handlers.py:1093`). For
+/// ASCII filenames, emits `attachment; filename=<quoted>` where `<quoted>` uses
+/// `quote_header_value(allow_token=True)` — an unquoted token (e.g.
+/// `traces.json`) or a `"..."` quoted string when the name has non-token chars.
+/// For non-ASCII names, emits an ASCII fallback plus an RFC 5987
+/// `filename*=UTF-8''<pct-encoded>` parameter.
 pub fn content_disposition_attachment(filename: &str) -> String {
     if filename.is_ascii() {
-        let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
-        return format!("attachment; filename=\"{escaped}\"");
+        return format!("attachment; filename={}", quote_header_value(filename));
     }
 
     // Non-ASCII: NFKD-strip to an ASCII fallback (best-effort — we do a plain
@@ -146,10 +161,12 @@ pub fn content_disposition_attachment(filename: &str) -> String {
     } else {
         ascii_fallback
     };
-    let ascii_fallback = ascii_fallback.replace('\\', "\\\\").replace('"', "\\\"");
 
     let quoted = percent_encoding::utf8_percent_encode(filename, RFC5987_SAFE).to_string();
-    format!("attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quoted}")
+    format!(
+        "attachment; filename={}; filename*=UTF-8''{quoted}",
+        quote_header_value(&ascii_fallback)
+    )
 }
 
 #[cfg(test)]
@@ -180,17 +197,38 @@ mod tests {
     }
 
     #[test]
-    fn ascii_content_disposition() {
+    fn ascii_token_filename_is_unquoted() {
+        // Matches `_content_disposition_attachment` (verified live): an all-token
+        // filename is emitted without surrounding quotes.
         assert_eq!(
             content_disposition_attachment("report.txt"),
-            "attachment; filename=\"report.txt\""
+            "attachment; filename=report.txt"
+        );
+        assert_eq!(
+            content_disposition_attachment("traces.json"),
+            "attachment; filename=traces.json"
+        );
+    }
+
+    #[test]
+    fn ascii_non_token_filename_is_quoted_and_escaped() {
+        assert_eq!(
+            content_disposition_attachment("my file.txt"),
+            "attachment; filename=\"my file.txt\""
+        );
+        assert_eq!(
+            content_disposition_attachment("a\"b.txt"),
+            "attachment; filename=\"a\\\"b.txt\""
         );
     }
 
     #[test]
     fn non_ascii_content_disposition_has_filename_star() {
+        // Fallback `.txt` is all-token, so it is unquoted, matching Python.
         let cd = content_disposition_attachment("日本語.txt");
-        assert!(cd.contains("filename*=UTF-8''"), "{cd}");
-        assert!(cd.starts_with("attachment; filename=\""), "{cd}");
+        assert_eq!(
+            cd,
+            "attachment; filename=.txt; filename*=UTF-8''%E6%97%A5%E6%9C%AC%E8%AA%9E.txt"
+        );
     }
 }

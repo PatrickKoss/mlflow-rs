@@ -271,6 +271,12 @@ class SqlRun(Base):
             name="runs_lifecycle_stage",
         ),
         PrimaryKeyConstraint("run_uuid", name="run_pk"),
+        Index(
+            f"index_{__tablename__}_experiment_id_lifecycle_stage_start_time",
+            "experiment_id",
+            "lifecycle_stage",
+            "start_time",
+        ),
     )
 
     @staticmethod
@@ -641,6 +647,7 @@ class SqlInput(Base):
             "destination_id",
             "source_type",
         ),
+        Index(f"index_{__tablename__}_source_id", "source_id"),
     )
 
     input_uuid = Column(String(36), nullable=False)
@@ -829,7 +836,7 @@ class SqlTraceTag(Base):
     # Key is unique within a request_id
     __table_args__ = (
         PrimaryKeyConstraint("request_id", "key", name="trace_tag_pk"),
-        Index(f"index_{__tablename__}_request_id"),
+        Index(f"index_{__tablename__}_request_id", "request_id"),
     )
 
 
@@ -860,7 +867,7 @@ class SqlTraceMetadata(Base):
     # Key is unique within a request_id
     __table_args__ = (
         PrimaryKeyConstraint("request_id", "key", name="trace_request_metadata_pk"),
-        Index(f"index_{__tablename__}_request_id"),
+        Index(f"index_{__tablename__}_request_id", "request_id"),
     )
 
 
@@ -1331,6 +1338,7 @@ class SqlLoggedModel(Base):
             ondelete="CASCADE",
             name="fk_logged_models_experiment_id",
         ),
+        Index(f"index_{__tablename__}_experiment_id", "experiment_id"),
     )
 
     def to_mlflow_entity(self) -> LoggedModel:
@@ -2046,6 +2054,35 @@ class SqlSpan(Base):
             "index_spans_experiment_id_type_status", "experiment_id", "type", "status"
         ),  # For type-only and type+status filters
         Index("index_spans_experiment_id_duration", "experiment_id", "duration_ns"),
+    )
+
+
+class SqlSpanAttribute(Base):
+    __tablename__ = "span_attributes"
+
+    trace_id = Column(String(50), nullable=False)
+    span_id = Column(String(50), nullable=False)
+    key = Column(String(250), nullable=False)
+    # Attribute values in spans.content are already JSON-encoded strings. The
+    # searchable prefix is bounded so the composite key/value index remains
+    # portable across all supported databases.
+    value = Column(String(500), nullable=False)
+    value_truncated = Column(Boolean, nullable=False, default=False, server_default=sa.false())
+
+    span = relationship(
+        "SqlSpan",
+        backref=backref("attributes_index", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+    __table_args__ = (
+        PrimaryKeyConstraint("trace_id", "span_id", "key", name="span_attributes_pk"),
+        ForeignKeyConstraint(
+            ["trace_id", "span_id"],
+            ["spans.trace_id", "spans.span_id"],
+            name="fk_span_attributes_span",
+            ondelete="CASCADE",
+        ),
+        Index("index_span_attributes_key_value", "key", "value"),
     )
 
 

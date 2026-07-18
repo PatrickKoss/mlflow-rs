@@ -1,4 +1,5 @@
 import base64
+import os
 import re
 import subprocess
 import sys
@@ -18,7 +19,6 @@ from mlflow.entities import Dataset, DatasetInput, InputTag, LoggedModelOutput
 from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.environment_variables import (
     _MLFLOW_INTERNAL_GATEWAY_AUTH_TOKEN,
-    _MLFLOW_RUST_STORE_TESTING,
     MLFLOW_ENABLE_WORKSPACES,
     MLFLOW_FLASK_SERVER_SECRET_KEY,
     MLFLOW_TRACKING_PASSWORD,
@@ -59,6 +59,24 @@ from tests.tracking.integration_test_utils import (
 
 _PACKAGED_BASIC_AUTH_INI = Path(auth_module.__file__).parent / "basic_auth.ini"
 _TEST_DIR = Path(__file__).parent
+_RUN_AGAINST_RUST = os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust"
+
+_skip_if_rust_custom_auth = pytest.mark.skipif(
+    _RUN_AGAINST_RUST,
+    reason="Rust runs in a separate process and cannot load a Python authorization_function",
+)
+_skip_if_rust_scorers_unimplemented = pytest.mark.skipif(
+    _RUN_AGAINST_RUST,
+    reason="Rust server does not implement the scorer API yet",
+)
+_skip_if_rust_gateway_unimplemented = pytest.mark.skipif(
+    _RUN_AGAINST_RUST,
+    reason="Rust server does not implement the gateway API yet",
+)
+_skip_if_rust_prompt_optimization_unimplemented = pytest.mark.skipif(
+    _RUN_AGAINST_RUST,
+    reason="Rust server does not implement the prompt-optimization API yet",
+)
 
 
 def _isolate_auth_config(extra_env: dict[str, str], tmp_path: Path) -> dict[str, str]:
@@ -125,13 +143,16 @@ def fastapi_client(request, tmp_path):
     extra_env[MLFLOW_FLASK_SERVER_SECRET_KEY.name] = "my-secret-key"
     # Set _MLFLOW_SGI_NAME to "uvicorn" so auth module returns FastAPI app
     extra_env["_MLFLOW_SGI_NAME"] = "uvicorn"
+    server_type, extra_env = resolve_auth_server_launch(backend_uri, extra_env)
+    if server_type != "rust":
+        server_type = "fastapi"
 
     with _init_server(
         backend_uri=backend_uri,
         root_artifact_uri=tmp_path.joinpath("artifacts").as_uri(),
         extra_env=extra_env,
         app="mlflow.server.auth:create_app",
-        server_type="fastapi",
+        server_type=server_type,
     ) as url:
         yield MlflowClient(url)
 
@@ -184,7 +205,7 @@ def test_authenticate(client, monkeypatch):
 def test_validate_username_and_password(client, username, password):
     # T12.1 parity backlog #3: the Rust server emits the standard HTTP reason phrase
     # "Bad Request", while Flask/werkzeug (Python default) emits "BAD REQUEST".
-    reason = "Bad Request" if _MLFLOW_RUST_STORE_TESTING.get() else "BAD REQUEST"
+    reason = "Bad Request" if _RUN_AGAINST_RUST else "BAD REQUEST"
     with pytest.raises(requests.exceptions.HTTPError, match=re.escape(reason)):
         create_user(client.tracking_uri, username=username, password=password)
 
@@ -373,6 +394,7 @@ def _mlflow_create_user_rest(base_uri, headers):
     ],
     indirect=True,
 )
+@_skip_if_rust_custom_auth
 def test_authenticate_jwt(client):
     # unauthenticated
     with pytest.raises(requests.HTTPError, match=r"401 Client Error: UNAUTHORIZED") as e:
@@ -848,6 +870,10 @@ def _wait(url: str, timeout: int = 10) -> None:
     pytest.fail("Server did not start")
 
 
+@pytest.mark.skipif(
+    _RUN_AGAINST_RUST,
+    reason="This test hardcodes the Python basic-auth CLI server",
+)
 def test_proxy_log_artifacts(monkeypatch, tmp_path):
     backend_uri = f"sqlite:///{tmp_path / 'sqlalchemy.db'}"
     port = get_safe_port()
@@ -1237,6 +1263,7 @@ def test_log_outputs_authorization(client: MlflowClient, monkeypatch: pytest.Mon
         client.log_outputs(run_id, model_outputs)
 
 
+@_skip_if_rust_scorers_unimplemented
 def test_reregister_scorer_does_not_raise(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
 
@@ -1277,6 +1304,7 @@ def test_reregister_scorer_does_not_raise(client, monkeypatch):
     assert response.json()["version"] == 2
 
 
+@_skip_if_rust_scorers_unimplemented
 def test_scorer_permission_denial(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
     username2, password2 = create_user(client.tracking_uri)
@@ -1326,6 +1354,7 @@ def test_scorer_permission_denial(client, monkeypatch):
             response.raise_for_status()
 
 
+@_skip_if_rust_scorers_unimplemented
 def test_scorer_read_permission(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
     username2, password2 = create_user(client.tracking_uri)
@@ -1717,6 +1746,7 @@ def test_get_metric_history_bulk_interval_auth(client: MlflowClient, monkeypatch
         assert len(data["metrics"]) == 2
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_secrets_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -1807,6 +1837,7 @@ def test_gateway_secrets_permissions(client, monkeypatch):
         response.raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoints_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -1936,6 +1967,7 @@ def test_gateway_endpoints_permissions(client, monkeypatch):
         response.raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_model_definitions_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2040,6 +2072,7 @@ def test_gateway_model_definitions_permissions(client, monkeypatch):
         response.raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_budget_policy_admin_only(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
 
@@ -2122,6 +2155,7 @@ def test_gateway_budget_policy_admin_only(client, monkeypatch):
         response.raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_ajax_routes_permissions(client, monkeypatch):
     username, password = create_user(client.tracking_uri)
 
@@ -2182,6 +2216,7 @@ def test_gateway_unauthenticated_access_denied(client, monkeypatch):
     assert response.status_code == 401
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoint_use_permission(fastapi_client, monkeypatch):
     user1, password1 = create_user(fastapi_client.tracking_uri)
     user2, password2 = create_user(fastapi_client.tracking_uri)
@@ -2280,6 +2315,7 @@ def test_gateway_endpoint_use_permission(fastapi_client, monkeypatch):
         ).raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoint_use_permission_with_workspaces(fastapi_workspace_client):
     tracking_uri = fastapi_workspace_client.tracking_uri
     admin_auth = (ADMIN_USERNAME, ADMIN_PASSWORD)
@@ -2353,6 +2389,7 @@ def test_gateway_endpoint_use_permission_with_workspaces(fastapi_workspace_clien
     assert response.status_code != 403
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_proxy_authenticates_via_mlflow_auth_header(fastapi_client, monkeypatch):
     user1, password1 = create_user(fastapi_client.tracking_uri)
     user2, password2 = create_user(fastapi_client.tracking_uri)
@@ -2454,6 +2491,7 @@ def test_gateway_proxy_authenticates_via_mlflow_auth_header(fastapi_client, monk
         ).raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_model_definition_requires_secret_use_permission(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2582,6 +2620,7 @@ def test_gateway_model_definition_requires_secret_use_permission(client, monkeyp
         ).raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoint_requires_model_definition_use_permission(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2743,6 +2782,7 @@ def test_gateway_endpoint_requires_model_definition_use_permission(client, monke
         ).raise_for_status()
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoint_requires_fallback_model_definition_use_permission(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2885,6 +2925,7 @@ def test_gateway_endpoint_requires_fallback_model_definition_use_permission(clie
     [{"MLFLOW_AUTH_CONFIG_PATH": "fixtures/no_permission_auth.ini"}],
     indirect=True,
 )
+@_skip_if_rust_prompt_optimization_unimplemented
 def test_prompt_optimization_job_search_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2928,6 +2969,7 @@ def test_prompt_optimization_job_search_permissions(client, monkeypatch):
     assert response.status_code != 403
 
 
+@_skip_if_rust_prompt_optimization_unimplemented
 def test_prompt_optimization_job_create_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2990,6 +3032,7 @@ def test_prompt_optimization_job_create_permissions(client, monkeypatch):
     assert response.status_code != 403
 
 
+@_skip_if_rust_gateway_unimplemented
 def test_gateway_endpoint_invocation_requires_use_permission(fastapi_client, monkeypatch):
     user1, password1 = create_user(fastapi_client.tracking_uri)
     user2, password2 = create_user(fastapi_client.tracking_uri)
@@ -3192,6 +3235,7 @@ def test_assistant_unauthenticated_access_denied(fastapi_client, monkeypatch):
     assert response.status_code == 401
 
 
+@_skip_if_rust_scorers_unimplemented
 def test_get_online_scoring_configs_with_auth(client, monkeypatch):
     username, password = create_user(client.tracking_uri)
 

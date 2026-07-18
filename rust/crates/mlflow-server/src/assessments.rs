@@ -365,6 +365,36 @@ fn expectation_proto_to_value_json(e: &apb::Expectation) -> Result<String, Mlflo
     value_message_to_json_string(e.value.as_ref())
 }
 
+/// `ExpectationValue.to_proto` (`assessment.py:635-651`): scalar values
+/// (int/float/bool/str) round-trip through the `value` (`google.protobuf.Value`)
+/// field; everything else (dict/list/null — `_need_serialization`,
+/// `assessment.py:674-677`) is emitted as a `serialized_value` carrying the JSON
+/// string under `serialization_format="JSON_FORMAT"`. The store keeps the value
+/// as `json.dumps(value)` (`value_json`), so a non-scalar's `serialized_value`
+/// is exactly that stored text.
+fn expectation_to_proto(value_json: String) -> apb::Expectation {
+    let parsed: serde_json::Value =
+        serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+    let needs_serialization = !matches!(
+        parsed,
+        serde_json::Value::Bool(_) | serde_json::Value::Number(_) | serde_json::Value::String(_)
+    );
+    if needs_serialization {
+        apb::Expectation {
+            value: None,
+            serialized_value: Some(apb::expectation::SerializedValue {
+                serialization_format: Some("JSON_FORMAT".to_string()),
+                value: Some(value_json),
+            }),
+        }
+    } else {
+        apb::Expectation {
+            value: Some(value_json_to_message(&value_json)),
+            serialized_value: None,
+        }
+    }
+}
+
 /// `FeedbackValue.from_proto(proto.feedback)` (`assessment.py:4396-4397`,
 /// `692-697`) — note this is `proto.feedback`, a *direct field access* on the
 /// whole `Assessment` message, not gated on `WhichOneof("value") ==
@@ -497,10 +527,7 @@ fn millis_to_timestamp(ms: i64) -> prost_types::Timestamp {
 fn to_proto_assessment(a: Assessment) -> apb::Assessment {
     let value = match a.value {
         AssessmentValue::Expectation { value_json } => {
-            apb::assessment::Value::Expectation(apb::Expectation {
-                value: Some(value_json_to_message(&value_json)),
-                serialized_value: None,
-            })
+            apb::assessment::Value::Expectation(expectation_to_proto(value_json))
         }
         AssessmentValue::Feedback { value_json, error } => {
             apb::assessment::Value::Feedback(apb::Feedback {

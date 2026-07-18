@@ -128,6 +128,17 @@ _SERVER_TYPE = os.environ.get("MLFLOW_SERVER_TYPE", "python").lower()
 _RUN_AGAINST_RUST = _SERVER_TYPE == "rust"
 
 
+def _skip_if_rust_endpoint_unimplemented(endpoint: str) -> None:
+    """Skip a test whose endpoint the Rust server (T12) does not implement yet.
+
+    T12.3 conformance backlog: the endpoints below have no Rust ``handler_for``
+    arm / store method, so the Rust server 404s (or empty-bodies) on them. These
+    are documented gaps, not parity bugs — the Python default path is unaffected.
+    """
+    if _RUN_AGAINST_RUST:
+        pytest.skip(f"Rust server does not implement {endpoint} yet (T12.3 backlog)")
+
+
 @pytest.fixture
 def mlflow_client(store_type: str, tmp_path: Path, db_uri: str, monkeypatch):
     """Provides an MLflow Tracking API client pointed at the local tracking server.
@@ -677,6 +688,9 @@ def test_set_tag_validation(mlflow_client):
 
 
 def test_path_validation(mlflow_client):
+    # The tracking `listArtifacts` RPC (`/mlflow/artifacts/list`) has no Rust
+    # handler yet, so the first assertion 404s instead of the 400 "Invalid path".
+    _skip_if_rust_endpoint_unimplemented("GET /mlflow/artifacts/list (listArtifacts)")
     experiment_id = mlflow_client.create_experiment("tags validation")
     created_run = mlflow_client.create_run(experiment_id)
     run_id = created_run.info.run_id
@@ -2157,6 +2171,11 @@ def test_update_run_name_without_changing_status(mlflow_client):
 
 
 def test_create_promptlab_run_handler_rejects_invalid_requests(mlflow_client):
+    # `create-promptlab-run` is a hand-registered Flask route (not a proto RPC);
+    # the hybrid Rust deployment proxies it to Python, and the Rust server itself
+    # 404s on it by design.
+    _skip_if_rust_endpoint_unimplemented("POST /mlflow/runs/create-promptlab-run")
+
     def assert_response(resp, message_part):
         assert resp.status_code == 400
         response_json = resp.json()
@@ -2246,6 +2265,9 @@ def test_create_promptlab_run_handler_rejects_invalid_requests(mlflow_client):
 
 
 def test_create_promptlab_run_handler_returns_expected_results(mlflow_client):
+    # See test_create_promptlab_run_handler_rejects_invalid_requests: promptlab
+    # runs are Python-proxied in the hybrid deployment; the Rust server 404s.
+    _skip_if_rust_endpoint_unimplemented("POST /mlflow/runs/create-promptlab-run")
     experiment_id = mlflow_client.create_experiment("log inputs test")
 
     response = requests.post(
@@ -3713,6 +3735,7 @@ def test_graphql_nan_metric_handling(mlflow_client):
 
 
 def test_create_and_get_evaluation_dataset(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3737,6 +3760,7 @@ def test_create_and_get_evaluation_dataset(mlflow_client, store_type):
 
 
 def test_search_evaluation_datasets(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3777,6 +3801,7 @@ def test_search_evaluation_datasets(mlflow_client, store_type):
 
 
 def test_evaluation_dataset_tag_operations(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3803,6 +3828,7 @@ def test_evaluation_dataset_tag_operations(mlflow_client, store_type):
 
 
 def test_evaluation_dataset_delete(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3822,6 +3848,7 @@ def test_evaluation_dataset_delete(mlflow_client, store_type):
 
 
 def test_evaluation_dataset_upsert_records(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3887,6 +3914,7 @@ def test_evaluation_dataset_upsert_records(mlflow_client, store_type):
 
 
 def test_add_dataset_to_experiments_rest_tracking(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("dataset_exp_1")
@@ -3920,6 +3948,7 @@ def test_add_dataset_to_experiments_rest_tracking(mlflow_client, store_type):
 
 
 def test_remove_dataset_from_experiments_rest_tracking(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("dataset_remove_exp_1")
@@ -3959,6 +3988,7 @@ def test_remove_dataset_from_experiments_rest_tracking(mlflow_client, store_type
 
 
 def test_add_multiple_experiments_at_once_rest_tracking(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exps = [mlflow_client.create_experiment(f"bulk_add_exp_{i}") for i in range(5)]
@@ -3998,6 +4028,7 @@ def test_dataset_experiment_association_error_cases_rest_tracking(mlflow_client,
 
 
 def test_idempotent_add_experiments_rest_tracking(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("idempotent_test_exp_1")
@@ -4045,6 +4076,7 @@ def test_idempotent_remove_experiments_rest_tracking(mlflow_client, store_type):
 
 
 def test_client_api_add_remove_experiments_rest_tracking(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("client_api_exp_1")
@@ -4076,6 +4108,7 @@ def test_client_api_add_remove_experiments_rest_tracking(mlflow_client, store_ty
 
 
 def test_scorer_CRUD(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("scorers API")
     if store_type == "file":
         pytest.skip("File store doesn't support scorer CRUD operations")
     experiment_id = mlflow_client.create_experiment("test_scorer_api_experiment")
@@ -5216,6 +5249,7 @@ def test_update_model_definition_provider(mlflow_client_with_secrets):
 
 
 def test_create_issue_with_all_fields(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
 
@@ -5254,6 +5288,7 @@ def test_create_issue_with_all_fields(mlflow_client, store_type):
 
 
 def test_create_issue_minimal_fields(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Minimal")
@@ -5277,6 +5312,7 @@ def test_create_issue_minimal_fields(mlflow_client, store_type):
 
 
 def test_create_issue_with_required_fields(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Required Fields")
@@ -5300,6 +5336,7 @@ def test_create_issue_with_required_fields(mlflow_client, store_type):
 
 
 def test_create_issue_invalid_experiment(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     response = requests.post(
@@ -5316,6 +5353,7 @@ def test_create_issue_invalid_experiment(mlflow_client, store_type):
 
 
 def test_get_issue(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Get")
@@ -5341,6 +5379,7 @@ def test_get_issue(mlflow_client, store_type):
 
 
 def test_get_issue_not_found(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     response = requests.get(f"{mlflow_client.tracking_uri}/api/3.0/mlflow/issues/nonexistent-issue")
@@ -5350,6 +5389,7 @@ def test_get_issue_not_found(mlflow_client, store_type):
 
 
 def test_update_issue(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Update")
@@ -5386,6 +5426,7 @@ def test_update_issue(mlflow_client, store_type):
 
 
 def test_search_issues_no_filters(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Search")
@@ -5412,6 +5453,7 @@ def test_search_issues_no_filters(mlflow_client, store_type):
 
 
 def test_search_issues_by_experiment(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     exp1 = mlflow_client.create_experiment("Issue Test Search Exp1")
@@ -5448,6 +5490,7 @@ def test_search_issues_by_experiment(mlflow_client, store_type):
 
 
 def test_search_issues_by_status(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Search Status")
@@ -5484,6 +5527,7 @@ def test_search_issues_by_status(mlflow_client, store_type):
 
 
 def test_search_issues_with_pagination(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Pagination")
@@ -5523,6 +5567,7 @@ def test_search_issues_with_pagination(mlflow_client, store_type):
 
 
 def test_search_issues_sorted_by_timestamp(mlflow_client, store_type):
+    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Sort")
