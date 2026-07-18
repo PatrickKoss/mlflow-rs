@@ -2832,12 +2832,26 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 15 — Part II foundations
 
-- [ ] **T15.1 Decision pass**: D14–D22 reviewed and recorded in §17 (execution
+- [x] **T15.1 Decision pass**: D14–D22 reviewed and recorded in §17 (execution
       model, litellm strategy, guardrail execution, promptlab writer, queue
       replacement, auth-gap policy).
       **AC:** each decision has consequences documented; scope table §11.2
       approved.
       **VER:** sign-off recorded in this file.
+      **DONE (2026-07-18):** full D14–D22 review executed by the orchestrator
+      under the user's standing continue-with-Part-2 directive. D14, D16,
+      D17, D19 were already decided; D22 accepted. The four `proposed` rows
+      are hereby ratified as decided (marked "T15.1 pass 2026-07-18" in §17):
+      D15 (legacy YAML gateway stays Python/deprecated; only the DB-backed
+      embedded gateway + gateway-proxy bridge are ported), D18 (emit the
+      corrected stream_url form; wire-visible deviation must get a
+      differential-corpus allowlist entry plus a UI dead-letter check), D20
+      (jobs table is the queue; HARD operational rule: Python and Rust
+      runners must never run concurrently on one DB — enforced in the
+      T14.3-style runbook at cutover), D21 (auth gaps ported faithfully with
+      `// AUTH GAP:` markers; hardening is a post-parity two-plane change).
+      Scope table §11.2 approved as written. User may veto any ratification;
+      revisit costs one table edit before the affected phase starts.
 - [ ] **T15.2 Proto/routing extension**: compile `datasets.proto`,
       `issues.proto`, `label_schemas.proto`, `review_queues.proto`,
       `prompt_optimization.proto` into `mlflow-proto`; the genai RPCs already
@@ -3123,13 +3137,13 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 | ID | Decision/Risk | Notes | Status |
 |---|---|---|---|
 | D14 | **Python-free execution model**: Rust owns wire, storage, queueing, scheduling, and all GenAI semantics. Each async job runs in a per-job `mlflow-genai-worker` Rust subprocess linked to the same `mlflow-genai` crate as the server; workers use the existing Rust HTTP APIs for store/gateway access. No Python interpreter, package, venv, sidecar, or fallback is permitted in production. The Python `mlflow.genai` SDK remains a compatible client/test oracle; OSS decorator-scorer rejection is preserved. | Keeps hard cancel/timeout/crash isolation while eliminating Python. `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=0` still disables execution explicitly; a missing native worker is a startup/deployment error, not a reduced-function fallback mode. | decided |
-| D15 | **Legacy standalone YAML gateway** (`mlflow gateway start`) stays Python and deprecated; only the DB-backed embedded gateway is ported. | The `gateway-proxy` bridge route IS ported. | proposed |
+| D15 | **Legacy standalone YAML gateway** (`mlflow gateway start`) stays Python and deprecated; only the DB-backed embedded gateway is ported. | The `gateway-proxy` bridge route IS ported. | decided (T15.1 pass 2026-07-18) |
 | D16 | **Full native LiteLLM compatibility**: vendor a pinned, generated manifest of every fallback provider transform, model/token limit, retry rule, tokenizer mapping, and price entry reachable in the reference release; implement it in Rust alongside the explicit gateway adapters. | No Python fallback and no fallback-only-provider exception. Manifest regeneration + semantic conformance is mandatory on upgrades because cost accuracy feeds budgets. | decided |
 | D17 | **Guardrail execution**: JudgeGuardrail executes builtin/instructions judges inline through the native `ScorerExecutor`/`JudgeRuntime`; decorator and unsupported serialized scorer kinds retain Python OSS rejection behavior. | Avoids per-request worker startup while sharing identical prompt/provider/feedback logic with async jobs; no sidecar. | decided |
-| D18 | **Assistant `/message` stream_url bug** (`api.py:154` returns `/stream/{id}`, route is `/sessions/{id}/stream`): the frontend builds its own URL, so both forms are dead letters. Propose: emit the correct form, document the deviation, and verify the UI never consumes the field. | Trivial but wire-visible. | proposed |
+| D18 | **Assistant `/message` stream_url bug** (`api.py:154` returns `/stream/{id}`, route is `/sessions/{id}/stream`): the frontend builds its own URL, so both forms are dead letters. Propose: emit the correct form, document the deviation, and verify the UI never consumes the field. | Trivial but wire-visible. | decided (T15.1 pass 2026-07-18) |
 | D19 | **Promptlab pyfunc artifact writer**: Rust writes the MLmodel/requirements/`parameters.yaml` and `eval_results_table.json` layout directly and byte-compatibly; the artifact remains loadable by the Python client. | No runtime code execution is needed to write the static layout; cross-language load/predict is a required test. | decided |
-| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. During migration the Python and Rust runners must never run simultaneously against the same DB (double execution); after cutover only native Rust workers exist. | Recovery improves because queue and lifecycle state cannot diverge. | proposed |
-| D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | proposed |
+| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. During migration the Python and Rust runners must never run simultaneously against the same DB (double execution); after cutover only native Rust workers exist. | Recovery improves because queue and lifecycle state cannot diverge. | decided (T15.1 pass 2026-07-18) |
+| D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | decided (T15.1 pass 2026-07-18) |
 | D22 | **FastAPI-vs-Flask error-shape split**: gateway/assistant routes emit FastAPI-style errors (`{"detail": ...}`, 422 validation shape) while Flask routes emit MLflow proto-style errors. Rust must keep the per-route split (Part I already did this for OTLP's 422). | | accepted |
 | R4 | **Provider API drift**: the explicit gateway adapters plus the pinned LiteLLM compatibility manifest chase moving upstream APIs. | Hermetic request/stream/cost conformance pins today's behavior; manifest regeneration is required with each supported MLflow/provider snapshot (extends D8). | mitigated |
 | R5 | **SSE byte-parity is fragile** across providers/chunk boundaries. | Frame-level recorder + recorded fixtures (T15.5/T22.3); allowlist only documented deviations. | mitigated |
