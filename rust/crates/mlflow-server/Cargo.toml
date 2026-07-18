@@ -56,6 +56,10 @@ sha2 = { workspace = true }
 md5 = { workspace = true }
 subtle = { workspace = true }
 rand = { workspace = true }
+# Distributed gateway budget windows. 0.27.6 predates the repository's
+# seven-day package cooldown and provides the Tokio multiplexed connection and
+# Lua-script APIs used by Python's RedisBudgetTracker equivalent.
+redis = { version = "0.27.6", default-features = false, features = ["tokio-comp", "script"] }
 
 # GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the
 # no-batching/query-safety guard and hand-written resolution against the fixed,

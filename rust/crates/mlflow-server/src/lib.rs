@@ -16,6 +16,7 @@ pub mod artifacts;
 pub mod assessments;
 pub mod auth_api;
 pub mod auth_middleware;
+pub mod budget;
 pub mod config;
 pub mod datasets;
 pub mod experiments;

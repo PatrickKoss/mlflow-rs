@@ -11,20 +11,29 @@ use axum::body::{Body, Bytes};
 use axum::extract::{OriginalUri, Path, State};
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::Response;
+use base64::Engine;
+use chrono::Utc;
 use futures::future::BoxFuture;
 use futures::{stream, FutureExt, StreamExt};
 use hmac::{Hmac, Mac};
 use md5::{Digest, Md5};
-use mlflow_store::{python_json_dumps, ResolvedGatewayEndpointConfig, ResolvedGatewayModelConfig};
+use mlflow_store::{
+    python_json_dumps, ResolvedGatewayEndpointConfig, ResolvedGatewayModelConfig, SpanInput,
+    SpanMetricInput, StartTraceInput, TraceTimeRange,
+};
+use mlflow_webhooks::{WebhookAction, WebhookEntity, WebhookEvent};
 use rand::Rng;
 use reqwest::Url;
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 
+use crate::budget::{exceeded_payload, refresh_from_store, reject_message};
 use crate::gateway_guardrails::{
     load_guardrails, GuardrailExecutionError, GuardrailPayloadSchema, LoadedGuardrails,
 };
-use crate::gateway_provider_matrix::{default_api_base, is_supported_provider, normalize_provider};
+use crate::gateway_provider_matrix::{
+    default_api_base, is_supported_provider, model_accounting, normalize_provider,
+};
 use crate::state::AppState;
 use crate::workspace::Workspace;
 
@@ -160,6 +169,30 @@ struct RoutingPlan {
     fallbacks: Vec<ResolvedGatewayModelConfig>,
     fallback_attempt_label: Option<i64>,
     attempt_limit: usize,
+}
+
+#[derive(Clone)]
+struct GatewayTraceContext {
+    state: AppState,
+    workspace: String,
+    endpoint: ResolvedGatewayEndpointConfig,
+    request: Value,
+    request_type: &'static str,
+    started_ns: i64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TokenUsage {
+    input_tokens: u64,
+    output_tokens: u64,
+    total_tokens: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TokenCost {
+    input_cost: f64,
+    output_cost: f64,
+    total_cost: f64,
 }
 
 /// Provider seam consumed by the unified runtime and extended by T18.4's
@@ -1101,10 +1134,17 @@ async fn passthrough_value_route(
             Ok(value) => value,
             Err(error) => return error.response(start.elapsed()),
         };
+    if let Some(response) = check_budget_limit(&state, &workspace, &endpoint, start).await {
+        return response;
+    }
+    let trace_started_ns = unix_nanos();
     if !supports_passthrough(&model.provider, action) {
         return unsupported_passthrough(&model.provider, action).response(start.elapsed());
     }
     let streaming = action.streaming(&payload);
+    // Traces record the client's original request even when a sanitizing
+    // guardrail rewrites the payload before the provider call.
+    let original_request = payload.clone();
     let guardrails = load_guardrails(&state, &workspace, &endpoint, &headers).await;
     let payload = match guardrails.before(payload, None).await {
         Ok(payload) => payload,
@@ -1114,6 +1154,14 @@ async fn passthrough_value_route(
         }
         Err(error) => return guardrail_error_response(error, start),
     };
+    let trace = endpoint.usage_tracking.then(|| GatewayTraceContext {
+        state: state.clone(),
+        workspace: workspace.clone(),
+        endpoint,
+        request: original_request,
+        request_type: passthrough_request_type(action),
+        started_ns: trace_started_ns,
+    });
     let mut request = match adapter.passthrough_request(&model, action, payload.clone(), &headers) {
         Ok(request) => request,
         Err(error) => return error.response(start.elapsed()),
@@ -1122,10 +1170,15 @@ async fn passthrough_value_route(
         return error.response(start.elapsed());
     }
     if streaming {
-        raw_stream_response(request, start)
+        raw_stream_response(
+            request,
+            trace.map(|trace| (trace, model, passthrough_method(action))),
+            start,
+        )
     } else {
         raw_non_stream_response(
             request,
+            trace.map(|trace| (trace, model, passthrough_method(action))),
             start,
             guardrails,
             payload,
@@ -1153,6 +1206,9 @@ pub async fn raw_proxy(
             Ok(value) => value,
             Err(error) => return error.response(start.elapsed()),
         };
+    if let Some(response) = check_budget_limit(&state, &workspace, &endpoint, start).await {
+        return response;
+    }
     let path = match uri.query() {
         Some(query) => format!("{path}?{query}"),
         None => path,
@@ -1191,6 +1247,628 @@ fn primary_model(
                 }),
             )
         })
+}
+
+async fn complete_gateway_trace(
+    trace: &GatewayTraceContext,
+    model: &ResolvedGatewayModelConfig,
+    method: &str,
+    output: &Value,
+    status: &str,
+) {
+    let usage = extract_token_usage(output);
+    let cost = usage.and_then(|usage| token_cost_for_model(model, usage));
+
+    // Python runs the budget callback inside the active trace, before the
+    // asynchronous trace exporter flushes this invocation to the store. Keep
+    // that ordering so a refresh cannot backfill this call and then add it a
+    // second time through record_cost.
+    if let Some(cost) = cost {
+        let now = Utc::now();
+        if let Err(error) = refresh_from_store(
+            trace.state.budget_tracker(),
+            trace.state.tracking_store(),
+            &trace.workspace,
+            now,
+        )
+        .await
+        {
+            tracing::debug!(error = %error, "Failed to refresh budget policies");
+        }
+        match trace
+            .state
+            .budget_tracker()
+            .record_cost(cost.total_cost, Some(&trace.workspace), now)
+            .await
+        {
+            Ok(windows) => {
+                if let Some(dispatcher) = trace.state.webhook_dispatcher() {
+                    for window in windows
+                        .into_iter()
+                        .filter(|window| window.policy.budget_action == "ALERT")
+                    {
+                        dispatcher
+                            .fire(
+                                WebhookEvent::new(
+                                    WebhookEntity::BudgetPolicy,
+                                    WebhookAction::Exceeded,
+                                ),
+                                exceeded_payload(&window, Some(&trace.workspace)),
+                            )
+                            .await;
+                    }
+                }
+            }
+            Err(error) => tracing::debug!(error = %error, "Failed to record budget cost"),
+        }
+    }
+
+    if let Err(error) =
+        persist_gateway_trace(trace, model, method, output, usage, cost, status).await
+    {
+        tracing::debug!(error = %error, "Failed to persist gateway trace");
+    }
+}
+
+async fn persist_gateway_trace(
+    trace: &GatewayTraceContext,
+    model: &ResolvedGatewayModelConfig,
+    method: &str,
+    output: &Value,
+    usage: Option<TokenUsage>,
+    cost: Option<TokenCost>,
+    status: &str,
+) -> Result<(), String> {
+    let Some(experiment_id) = trace.endpoint.experiment_id.as_deref() else {
+        return Ok(());
+    };
+    let trace_uuid = uuid::Uuid::new_v4();
+    let trace_id = format!("tr-{}", trace_uuid.simple());
+    let root_bytes = first_eight(uuid::Uuid::new_v4());
+    let child_bytes = first_eight(uuid::Uuid::new_v4());
+    let root_id = hex_lower(&root_bytes);
+    let child_id = hex_lower(&child_bytes);
+    let ended_ns = unix_nanos().max(trace.started_ns);
+    let duration_ms = (ended_ns - trace.started_ns) / 1_000_000;
+
+    let request_json = python_json_dumps(&trace.request, false);
+    let output_json = python_json_dumps(output, false);
+    let mut metadata = vec![
+        (
+            "mlflow.gateway.endpointId".to_string(),
+            trace.endpoint.endpoint_id.clone(),
+        ),
+        (
+            "mlflow.gateway.requestType".to_string(),
+            trace.request_type.to_string(),
+        ),
+        ("mlflow.traceInputs".to_string(), request_json.clone()),
+        ("mlflow.traceOutputs".to_string(), output_json.clone()),
+        ("mlflow.trace_schema.version".to_string(), "3".to_string()),
+    ];
+    if let Some(usage) = usage {
+        metadata.push((
+            "mlflow.trace.tokenUsage".to_string(),
+            python_json_dumps(&usage_value(usage), false),
+        ));
+    }
+    if let Some(cost) = cost {
+        metadata.push((
+            "mlflow.trace.cost".to_string(),
+            python_json_dumps(&cost_value(cost), false),
+        ));
+    }
+    let start = StartTraceInput {
+        trace_id: trace_id.clone(),
+        experiment_id: experiment_id.to_string(),
+        request_time: trace.started_ns / 1_000_000,
+        execution_duration: Some(duration_ms),
+        state: status.to_string(),
+        client_request_id: None,
+        request_preview: request_preview(&trace.request),
+        response_preview: response_preview(output),
+        tags: vec![(
+            "mlflow.traceName".to_string(),
+            format!("gateway/{}", trace.endpoint.endpoint_name),
+        )],
+        trace_metadata: metadata,
+        trace_metrics: Vec::new(),
+    };
+    trace
+        .state
+        .tracking_store()
+        .start_trace(&trace.workspace, &start)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let root_content = span_content(
+        trace_uuid.as_bytes(),
+        &root_bytes,
+        None,
+        &format!("gateway/{}", trace.endpoint.endpoint_name),
+        trace.started_ns,
+        ended_ns,
+        status,
+        root_attributes(trace, &trace_id, &request_json, &output_json),
+    );
+    let child_attributes = child_attributes(model, &trace_id, method, usage, cost);
+    let child_content = span_content(
+        trace_uuid.as_bytes(),
+        &child_bytes,
+        Some(&root_bytes),
+        &format!(
+            "provider/{}/{}",
+            normalize_provider(&model.provider),
+            model.model_name
+        ),
+        trace.started_ns,
+        ended_ns,
+        status,
+        child_attributes,
+    );
+    let spans = vec![
+        SpanInput {
+            trace_id: trace_id.clone(),
+            span_id: root_id.clone(),
+            parent_span_id: None,
+            name: Some(format!("gateway/{}", trace.endpoint.endpoint_name)),
+            span_type: Some("UNKNOWN".to_string()),
+            status: status.to_string(),
+            start_time_unix_nano: trace.started_ns,
+            end_time_unix_nano: Some(ended_ns),
+            content: root_content,
+            dimension_attributes: None,
+        },
+        SpanInput {
+            trace_id: trace_id.clone(),
+            span_id: child_id.clone(),
+            parent_span_id: Some(root_id),
+            name: Some(format!(
+                "provider/{}/{}",
+                normalize_provider(&model.provider),
+                model.model_name
+            )),
+            span_type: Some("LLM".to_string()),
+            status: status.to_string(),
+            start_time_unix_nano: trace.started_ns,
+            end_time_unix_nano: Some(ended_ns),
+            content: child_content,
+            dimension_attributes: Some(
+                json!({
+                    "mlflow.llm.model": model.model_name,
+                    "mlflow.llm.provider": normalize_provider(&model.provider),
+                })
+                .to_string(),
+            ),
+        },
+    ];
+    let metrics = cost
+        .map(|cost| {
+            [
+                ("input_cost", cost.input_cost),
+                ("output_cost", cost.output_cost),
+                ("total_cost", cost.total_cost),
+            ]
+            .into_iter()
+            .map(|(key, value)| SpanMetricInput {
+                trace_id: trace_id.clone(),
+                span_id: child_id.clone(),
+                key: key.to_string(),
+                value,
+            })
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    trace
+        .state
+        .tracking_store()
+        .log_spans(
+            &trace.workspace,
+            experiment_id,
+            &spans,
+            &metrics,
+            &[TraceTimeRange {
+                trace_id,
+                min_start_ms: trace.started_ns / 1_000_000,
+                max_end_ms: Some(ended_ns / 1_000_000),
+                root_span_status: Some(status.to_string()),
+            }],
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn extract_token_usage(output: &Value) -> Option<TokenUsage> {
+    let usage = output
+        .get("usage")
+        .or_else(|| output.get("usageMetadata"))?;
+    let input = first_u64(
+        usage,
+        &["prompt_tokens", "input_tokens", "promptTokenCount"],
+    );
+    let output_tokens = first_u64(
+        usage,
+        &["completion_tokens", "output_tokens", "candidatesTokenCount"],
+    );
+    let total = first_u64(usage, &["total_tokens", "totalTokenCount"]).or_else(|| {
+        input
+            .zip(output_tokens)
+            .map(|(input, output)| input + output)
+    });
+    match (input, output_tokens, total) {
+        (Some(input_tokens), Some(output_tokens), Some(total_tokens)) => Some(TokenUsage {
+            input_tokens,
+            output_tokens,
+            total_tokens,
+        }),
+        _ => None,
+    }
+}
+
+fn stream_usage_output(bytes: &[u8]) -> Value {
+    let mut input_tokens = None;
+    let mut output_tokens = None;
+    let mut total_tokens = None;
+
+    for line in String::from_utf8_lossy(bytes).lines() {
+        let line = line.trim();
+        let payload = line.strip_prefix("data:").map(str::trim).unwrap_or(line);
+        if payload.is_empty() || payload == "[DONE]" {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(payload) else {
+            continue;
+        };
+        let Some(usage) = value
+            .get("usage")
+            .or_else(|| value.get("usageMetadata"))
+            .or_else(|| value.pointer("/message/usage"))
+        else {
+            continue;
+        };
+        input_tokens = first_u64(
+            usage,
+            &["prompt_tokens", "input_tokens", "promptTokenCount"],
+        )
+        .or(input_tokens);
+        output_tokens = first_u64(
+            usage,
+            &["completion_tokens", "output_tokens", "candidatesTokenCount"],
+        )
+        .or(output_tokens);
+        total_tokens = first_u64(usage, &["total_tokens", "totalTokenCount"]).or(total_tokens);
+    }
+
+    let total_tokens = total_tokens.or_else(|| {
+        input_tokens
+            .zip(output_tokens)
+            .map(|(input, output)| input + output)
+    });
+    match (input_tokens, output_tokens, total_tokens) {
+        (Some(input), Some(output), Some(total)) => json!({
+            "usage": {
+                "prompt_tokens": input,
+                "completion_tokens": output,
+                "total_tokens": total,
+            }
+        }),
+        _ => Value::Null,
+    }
+}
+
+fn first_u64(value: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter().find_map(|key| value.get(*key)?.as_u64())
+}
+
+fn token_cost_for_model(
+    model: &ResolvedGatewayModelConfig,
+    usage: TokenUsage,
+) -> Option<TokenCost> {
+    let accounting = model_accounting(&model.provider, &model.model_name)?;
+    let input_rate = accounting
+        .prices
+        .get("input_cost_per_token")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let output_rate = accounting
+        .prices
+        .get("output_cost_per_token")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    if input_rate == 0.0 && output_rate == 0.0 {
+        return None;
+    }
+    let input_cost = input_rate * usage.input_tokens as f64;
+    let output_cost = output_rate * usage.output_tokens as f64;
+    Some(TokenCost {
+        input_cost,
+        output_cost,
+        total_cost: input_cost + output_cost,
+    })
+}
+
+fn usage_value(usage: TokenUsage) -> Value {
+    json!({
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "total_tokens": usage.total_tokens,
+    })
+}
+
+fn cost_value(cost: TokenCost) -> Value {
+    json!({
+        "input_cost": cost.input_cost,
+        "output_cost": cost.output_cost,
+        "total_cost": cost.total_cost,
+    })
+}
+
+fn root_attributes(
+    trace: &GatewayTraceContext,
+    trace_id: &str,
+    request_json: &str,
+    output_json: &str,
+) -> Map<String, Value> {
+    string_attributes([
+        (
+            "mlflow.experimentId",
+            quoted(trace.endpoint.experiment_id.as_deref().unwrap_or("")),
+        ),
+        ("mlflow.traceRequestId", quoted(trace_id)),
+        ("mlflow.spanType", quoted("UNKNOWN")),
+        ("endpoint_id", quoted(&trace.endpoint.endpoint_id)),
+        ("endpoint_name", quoted(&trace.endpoint.endpoint_name)),
+        ("mlflow.spanInputs", request_json.to_string()),
+        ("mlflow.spanOutputs", output_json.to_string()),
+    ])
+}
+
+fn child_attributes(
+    model: &ResolvedGatewayModelConfig,
+    trace_id: &str,
+    method: &str,
+    usage: Option<TokenUsage>,
+    cost: Option<TokenCost>,
+) -> Map<String, Value> {
+    let mut attributes = string_attributes([
+        ("mlflow.traceRequestId", quoted(trace_id)),
+        ("mlflow.spanType", quoted("LLM")),
+        ("mlflow.llm.model", quoted(&model.model_name)),
+        (
+            "mlflow.llm.provider",
+            quoted(normalize_provider(&model.provider)),
+        ),
+    ]);
+    let action = if method.contains('_') {
+        "action"
+    } else {
+        "method"
+    };
+    attributes.insert(action.to_string(), Value::String(quoted(method)));
+    if let Some(usage) = usage {
+        attributes.insert(
+            "mlflow.chat.tokenUsage".to_string(),
+            Value::String(python_json_dumps(&usage_value(usage), false)),
+        );
+    }
+    if let Some(cost) = cost {
+        attributes.insert(
+            "mlflow.llm.cost".to_string(),
+            Value::String(python_json_dumps(&cost_value(cost), false)),
+        );
+    }
+    attributes
+}
+
+fn string_attributes<const N: usize>(entries: [(&str, String); N]) -> Map<String, Value> {
+    entries
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), Value::String(value)))
+        .collect()
+}
+
+fn quoted(value: &str) -> String {
+    serde_json::to_string(value).expect("string JSON serialization cannot fail")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn span_content(
+    trace_id: &[u8; 16],
+    span_id: &[u8; 8],
+    parent_span_id: Option<&[u8; 8]>,
+    name: &str,
+    start_ns: i64,
+    end_ns: i64,
+    status: &str,
+    attributes: Map<String, Value>,
+) -> String {
+    let code = if status == "OK" {
+        "STATUS_CODE_OK"
+    } else {
+        "STATUS_CODE_ERROR"
+    };
+    json!({
+        "trace_id": base64::engine::general_purpose::STANDARD.encode(trace_id),
+        "span_id": base64::engine::general_purpose::STANDARD.encode(span_id),
+        "parent_span_id": parent_span_id.map(|id| base64::engine::general_purpose::STANDARD.encode(id)),
+        "name": name,
+        "start_time_unix_nano": start_ns,
+        "end_time_unix_nano": end_ns,
+        "events": [],
+        "status": {"code": code, "message": ""},
+        "attributes": attributes,
+        "links": [],
+    })
+    .to_string()
+}
+
+fn first_eight(id: uuid::Uuid) -> [u8; 8] {
+    id.as_bytes()[..8].try_into().expect("UUID has 16 bytes")
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn request_preview(request: &Value) -> Option<String> {
+    request
+        .get("messages")
+        .and_then(Value::as_array)
+        .and_then(|messages| messages.last())
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            request
+                .get("input")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+}
+
+fn response_preview(output: &Value) -> Option<String> {
+    output
+        .pointer("/choices/0/message/content")
+        .or_else(|| output.pointer("/choices/0/delta/content"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn unix_nanos() -> i64 {
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+    )
+    .unwrap_or(i64::MAX)
+}
+
+/// Python calls `check_budget_limit` after endpoint resolution and before
+/// guardrail loading/execution. T18.7 inserts guardrails after this seam.
+async fn check_budget_limit(
+    state: &AppState,
+    workspace: &str,
+    endpoint: &ResolvedGatewayEndpointConfig,
+    start: Instant,
+) -> Option<Response> {
+    let now = chrono::Utc::now();
+    if let Err(error) = refresh_from_store(
+        state.budget_tracker(),
+        state.tracking_store(),
+        workspace,
+        now,
+    )
+    .await
+    {
+        tracing::debug!(error = %error, "Failed to refresh budget policies");
+    }
+    match state
+        .budget_tracker()
+        .should_reject_request(Some(workspace), now)
+        .await
+    {
+        Ok(Some(window)) => {
+            let detail = reject_message(&window);
+            if let Err(error) =
+                persist_budget_error_trace(state, workspace, endpoint, &detail).await
+            {
+                tracing::debug!(error = %error, "Failed to persist budget rejection trace");
+            }
+            Some(
+                GatewayRuntimeError::http(StatusCode::TOO_MANY_REQUESTS, Value::String(detail))
+                    .response(start.elapsed()),
+            )
+        }
+        Ok(None) => None,
+        Err(error) => {
+            Some(GatewayRuntimeError::internal(error.to_string()).response(start.elapsed()))
+        }
+    }
+}
+
+async fn persist_budget_error_trace(
+    state: &AppState,
+    workspace: &str,
+    endpoint: &ResolvedGatewayEndpointConfig,
+    detail: &str,
+) -> Result<(), String> {
+    if !endpoint.usage_tracking {
+        return Ok(());
+    }
+    let Some(experiment_id) = endpoint.experiment_id.as_deref() else {
+        return Ok(());
+    };
+    let trace_uuid = uuid::Uuid::new_v4();
+    let trace_id = format!("tr-{}", trace_uuid.simple());
+    let root_bytes = first_eight(uuid::Uuid::new_v4());
+    let root_id = hex_lower(&root_bytes);
+    let started_ns = unix_nanos();
+    let ended_ns = unix_nanos().max(started_ns);
+    let name = format!("gateway/{}", endpoint.endpoint_name);
+    state
+        .tracking_store()
+        .start_trace(
+            workspace,
+            &StartTraceInput {
+                trace_id: trace_id.clone(),
+                experiment_id: experiment_id.to_string(),
+                request_time: started_ns / 1_000_000,
+                execution_duration: Some((ended_ns - started_ns) / 1_000_000),
+                state: "ERROR".to_string(),
+                client_request_id: None,
+                request_preview: None,
+                response_preview: Some(detail.to_string()),
+                tags: vec![("mlflow.traceName".to_string(), name.clone())],
+                trace_metadata: vec![("mlflow.trace_schema.version".to_string(), "3".to_string())],
+                trace_metrics: Vec::new(),
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let content = span_content(
+        trace_uuid.as_bytes(),
+        &root_bytes,
+        None,
+        &name,
+        started_ns,
+        ended_ns,
+        "ERROR",
+        string_attributes([
+            ("mlflow.experimentId", quoted(experiment_id)),
+            ("mlflow.traceRequestId", quoted(&trace_id)),
+            ("mlflow.spanType", quoted("LLM")),
+            ("endpoint_id", quoted(&endpoint.endpoint_id)),
+            ("endpoint_name", quoted(&endpoint.endpoint_name)),
+        ]),
+    );
+    state
+        .tracking_store()
+        .log_spans(
+            workspace,
+            experiment_id,
+            &[SpanInput {
+                trace_id: trace_id.clone(),
+                span_id: root_id,
+                parent_span_id: None,
+                name: Some(name),
+                span_type: Some("LLM".to_string()),
+                status: "ERROR".to_string(),
+                start_time_unix_nano: started_ns,
+                end_time_unix_nano: Some(ended_ns),
+                content,
+                dimension_attributes: None,
+            }],
+            &[],
+            &[TraceTimeRange {
+                trace_id,
+                min_start_ms: started_ns / 1_000_000,
+                max_end_ms: Some(ended_ns / 1_000_000),
+                root_span_status: Some("ERROR".to_string()),
+            }],
+        )
+        .await
+        .map_err(|error| error.to_string())
 }
 
 async fn resolve_runtime_endpoint_provider(
@@ -1346,6 +2024,20 @@ async fn invoke_value(
             .response(start.elapsed())
         }
     };
+    if let Some(response) = check_budget_limit(&state, workspace, &endpoint, start).await {
+        return response;
+    }
+    let trace = endpoint.usage_tracking.then(|| GatewayTraceContext {
+        state: state.clone(),
+        workspace: workspace.to_string(),
+        endpoint: endpoint.clone(),
+        request: payload.clone(),
+        request_type: match kind {
+            InvocationKind::Chat => "unified/chat",
+            InvocationKind::Embeddings => "unified/embeddings",
+        },
+        started_ns: unix_nanos(),
+    });
     let plan = match build_routing_plan(&endpoint) {
         Ok(plan) => plan,
         Err(error) => return error.response(start.elapsed()),
@@ -1360,7 +2052,7 @@ async fn invoke_value(
         LoadedGuardrails::empty()
     };
     if stream {
-        stream_response(plan, kind, payload, guardrails, start).await
+        stream_response(plan, kind, payload, guardrails, trace, start).await
     } else {
         let payload = match guardrails
             .before(payload, Some(GuardrailPayloadSchema::ChatRequest))
@@ -1369,7 +2061,7 @@ async fn invoke_value(
             Ok(payload) => payload,
             Err(error) => return guardrail_error_response(error, start),
         };
-        non_stream_response(plan, kind, payload, guardrails, start).await
+        non_stream_response(plan, kind, payload, guardrails, trace, start).await
     }
 }
 
@@ -1378,6 +2070,7 @@ async fn non_stream_response(
     kind: InvocationKind,
     payload: Value,
     guardrails: LoadedGuardrails,
+    trace: Option<GatewayTraceContext>,
     start: Instant,
 ) -> Response {
     let mut provider_elapsed = Duration::ZERO;
@@ -1390,10 +2083,12 @@ async fn non_stream_response(
                 continue;
             }
         };
-        let result = execute_non_stream_attempt(model, kind, payload.clone()).await;
+        let result = execute_non_stream_attempt(model.clone(), kind, payload.clone()).await;
         provider_elapsed += result.1;
         match result.0 {
             Ok(value) => {
+                // AFTER guardrails transform the response first so the trace
+                // records what the client actually receives.
                 let value = match guardrails
                     .after(&payload, value, Some(GuardrailPayloadSchema::ChatResponse))
                     .await
@@ -1401,6 +2096,19 @@ async fn non_stream_response(
                     Ok(value) => value,
                     Err(error) => return guardrail_error_response(error, start),
                 };
+                if let Some(trace) = trace.as_ref() {
+                    complete_gateway_trace(
+                        trace,
+                        &model,
+                        match kind {
+                            InvocationKind::Chat => "chat",
+                            InvocationKind::Embeddings => "embeddings",
+                        },
+                        &value,
+                        "OK",
+                    )
+                    .await;
+                }
                 return with_non_stream_timing(
                     json_response(StatusCode::OK, value),
                     start,
@@ -1606,6 +2314,11 @@ async fn send_provider_request(
 
 async fn raw_non_stream_response(
     request: ProviderRequest,
+    trace: Option<(
+        GatewayTraceContext,
+        ResolvedGatewayModelConfig,
+        &'static str,
+    )>,
     start: Instant,
     guardrails: LoadedGuardrails,
     request_payload: Value,
@@ -1647,6 +2360,8 @@ async fn raw_non_stream_response(
         return with_non_stream_timing(response, start, provider_elapsed);
     };
     let response = if status.is_success() {
+        // AFTER guardrails transform the response first so the trace records
+        // what the client actually receives.
         let value = if run_after {
             match guardrails.after(&request_payload, value, None).await {
                 Ok(value) => value,
@@ -1655,6 +2370,9 @@ async fn raw_non_stream_response(
         } else {
             value
         };
+        if let Some((trace, model, method)) = trace.as_ref() {
+            complete_gateway_trace(trace, model, method, &value, "OK").await;
+        }
         json_response(status, value)
     } else {
         let detail = value.pointer("/error/message").cloned().unwrap_or(value);
@@ -1667,13 +2385,29 @@ struct RawProviderStream {
     initial: Option<BoxFuture<'static, Result<reqwest::Response, reqwest::Error>>>,
     upstream: Option<futures::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>>,
     done: bool,
+    trace: Option<(
+        GatewayTraceContext,
+        ResolvedGatewayModelConfig,
+        &'static str,
+    )>,
+    trace_bytes: Vec<u8>,
 }
 
-fn raw_stream_response(request: ProviderRequest, start: Instant) -> Response {
+fn raw_stream_response(
+    request: ProviderRequest,
+    trace: Option<(
+        GatewayTraceContext,
+        ResolvedGatewayModelConfig,
+        &'static str,
+    )>,
+    start: Instant,
+) -> Response {
     let state = RawProviderStream {
         initial: Some(send_provider_request(request).boxed()),
         upstream: None,
         done: false,
+        trace,
+        trace_bytes: Vec::new(),
     };
     let output = stream::unfold(state, next_raw_stream_chunk).map(Ok::<_, Infallible>);
     let mut response = Response::new(Body::from_stream(output));
@@ -1721,12 +2455,21 @@ async fn next_raw_stream_chunk(mut state: RawProviderStream) -> Option<(Bytes, R
         }
     }
     match state.upstream.as_mut()?.next().await {
-        Some(Ok(bytes)) => Some((bytes, state)),
+        Some(Ok(bytes)) => {
+            state.trace_bytes.extend_from_slice(&bytes);
+            Some((bytes, state))
+        }
         Some(Err(error)) => {
             state.done = true;
             Some((sse_error(&error.to_string(), "ClientPayloadError"), state))
         }
-        None => None,
+        None => {
+            if let Some((trace, model, method)) = state.trace.as_ref() {
+                let output = stream_usage_output(&state.trace_bytes);
+                complete_gateway_trace(trace, model, method, &output, "OK").await;
+            }
+            None
+        }
     }
 }
 
@@ -1821,6 +2564,8 @@ struct ProviderStream {
     payload: Value,
     guardrails: LoadedGuardrails,
     pre_guardrails_complete: bool,
+    trace: Option<GatewayTraceContext>,
+    trace_frames: Vec<Value>,
     next_attempt: usize,
     active: Option<ActiveProviderStream>,
     last_error: Option<GatewayRuntimeError>,
@@ -1842,6 +2587,7 @@ async fn stream_response(
     kind: InvocationKind,
     payload: Value,
     guardrails: LoadedGuardrails,
+    trace: Option<GatewayTraceContext>,
     start: Instant,
 ) -> Response {
     let state = ProviderStream {
@@ -1850,6 +2596,8 @@ async fn stream_response(
         payload,
         guardrails,
         pre_guardrails_complete: false,
+        trace,
+        trace_frames: Vec::new(),
         next_attempt: 0,
         active: None,
         last_error: None,
@@ -1968,6 +2716,20 @@ async fn next_stream_chunk(mut state: ProviderStream) -> Option<(Bytes, Provider
                         fail_stream_attempt(&mut state, error);
                         continue;
                     }
+                }
+                if let (Some(trace), Some(active)) = (state.trace.as_ref(), state.active.as_ref()) {
+                    let output = state.trace_frames.last().cloned().unwrap_or(Value::Null);
+                    complete_gateway_trace(
+                        trace,
+                        &active.model,
+                        match state.kind {
+                            InvocationKind::Chat => "chat_stream",
+                            InvocationKind::Embeddings => "embeddings",
+                        },
+                        &output,
+                        "OK",
+                    )
+                    .await;
                 }
                 // An empty stream or a clean EOF is success and ends the
                 // fallback chain, exactly like Python's async-for completion.
@@ -2130,6 +2892,7 @@ fn process_provider_line(
     ) {
         Ok(frames) => {
             for frame in frames {
+                state.trace_frames.push(frame.clone());
                 state.pending.push(sse_json(&frame));
             }
             Ok(())
@@ -2500,6 +3263,33 @@ fn passthrough_route(action: PassthroughAction) -> &'static str {
         PassthroughAction::GeminiStreamGenerateContent => {
             "/gemini/v1beta/models/{endpoint_name}:streamGenerateContent"
         }
+    }
+}
+
+fn passthrough_request_type(action: PassthroughAction) -> &'static str {
+    match action {
+        PassthroughAction::OpenAiChat => "passthrough/model/openai-chat",
+        PassthroughAction::OpenAiEmbeddings => "passthrough/model/openai-embeddings",
+        PassthroughAction::OpenAiResponses | PassthroughAction::OpenAiResponsesCompact => {
+            "passthrough/model/openai-responses"
+        }
+        PassthroughAction::AnthropicMessages => "passthrough/model/anthropic-messages",
+        PassthroughAction::GeminiGenerateContent
+        | PassthroughAction::GeminiStreamGenerateContent => {
+            "passthrough/model/gemini-generateContent"
+        }
+    }
+}
+
+fn passthrough_method(action: PassthroughAction) -> &'static str {
+    match action {
+        PassthroughAction::OpenAiChat => "openai_chat",
+        PassthroughAction::OpenAiEmbeddings => "openai_embeddings",
+        PassthroughAction::OpenAiResponses => "openai_responses",
+        PassthroughAction::OpenAiResponsesCompact => "openai_responses_compact",
+        PassthroughAction::AnthropicMessages => "anthropic_messages",
+        PassthroughAction::GeminiGenerateContent => "gemini_generate_content",
+        PassthroughAction::GeminiStreamGenerateContent => "gemini_stream_generate_content",
     }
 }
 
