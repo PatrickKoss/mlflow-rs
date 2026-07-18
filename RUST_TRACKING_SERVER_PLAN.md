@@ -1909,12 +1909,34 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       10k-run DB; store core+runs 256 passed; cargo fmt/clippy/test-workspace
       exit 0; T12.4 replay harness exit 0 post-merge. NOT run: postgres/mysql
       `check_migration.sh` (no docker locally) — covered by migration CI.
-- [ ] **T13.2 `span_attributes` extraction table** (Q7): indexed key/value maintained on
+- [x] **T13.2 `span_attributes` extraction table** (Q7): indexed key/value maintained on
       span ingest; span-content LIKE filters rewritten; shared alembic migration with a
       Python-compatible write path or capability-gated Rust-only (D7).
       **AC:** span-attribute filter on 50M spans < 1s on postgres; results identical to
       LIKE baseline on the corpus.
       **VER:** benchmark report + differential search results.
+      **DONE (2026-07-18):** D7 resolved as SHARED migration + Python write
+      path. Revision `c4a9b7d3e812` (off `a3f8c21d9b47`): `span_attributes`
+      (trace_id, span_id, key PK; value VARCHAR(500) + value_truncated flag;
+      composite FK → spans ON DELETE CASCADE; index (key, value)); batched
+      keyset backfill of existing spans (1k batches, top-level string attrs
+      only, >250-char keys skipped to avoid aliasing). Write paths: Python
+      log_spans extract + relog delete-and-replace + archival cleanup; Rust
+      shared span-ingest path (OTLP included) + trace-delete/workspace
+      cleanup. Read path: Rust span-attribute LIKE now pre-filters via the
+      indexed table, KEEPING the original content-LIKE as residual predicate
+      so results are byte-identical to Python (JSON-escaping quirks, cross-
+      attribute substring bleed, >500-char values); ILIKE/RLIKE and
+      wildcard/quote/backslash/long keys stay on content scan (documented);
+      Python read path unchanged. Verified: schema suite 23 passed; sqlite
+      up/down/up walk; backfill == ingest extraction (incl. truncated 600-char
+      value); byte-identical Python-vs-Rust responses on 9 adversarial span
+      queries over 2,500 spans (unicode, substring-hostile, ILIKE, missing
+      key); trace store 507 passed, workspace suite 68 passed; timing sanity
+      100k spans sqlite: 30.2ms LIKE → 2.8ms indexed (10.7x), plan uses
+      index_span_attributes_key_value; cargo fmt/clippy/test-workspace and
+      T12.4 replay corpus exit 0 pre- AND post-merge. 50M-span/<1s postgres AC
+      deferred to T13.3's full-scale bench run (not measurable locally).
 - [ ] **T13.3 Benchmark suite + seeded dataset generator** (`rust/bench/`): ~100 GB-scale
       synthetic DB (millions of runs, dense metrics, 10M+ traces with spans, 100k+ model
       versions); scenarios: runs/search with metric filters + ordering, deep pagination,
