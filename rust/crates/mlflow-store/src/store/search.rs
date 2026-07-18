@@ -128,7 +128,7 @@ impl TrackingStore {
         }
 
         let cursor = match page_token {
-            Some(t) => Some(Cursor::decode(t, order_cols.len())?),
+            Some(t) => Some(Cursor::decode(t, order_cols.cols.len())?),
             None => None,
         };
 
@@ -137,12 +137,13 @@ impl TrackingStore {
             &exp_ids,
             stages,
             &parsed_filters,
-            &order_cols,
+            &order_cols.cols,
+            &order_cols.joins,
             cursor.as_ref(),
             max_results,
         )?;
 
-        let kinds: Vec<ColKind> = order_cols.iter().map(|c| c.kind).collect();
+        let kinds: Vec<ColKind> = order_cols.cols.iter().map(|c| c.kind).collect();
         let rows: Vec<SearchRow> = self
             .db()
             .fetch_all(&query.sql, &query.binds, |r| SearchRow::from_row(r, &kinds))
@@ -379,10 +380,22 @@ impl JoinEntity {
     }
 }
 
+/// The ordered [`SortCol`] list plus the order-by joins they reference. Returned
+/// together so callers thread both explicitly — a prior thread-local approach
+/// was unsound across the `.await` between building the columns and the SQL,
+/// since the task could resume on a different worker thread and drain an empty
+/// registry, dropping the join while the SELECT still referenced its alias.
+#[derive(Debug)]
+struct OrderCols {
+    cols: Vec<SortCol>,
+    joins: Vec<JoinSpec>,
+}
+
 /// Build the ordered [`SortCol`] list from the user order-by list, appended with
 /// the `start_time DESC` (if absent) and `run_uuid ASC` tiebreaks — exactly
 /// `_get_orderby_clauses`.
-fn build_order_cols(order_by: &[String]) -> Result<Vec<SortCol>, MlflowError> {
+fn build_order_cols(order_by: &[String]) -> Result<OrderCols, MlflowError> {
+    let mut joins: Vec<JoinSpec> = Vec::new();
     let mut cols: Vec<SortCol> = Vec::new();
     let mut observed: Vec<(String, String)> = Vec::new();
     let mut join_idx = 0usize;
@@ -454,16 +467,13 @@ fn build_order_cols(order_by: &[String]) -> Result<Vec<SortCol>, MlflowError> {
                         ColKind::Text
                     },
                 });
-                // Remember the join so the SQL builder can emit it. We stash the
-                // entity+key on the SortCol expr via a side table below; simpler:
-                // rebuild joins from cols is hard, so record here.
-                JOIN_REGISTRY.with(|reg| {
-                    reg.borrow_mut().push(JoinSpec {
-                        alias,
-                        table: entity.table(),
-                        key: k,
-                        is_metric: entity == JoinEntity::Metric,
-                    })
+                // Record the join so the SQL builder can emit it alongside the
+                // order columns that reference its alias.
+                joins.push(JoinSpec {
+                    alias,
+                    table: entity.table(),
+                    key: k,
+                    is_metric: entity == JoinEntity::Metric,
                 });
             }
         }
@@ -487,22 +497,17 @@ fn build_order_cols(order_by: &[String]) -> Result<Vec<SortCol>, MlflowError> {
         kind: ColKind::Text,
     });
 
-    Ok(cols)
+    Ok(OrderCols { cols, joins })
 }
 
-// The order-by joins collected while building `SortCol`s. Using a thread-local
-// keeps `build_order_cols` a pure function of its inputs while still letting the
-// SQL builder pick up the joins in order; it is drained per `search_runs` call.
+// One order-by join (a `LEFT JOIN` of a per-key metric/param/tag subquery),
+// carried alongside the [`SortCol`]s that reference its alias.
 #[derive(Debug, Clone)]
 struct JoinSpec {
     alias: String,
     table: &'static str,
     key: String,
     is_metric: bool,
-}
-
-thread_local! {
-    static JOIN_REGISTRY: std::cell::RefCell<Vec<JoinSpec>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// `_get_identifier`-resolved order target validation. The parser already
@@ -579,18 +584,17 @@ struct Query {
 /// Build the full `search_runs` `SELECT`: run columns + order/keyset columns,
 /// order-by joins, EXISTS filters, workspace/lifecycle/experiment predicates,
 /// keyset predicate, `ORDER BY`, and `LIMIT max+1`.
+#[allow(clippy::too_many_arguments)]
 fn build_search_sql(
     dialect: Dialect,
     exp_ids: &[i64],
     stages: &[&str],
     filters: &[Comparison],
     order_cols: &[SortCol],
+    joins: &[JoinSpec],
     cursor: Option<&Cursor>,
     max_results: Option<i64>,
 ) -> Result<Query, MlflowError> {
-    // Drain the joins collected by `build_order_cols` for this call.
-    let joins: Vec<JoinSpec> = JOIN_REGISTRY.with(|reg| std::mem::take(&mut *reg.borrow_mut()));
-
     // Fix up the raw start_time DESC NULLS placement per dialect.
     let order_cols = apply_dialect_nulls(dialect, order_cols);
 
@@ -606,7 +610,7 @@ fn build_search_sql(
     let mut sql = format!("{select} FROM runs r");
 
     // Order-by joins (LEFT JOIN a per-key subquery), matching Python's outerjoin.
-    for j in &joins {
+    for j in joins {
         let key_ph = ph.next();
         binds.push(Val::Text(j.key.clone()));
         let cols = if j.is_metric {
@@ -1526,12 +1530,6 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
 
-    /// Drain the thread-local join registry so a prior test's leftover joins
-    /// never leak into the next `build_order_cols` call.
-    fn drain_joins() {
-        JOIN_REGISTRY.with(|r| r.borrow_mut().clear());
-    }
-
     #[test]
     fn max_results_validation_matches_python() {
         assert!(validate_max_results(None).is_ok());
@@ -1556,34 +1554,33 @@ mod tests {
 
     #[test]
     fn default_order_appends_start_time_then_run_uuid() {
-        drain_joins();
-        let cols = build_order_cols(&[]).unwrap();
+        let OrderCols { cols, joins } = build_order_cols(&[]).unwrap();
         // Just the two tiebreaks: start_time DESC, run_uuid ASC.
         assert_eq!(cols.len(), 2);
         assert_eq!(cols[0].expr, "r.start_time");
         assert_eq!(cols[0].dir, Dir::Desc);
         assert_eq!(cols[1].expr, "r.run_uuid");
         assert_eq!(cols[1].dir, Dir::Asc);
-        drain_joins();
+        assert!(joins.is_empty());
     }
 
     #[test]
     fn start_time_order_by_suppresses_extra_tiebreak() {
-        drain_joins();
-        let cols = build_order_cols(&["attribute.start_time ASC".to_string()]).unwrap();
+        let cols = build_order_cols(&["attribute.start_time ASC".to_string()])
+            .unwrap()
+            .cols;
         // rank CASE + value + run_uuid  (no second start_time appended).
         assert_eq!(cols.len(), 3);
         assert_eq!(cols[0].kind, ColKind::Rank);
         assert_eq!(cols[1].expr, "r.start_time");
         assert_eq!(cols[1].dir, Dir::Asc);
         assert_eq!(cols[2].expr, "r.run_uuid");
-        drain_joins();
     }
 
     #[test]
     fn metric_order_by_emits_three_way_rank() {
-        drain_joins();
-        let cols = build_order_cols(&["metrics.acc DESC".to_string()]).unwrap();
+        let OrderCols { cols, joins } =
+            build_order_cols(&["metrics.acc DESC".to_string()]).unwrap();
         // rank CASE (is_nan=>1, null=>2) + value DESC + start_time DESC + run_uuid.
         assert_eq!(cols.len(), 4);
         assert_eq!(cols[0].kind, ColKind::Rank);
@@ -1591,30 +1588,26 @@ mod tests {
         assert!(cols[0].expr.contains("IS NULL THEN 2"));
         assert_eq!(cols[1].kind, ColKind::Num);
         assert_eq!(cols[1].dir, Dir::Desc);
-        // One order-by join was registered.
-        let n = JOIN_REGISTRY.with(|r| r.borrow().len());
-        assert_eq!(n, 1);
-        drain_joins();
+        // One order-by join was returned, referencing the metric latest table.
+        assert_eq!(joins.len(), 1);
+        assert!(joins[0].is_metric);
+        assert_eq!(joins[0].table, "latest_metrics");
     }
 
     #[test]
     fn duplicate_order_by_fields_rejected() {
-        drain_joins();
         let e = build_order_cols(&["metrics.acc".to_string(), "metrics.acc DESC".to_string()])
             .unwrap_err();
         assert!(e.message.contains("duplicate fields"), "{}", e.message);
-        drain_joins();
     }
 
     #[test]
     fn order_by_created_alias_is_start_time() {
-        drain_joins();
         // `created` translates to start_time, so the extra start_time tiebreak
         // is suppressed (same key as the user clause).
-        let cols = build_order_cols(&["created ASC".to_string()]).unwrap();
+        let cols = build_order_cols(&["created ASC".to_string()]).unwrap().cols;
         assert_eq!(cols.len(), 3);
         assert_eq!(cols[1].expr, "r.start_time");
-        drain_joins();
     }
 
     #[test]
