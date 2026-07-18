@@ -1733,6 +1733,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlflow-genai"
+version = "0.1.0"
+dependencies = [
+ "nix",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "mlflow-genai-worker"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "mlflow-genai",
+ "nix",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "mlflow-proto"
 version = "0.1.0"
 dependencies = [
@@ -2572,6 +2598,8 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
+ "serde",
+ "serde_json",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

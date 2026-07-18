@@ -1,0 +1,14 @@
+{
+  "name": "concise_answer",
+  "value": "yes",
+  "rationale": "The response is concise.",
+  "source": {
+    "source_type": "LLM_JUDGE",
+    "source_id": "openai:/mock-judge"
+  },
+  "metadata": {
+    "mlflow.assessment.judgeInputTokens": 12,
+    "mlflow.assessment.judgeOutputTokens": 7,
+    "guideline": "Return 'yes' when {{ outputs }} is concise, otherwise return 'no'."
+  }
+}

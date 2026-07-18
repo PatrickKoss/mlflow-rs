@@ -1,0 +1,23 @@
+{
+  "name": "concise_answer",
+  "aggregations": null,
+  "description": null,
+  "is_session_level_scorer": false,
+  "mlflow_version": "3.14.1.dev0",
+  "serialization_version": 1,
+  "builtin_scorer_class": null,
+  "builtin_scorer_pydantic_data": null,
+  "call_source": null,
+  "call_signature": null,
+  "original_func_name": null,
+  "instructions_judge_pydantic_data": {
+    "instructions": "Return 'yes' when {{ outputs }} is concise, otherwise return 'no'.",
+    "model": "openai:/mock-judge",
+    "feedback_value_type": {
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "memory_augmented_judge_data": null,
+  "third_party_scorer_data": null
+}

@@ -11,6 +11,8 @@ members = [
   "crates/mlflow-artifacts",
   "crates/mlflow-webhooks",
   "crates/mlflow-test-support",
+  "crates/mlflow-genai",
+  "crates/mlflow-genai-worker",
 ]
 # `spikes/` is a standalone project (its own Cargo.toml, not a workspace member).
 exclude = ["spikes"]
@@ -39,6 +41,7 @@ mlflow-search = { path = "crates/mlflow-search" }
 mlflow-artifacts = { path = "crates/mlflow-artifacts" }
 mlflow-webhooks = { path = "crates/mlflow-webhooks" }
 mlflow-test-support = { path = "crates/mlflow-test-support" }
+mlflow-genai = { path = "crates/mlflow-genai" }
 
 # Async runtime / HTTP
 tokio = { version = "1.52", features = ["full"] }
@@ -46,6 +49,7 @@ axum = "0.8"
 tower = "0.5"
 tower-http = "0.7"
 hyper = "1.10"
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
 
 # Database
 sqlx = { version = "0.8.6", default-features = false, features = [

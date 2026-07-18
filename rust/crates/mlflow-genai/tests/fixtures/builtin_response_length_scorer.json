@@ -1,0 +1,28 @@
+{
+  "name": "response_length",
+  "aggregations": null,
+  "description": "Check whether the output length is within specified bounds.",
+  "is_session_level_scorer": false,
+  "mlflow_version": "3.14.1.dev0",
+  "serialization_version": 1,
+  "builtin_scorer_class": "ResponseLength",
+  "builtin_scorer_pydantic_data": {
+    "name": "response_length",
+    "aggregations": null,
+    "description": "Check whether the output length is within specified bounds.",
+    "required_columns": [
+      "outputs"
+    ],
+    "inference_params": null,
+    "min_length": 2,
+    "max_length": 4,
+    "unit": "words",
+    "instructions": "Check whether the output length in words is within [min=2, max=4]."
+  },
+  "call_source": null,
+  "call_signature": null,
+  "original_func_name": null,
+  "instructions_judge_pydantic_data": null,
+  "memory_augmented_judge_data": null,
+  "third_party_scorer_data": null
+}
