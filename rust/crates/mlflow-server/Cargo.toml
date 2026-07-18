@@ -77,6 +77,7 @@ mlflow-error = { workspace = true }
 mlflow-proto = { workspace = true }
 mlflow-registry = { workspace = true }
 mlflow-webhooks = { workspace = true }
+mlflow-test-support = { workspace = true }
 prost = { workspace = true }
 base64 = { workspace = true }
 flate2 = { workspace = true }

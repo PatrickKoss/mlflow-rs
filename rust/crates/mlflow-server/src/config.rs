@@ -26,6 +26,8 @@ pub const MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR: &str = "MLFLOW_SERVER_CORS
 pub const MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR: &str = "MLFLOW_SERVER_X_FRAME_OPTIONS";
 pub const MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR: &str =
     "MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE";
+/// Python's job-runner enable gate (default `True`).
+pub const MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR: &str = "MLFLOW_SERVER_ENABLE_JOB_EXECUTION";
 
 /// `MLFLOW_ENABLE_WORKSPACES` (`environment_variables.py`, default `False`).
 pub const MLFLOW_ENABLE_WORKSPACES_ENV_VAR: &str = "MLFLOW_ENABLE_WORKSPACES";
@@ -181,6 +183,10 @@ pub enum ConfigError {
          supported. Point both at the same database or omit --registry-store-uri."
     )]
     RegistryUriMismatch { registry: String, backend: String },
+    #[error(
+        "{name} value must be one of ['true', 'false', '1', '0'] (case-insensitive), but got {value}"
+    )]
+    InvalidBooleanEnvironment { name: &'static str, value: String },
 }
 
 /// Back-compat alias: pre-T11.1 code referred to `StaticPrefixError`.
@@ -224,6 +230,9 @@ pub struct ServerConfig {
     /// Whether the basic-auth app is enabled (`--app-name basic-auth`, or
     /// `MLFLOW_AUTH_CONFIG_PATH` present).
     pub auth_enabled: bool,
+    /// Whether the DB-backed job runner may start. Python defaults this gate to
+    /// enabled and disables it only for `false`/`0`.
+    pub job_execution_enabled: bool,
     /// Resolved workspaces-enabled signal (flags override
     /// `MLFLOW_ENABLE_WORKSPACES`).
     pub enable_workspaces: bool,
@@ -257,6 +266,7 @@ impl Default for ServerConfig {
             disable_security_middleware: false,
             expose_prometheus: true,
             auth_enabled: false,
+            job_execution_enabled: true,
             enable_workspaces: false,
             workspace_store_uri: None,
         }
@@ -317,6 +327,7 @@ impl ServerConfig {
         } else {
             env_truthy(MLFLOW_ENABLE_WORKSPACES_ENV_VAR)
         };
+        let job_execution_enabled = env_bool(MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR, true)?;
 
         Ok(Self {
             host: cli.host,
@@ -338,6 +349,7 @@ impl ServerConfig {
             ),
             expose_prometheus: cli.expose_prometheus.is_some(),
             auth_enabled,
+            job_execution_enabled,
             enable_workspaces,
             workspace_store_uri: cli.workspace_store_uri,
         })
@@ -362,6 +374,17 @@ fn env_truthy(name: &str) -> bool {
         .ok()
         .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "true" | "1"))
         .unwrap_or(false)
+}
+
+fn env_bool(name: &'static str, default: bool) -> Result<bool, ConfigError> {
+    let Ok(value) = std::env::var(name) else {
+        return Ok(default);
+    };
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "1" => Ok(true),
+        "false" | "0" => Ok(false),
+        _ => Err(ConfigError::InvalidBooleanEnvironment { name, value }),
+    }
 }
 
 /// Validates a static prefix the same way Python's `_validate_static_prefix`
@@ -448,6 +471,7 @@ mod tests {
         assert!(!config.disable_security_middleware);
         assert!(!config.expose_prometheus);
         assert!(!config.auth_enabled);
+        assert!(config.job_execution_enabled);
         assert!(!config.enable_workspaces);
         assert_eq!(config.workers, None);
     }
@@ -667,6 +691,31 @@ mod tests {
         }
     }
 
+    #[test]
+    fn job_execution_gate_matches_python_boolean_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        unsafe {
+            std::env::set_var(MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR, "0");
+        }
+        assert!(
+            !ServerConfig::from_cli(parse(&[]))
+                .unwrap()
+                .job_execution_enabled
+        );
+
+        unsafe {
+            std::env::set_var(MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR, "invalid");
+        }
+        assert!(matches!(
+            ServerConfig::from_cli(parse(&[])),
+            Err(ConfigError::InvalidBooleanEnvironment { .. })
+        ));
+        unsafe {
+            std::env::remove_var(MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR);
+        }
+    }
+
     /// Clears every env var the parser reads so a test's outcome does not depend
     /// on the ambient environment (clap `env = ...` reads the live process env).
     fn clear_env() {
@@ -676,6 +725,7 @@ mod tests {
             MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR,
             MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR,
             MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR,
+            MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR,
             MLFLOW_ENABLE_WORKSPACES_ENV_VAR,
             MLFLOW_WORKSPACE_STORE_URI_ENV_VAR,
             MLFLOW_AUTH_CONFIG_PATH_ENV_VAR,
