@@ -1957,11 +1957,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       Rust on identical workloads.
       **AC:** report with Rust idle/loaded RSS; target ≥ 5x total reduction.
       **VER:** `rust/bench/memory.md` (cgroup memory.current sampling).
-- [ ] **T14.2 Soak test**: 24 h mixed workload (ingest + search + UI polling + webhook
-      deliveries) at realistic rates on postgres; RSS growth, pool health, error rates.
-      **AC:** no monotonic RSS growth; error rate < 0.01%; no webhook-delivery task
-      leaks.
-      **VER:** soak dashboard/logs in release notes.
+- [ ] **T14.2 Soak + load comparison** *(respecified by user 2026-07-18: 1 h
+      instead of 24 h — "1h is good enough with the right measurement and load
+      test")*: 1 h mixed workload run TWICE on identical infrastructure — once
+      against the Python server, once against Rust — as realistic as possible:
+      **postgres + MinIO (S3) artifact storage in local docker containers**.
+      Workload models the user's real pain points:
+      - concurrent training runs logging params/metrics/tags at realistic
+        cadence (the "huge problems while doing trainings and tracking");
+      - trace ingest alongside training;
+      - the post-training read pattern from real clients (e.g. the ONNX model
+        flow): after a run finishes, `metrics/get-history` and
+        `metrics/get-history-bulk-interval` calls for its metrics;
+      - regular result querying throughout (runs/search, experiment listing,
+        UI-style polling);
+      - artifact/model uploads to S3 (MinIO) as part of each training run.
+      Measure per-endpoint latency percentiles (p50/p95/p99), error rates, RSS
+      over time, and DB pool health for BOTH servers; report side by side.
+      **AC:** no monotonic RSS growth over the hour; error rate < 0.01%; no
+      webhook-delivery task leaks; comparative report Python vs Rust.
+      **VER:** soak report (`rust/bench/soak.md`) with graphs/tables + docker
+      compose file to reproduce.
 - [ ] **T14.3 Operational docs**: deployment guide (compose + k8s), migration runbook
       (Python-only → split; auth DB sharing; secret/key management for Fernet + CSRF),
       rollback procedure (nginx flips routes back to Python — zero data migration, both
