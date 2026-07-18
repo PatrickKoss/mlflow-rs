@@ -1,0 +1,101 @@
+# Plan §12.2-§12.4 - T17.4 invoke submission surfaces. The Python side
+# has submission enabled but no Huey consumer; the Rust runner executes with
+# MLFLOW_GENAI_WORKER_FIXTURE=1. These cases compare the immediate handles and
+# durable pre-created run/tag shapes while execution-result parity is also
+# asserted by the native fixture integration test.
+cases:
+  - name: evaluate_invoke_submit
+    method: POST
+    path: /ajax-api/3.0/mlflow/genai/evaluate/invoke
+    body:
+      experiment_id: "0"
+      trace_ids: [tr-corpus-a, tr-corpus-b]
+      serialized_scorers:
+        - '{"name":"corpus_judge","aggregations":null,"description":null,"is_session_level_scorer":false,"mlflow_version":"3.14.1.dev0","serialization_version":1,"builtin_scorer_class":null,"builtin_scorer_pydantic_data":null,"call_source":null,"call_signature":null,"original_func_name":null,"instructions_judge_pydantic_data":{"instructions":"Evaluate {{ outputs }}","model":"openai:/fixture"},"memory_augmented_judge_data":null,"third_party_scorer_data":null}'
+    bind:
+      - {bind: evaluate_job_id, from: "$.job_id"}
+      - {bind: evaluate_run_id, from: "$.run_id"}
+    expect_status: 200
+
+  - name: evaluate_invoke_precreated_run
+    method: GET
+    path: /api/2.0/mlflow/runs/get
+    query: {run_id: "${evaluate_run_id}"}
+    normalize:
+      drop_paths:
+        - "$.run.info.run_name"
+        - "$.run.data.tags[0].value"
+        - "$.run.data.tags[1].value"
+    expect_status: 200
+
+  - name: evaluate_invoke_empty_traces
+    method: POST
+    path: /ajax-api/3.0/mlflow/genai/evaluate/invoke
+    body:
+      experiment_id: "0"
+      trace_ids: []
+      serialized_scorers: ['{"name":"unused"}']
+    expect_status: 400
+
+  - name: evaluate_invoke_empty_scorers
+    method: POST
+    path: /ajax-api/3.0/mlflow/genai/evaluate/invoke
+    body: {experiment_id: "0", trace_ids: [tr-corpus-a], serialized_scorers: []}
+    expect_status: 400
+
+  - name: scorer_invoke_fixed_batches
+    method: POST
+    path: /ajax-api/3.0/mlflow/scorer/invoke
+    body:
+      experiment_id: "0"
+      serialized_scorer: '{"name":"corpus_judge","aggregations":null,"description":null,"is_session_level_scorer":false,"mlflow_version":"3.14.1.dev0","serialization_version":1,"builtin_scorer_class":null,"builtin_scorer_pydantic_data":null,"call_source":null,"call_signature":null,"original_func_name":null,"instructions_judge_pydantic_data":{"instructions":"Evaluate {{ outputs }}","model":"openai:/fixture"},"memory_augmented_judge_data":null,"third_party_scorer_data":null}'
+      trace_ids: [tr-corpus-a, tr-corpus-b, tr-corpus-c]
+      log_assessments: true
+    expect_status: 200
+
+  - name: scorer_invoke_missing_experiment
+    method: POST
+    path: /ajax-api/3.0/mlflow/scorer/invoke
+    body: {serialized_scorer: '{}', trace_ids: [tr-corpus-a]}
+    expect_status: 400
+
+  - name: scorer_invoke_invalid_scorer_json
+    method: POST
+    path: /ajax-api/3.0/mlflow/scorer/invoke
+    body: {experiment_id: "0", serialized_scorer: not-json, trace_ids: [tr-corpus-a]}
+    expect_status: 400
+
+  - name: issues_invoke_submit
+    method: POST
+    path: /ajax-api/3.0/mlflow/issues/invoke
+    body:
+      experiment_id: "0"
+      trace_ids: [tr-corpus-a, tr-corpus-b]
+      categories: [correctness, safety]
+      provider: openai
+      model: gpt-5
+    bind:
+      - {bind: issues_job_id, from: "$.job_id"}
+      - {bind: issues_run_id, from: "$.run_id"}
+    expect_status: 200
+
+  - name: issues_invoke_precreated_run
+    method: GET
+    path: /api/2.0/mlflow/runs/get
+    query: {run_id: "${issues_run_id}"}
+    normalize:
+      drop_paths:
+        - "$.run.info.run_name"
+        - "$.run.data.tags[1].value"
+        - "$.run.data.tags[2].value"
+    expect_status: 200
+
+  - name: issues_invoke_missing_model
+    method: POST
+    path: /ajax-api/3.0/mlflow/issues/invoke
+    body:
+      experiment_id: "0"
+      trace_ids: [tr-corpus-a]
+      categories: [correctness]
+      provider: openai
+    expect_status: 500

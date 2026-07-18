@@ -20,6 +20,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod graphql;
+pub mod invoke;
 pub mod issues;
 pub mod job_runner;
 pub mod jobs;
@@ -361,6 +362,23 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         axum::routing::patch(jobs::fastapi_cancel_job),
     );
     // ---- end generic jobs ----
+
+    // ---- GenAI invoke submissions (T17.4, §12.2-§12.4) ----
+    // AUTH GAP (D21): Python authenticates all three hand-written AJAX routes
+    // globally but registers no experiment/trace-specific validator for them.
+    router = router.route(
+        "/ajax-api/3.0/mlflow/genai/evaluate/invoke",
+        axum::routing::post(invoke::invoke_genai_evaluate),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/scorer/invoke",
+        axum::routing::post(invoke::invoke_scorer),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/issues/invoke",
+        axum::routing::post(invoke::invoke_issue_detection),
+    );
+    // ---- end GenAI invoke submissions ----
 
     // AUTH GAP: online configs (D21) are authenticated-only in Python; no
     // experiment/scorer-specific validator is applied.

@@ -14,7 +14,7 @@ use hyper_util::rt::TokioExecutor;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
 use mlflow_store::{Db, JobStatus, JobStore, PoolConfig, TrackingStore};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
 const BACKEND_ENV: &str = "_MLFLOW_SERVER_FILE_STORE";
@@ -61,7 +61,13 @@ impl PythonServer {
             ])
             .current_dir(repo_root())
             .env(BACKEND_ENV, uri)
+            .env("MLFLOW_TRACKING_URI", format!("http://127.0.0.1:{port}"))
             .env("MLFLOW_SERVER_ENABLE_JOB_EXECUTION", "true")
+            .env("MLFLOW_SERVER_SCORER_INVOKE_BATCH_SIZE", "2")
+            .env(
+                "MLFLOW_RUN_CONTEXT",
+                r#"{"mlflow.user":"cross-server","mlflow.source.name":"cross-server","mlflow.source.type":"LOCAL"}"#,
+            )
             .env(
                 "_MLFLOW_SUPPORTED_JOB_FUNCTION_LIST",
                 "test_endpoint.simple_job_fun",
@@ -342,4 +348,156 @@ async fn prompt_optimization_rows_created_by_either_server_have_identical_get_by
 
     shutdown_tx.send(()).unwrap();
     rust_server.await.unwrap();
+}
+
+#[tokio::test]
+async fn invoke_jobs_and_precreated_runs_are_byte_readable_by_either_server() {
+    std::env::set_var(
+        "MLFLOW_RUN_CONTEXT",
+        r#"{"mlflow.user":"cross-server","mlflow.source.name":"cross-server","mlflow.source.type":"LOCAL"}"#,
+    );
+    std::env::set_var("MLFLOW_SERVER_SCORER_INVOKE_BATCH_SIZE", "2");
+    let directory = tempfile::tempdir().unwrap();
+    let db_path = directory.path().join("shared-invoke.db");
+    std::fs::copy(fixture_path(), &db_path).unwrap();
+    let uri = format!("sqlite:///{}", db_path.display());
+    let db = Db::connect(&uri, PoolConfig::default()).await.unwrap();
+    let tracking = TrackingStore::new(
+        db.clone(),
+        directory.path().join("artifacts").display().to_string(),
+    );
+    let experiment_id = tracking
+        .create_experiment(WS, "cross-server-invoke", None, &[])
+        .await
+        .unwrap();
+    let jobs = JobStore::new(db);
+    let recorder = PrometheusBuilder::new().build_recorder().handle();
+    let app = build_app_with_recorder(
+        &ServerConfig {
+            disable_security_middleware: true,
+            ..Default::default()
+        },
+        recorder,
+        Some(AppState::new(tracking)),
+    );
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let rust_address = listener.local_addr().unwrap();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let rust_server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+            .unwrap();
+    });
+    let rust_base = format!("http://{rust_address}");
+    let python = PythonServer::start(&uri, directory.path()).await;
+    let scorer = include_str!("../../mlflow-genai/tests/fixtures/instructions_judge_scorer.json");
+
+    for base in [&rust_base, &python.base] {
+        let (status, evaluate) = post_json(
+            &format!("{base}/ajax-api/3.0/mlflow/genai/evaluate/invoke"),
+            &json!({
+                "experiment_id": experiment_id,
+                "trace_ids": ["tr-a", "tr-b"],
+                "serialized_scorers": [scorer],
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let evaluate_job = jobs
+            .get_job(WS, evaluate["job_id"].as_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(evaluate_job.job_name, "invoke_genai_evaluate");
+        assert_eq!(evaluate_job.status, JobStatus::Pending);
+        let params: Value = serde_json::from_str(&evaluate_job.params).unwrap();
+        assert_eq!(params["trace_ids"], json!(["tr-a", "tr-b"]));
+        assert_eq!(params["serialized_scorers"], json!([scorer]));
+        cross_read_run_bytes(
+            &rust_base,
+            &python.base,
+            evaluate["run_id"].as_str().unwrap(),
+        )
+        .await;
+
+        let (status, scorer_response) = post_json(
+            &format!("{base}/ajax-api/3.0/mlflow/scorer/invoke"),
+            &json!({
+                "experiment_id": experiment_id,
+                "serialized_scorer": scorer,
+                "trace_ids": ["tr-a", "tr-b", "tr-c"],
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(scorer_response["jobs"].as_array().unwrap().len(), 2);
+        for submitted in scorer_response["jobs"].as_array().unwrap() {
+            let job = jobs
+                .get_job(WS, submitted["job_id"].as_str().unwrap())
+                .await
+                .unwrap();
+            assert_eq!(job.job_name, "invoke_scorer");
+            assert_eq!(job.status, JobStatus::Pending);
+        }
+
+        let (status, issues) = post_json(
+            &format!("{base}/ajax-api/3.0/mlflow/issues/invoke"),
+            &json!({
+                "experiment_id": experiment_id,
+                "trace_ids": ["tr-a", "tr-b"],
+                "categories": ["correctness", "safety"],
+                "provider": "openai",
+                "model": "gpt-5",
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let issues_job = jobs
+            .get_job(WS, issues["job_id"].as_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(issues_job.job_name, "invoke_issue_detection");
+        assert_eq!(issues_job.status, JobStatus::Pending);
+        cross_read_run_bytes(&rust_base, &python.base, issues["run_id"].as_str().unwrap()).await;
+    }
+
+    shutdown_tx.send(()).unwrap();
+    rust_server.await.unwrap();
+}
+
+async fn cross_read_run_bytes(rust_base: &str, python_base: &str, run_id: &str) {
+    let tail = format!("/api/2.0/mlflow/runs/get?run_id={run_id}");
+    let (rust_status, rust_body) = request_bytes(Method::GET, &format!("{rust_base}{tail}")).await;
+    let (python_status, python_body) =
+        request_bytes(Method::GET, &format!("{python_base}{tail}")).await;
+    assert_eq!(rust_status, StatusCode::OK);
+    assert_eq!(python_status, StatusCode::OK);
+    let mut rust: Value = serde_json::from_slice(&rust_body).unwrap();
+    let mut python: Value = serde_json::from_slice(&python_body).unwrap();
+    canonicalize_tag_arrays(&mut rust);
+    canonicalize_tag_arrays(&mut python);
+    assert_eq!(rust, python);
+}
+
+fn canonicalize_tag_arrays(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, value) in object {
+                canonicalize_tag_arrays(value);
+                if key == "tags" {
+                    if let Some(tags) = value.as_array_mut() {
+                        tags.sort_by_key(|tag| tag["key"].as_str().unwrap_or("").to_string());
+                    }
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                canonicalize_tag_arrays(value);
+            }
+        }
+        _ => {}
+    }
 }

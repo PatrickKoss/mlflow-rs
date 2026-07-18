@@ -133,12 +133,16 @@ class DualServers:
         seed_db: Path,
         artifact_root: Path,
         extra_env: dict[str, str] | None = None,
+        python_extra_env: dict[str, str] | None = None,
+        rust_extra_env: dict[str, str] | None = None,
         python_app: str = "mlflow.server:app",
     ) -> None:
         self.workdir = workdir
         self.seed_db = seed_db
         self.artifact_root = artifact_root
         self.extra_env = extra_env or {}
+        self.python_extra_env = python_extra_env or {}
+        self.rust_extra_env = rust_extra_env or {}
         # The flask `--app` target. The plain sections use the base tracking
         # app; the auth section must use the auth app factory (the auth
         # endpoints exist only there), mirroring
@@ -164,7 +168,14 @@ class DualServers:
             SERVE_ARTIFACTS_ENV_VAR: "true",
             ARTIFACTS_DESTINATION_ENV_VAR: str(art),
             **self.extra_env,
+            **(self.python_extra_env if name == "python" else self.rust_extra_env),
         }
+        if name == "python" and "MLFLOW_SERVER_ENABLE_JOB_EXECUTION" in self.python_extra_env:
+            # The invoke handlers construct MlflowClient/fluent APIs inside the
+            # server process. The real `mlflow server` launcher pins those calls
+            # back to itself; the bare Flask compliance launcher must do so
+            # explicitly or evaluate runs escape into the local file store.
+            env["MLFLOW_TRACKING_URI"] = f"http://{LOCALHOST}:{port}"
         proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
         _await_server_up_or_die(port, timeout=40)
         return ServerHandle(
@@ -626,6 +637,7 @@ Corpus sections map to plan section 3 as follows:
 - auth (separate boot) -> 3.16 (401/403/admin/non-admin)
 - workspaces (separate boot) -> 3.17 (X-MLFLOW-WORKSPACE scoping)
 - prompt_optimization -> 12.7 (queued create/get/search/cancel/delete + errors)
+- invoke -> 12.2-12.4 (invoke handles, validation, batching, pre-created runs/tags)
 
 Deliberately deferred to follow-up (documented, not covered here): assessments
 FieldMask update paths (3.9) beyond create/get; trace artifact fetch dispatch
@@ -656,13 +668,41 @@ def _run_sqlite_sections(
 
     results: list[CaseResult] = []
     creds: dict[str, tuple[str, str]] = {}
+    submission_sections = {"prompt_optimization", "invoke"} & sections.keys()
     extra_env = {}
-    if "prompt_optimization" in sections:
+    python_extra_env = {}
+    rust_extra_env = {}
+    if submission_sections:
         extra_env = {
+            "MLFLOW_SERVER_SCORER_INVOKE_BATCH_SIZE": "2",
+            "MLFLOW_RUN_CONTEXT": json.dumps({
+                "mlflow.user": "corpus-user",
+                "mlflow.source.name": "corpus-server",
+                "mlflow.source.type": "LOCAL",
+            }),
+        }
+        python_extra_env = {
             "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "true",
             "_MLFLOW_HUEY_STORAGE_PATH": str(workroot),
         }
-    with DualServers(workroot, seed_db, artifact_root, extra_env=extra_env) as servers:
+        if "invoke" in submission_sections:
+            rust_extra_env = {
+                "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "true",
+                "MLFLOW_GENAI_WORKER_FIXTURE": "1",
+            }
+        else:
+            # Prompt-optimization CRUD asserts the queued state. Rust writes
+            # the same D20 row with the claim loop disabled, matching Python's
+            # Flask-only compliance process, which has no Huey consumer hook.
+            rust_extra_env = {"MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false"}
+    with DualServers(
+        workroot,
+        seed_db,
+        artifact_root,
+        extra_env=extra_env,
+        python_extra_env=python_extra_env,
+        rust_extra_env=rust_extra_env,
+    ) as servers:
         py_bindings: dict[str, Any] = {}
         rust_bindings: dict[str, Any] = {}
         for section, cases in sections.items():
@@ -803,10 +843,15 @@ def main() -> int:
 
     auth_cases = sections.pop("auth", [])
     workspace_cases = sections.pop("workspaces", [])
+    invoke_cases = sections.pop("invoke", [])
 
     all_results: list[CaseResult] = []
-    with tempfile.TemporaryDirectory(prefix="t124-sqlite-") as td:
-        all_results.extend(_run_sqlite_sections(sections, allow, Path(td)))
+    if sections:
+        with tempfile.TemporaryDirectory(prefix="t124-sqlite-") as td:
+            all_results.extend(_run_sqlite_sections(sections, allow, Path(td)))
+    if invoke_cases:
+        with tempfile.TemporaryDirectory(prefix="t124-invoke-") as td:
+            all_results.extend(_run_sqlite_sections({"invoke": invoke_cases}, allow, Path(td)))
 
     if auth_cases:
         with tempfile.TemporaryDirectory(prefix="t124-auth-") as td:

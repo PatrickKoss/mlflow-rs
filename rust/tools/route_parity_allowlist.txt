@@ -15,3 +15,6 @@ GET /api/3.0/mlflow/scorers/online-configs            # scorer online configs (T
 GET /ajax-api/3.0/mlflow/scorers/online-configs       # scorer online configs (T16.2) — hand-registered Flask route, not a proto RPC
 PUT /api/3.0/mlflow/scorers/online-config             # scorer online config (T16.2) — hand-registered Flask route, not a proto RPC
 PUT /ajax-api/3.0/mlflow/scorers/online-config        # scorer online config (T16.2) — hand-registered Flask route, not a proto RPC
+POST /ajax-api/3.0/mlflow/genai/evaluate/invoke      # evaluate invoke (T17.4) — hand-registered Flask route, not a proto RPC
+POST /ajax-api/3.0/mlflow/scorer/invoke              # scorer invoke (T17.4) — hand-registered Flask route, not a proto RPC
+POST /ajax-api/3.0/mlflow/issues/invoke              # issue-detection invoke (T17.4) — hand-registered Flask route, not a proto RPC
