@@ -4,7 +4,7 @@
 //!
 //! Gated behind `MLFLOW_RUST_TEST_PG_URI` (and `MLFLOW_RUST_TEST_MYSQL_URI`),
 //! like the other live-DB tests — skipped with a message when unset. The DB must
-//! already be Alembic-migrated to head `b7e4c1a90f23` (Rust never migrates).
+//! already be Alembic-migrated to head `a3f8c21d9b47` (Rust never migrates).
 //!
 //! The write-ordering discipline under test (plan §4 item 11, commit
 //! `4c5548c39`): both writers emit `trace_request_metadata`/`trace_metrics` in

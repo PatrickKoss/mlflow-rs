@@ -142,6 +142,8 @@ class SqlModelVersion(Base):
             onupdate="cascade",
         ),
         PrimaryKeyConstraint("workspace", "name", "version", name="model_version_pk"),
+        Index(f"index_{__tablename__}_run_id", "run_id"),
+        Index(f"index_{__tablename__}_current_stage", "current_stage"),
     )
 
     # entity mappers

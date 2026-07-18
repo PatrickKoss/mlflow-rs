@@ -271,6 +271,12 @@ class SqlRun(Base):
             name="runs_lifecycle_stage",
         ),
         PrimaryKeyConstraint("run_uuid", name="run_pk"),
+        Index(
+            f"index_{__tablename__}_experiment_id_lifecycle_stage_start_time",
+            "experiment_id",
+            "lifecycle_stage",
+            "start_time",
+        ),
     )
 
     @staticmethod
@@ -641,6 +647,7 @@ class SqlInput(Base):
             "destination_id",
             "source_type",
         ),
+        Index(f"index_{__tablename__}_source_id", "source_id"),
     )
 
     input_uuid = Column(String(36), nullable=False)
@@ -829,7 +836,7 @@ class SqlTraceTag(Base):
     # Key is unique within a request_id
     __table_args__ = (
         PrimaryKeyConstraint("request_id", "key", name="trace_tag_pk"),
-        Index(f"index_{__tablename__}_request_id"),
+        Index(f"index_{__tablename__}_request_id", "request_id"),
     )
 
 
@@ -860,7 +867,7 @@ class SqlTraceMetadata(Base):
     # Key is unique within a request_id
     __table_args__ = (
         PrimaryKeyConstraint("request_id", "key", name="trace_request_metadata_pk"),
-        Index(f"index_{__tablename__}_request_id"),
+        Index(f"index_{__tablename__}_request_id", "request_id"),
     )
 
 
@@ -1331,6 +1338,7 @@ class SqlLoggedModel(Base):
             ondelete="CASCADE",
             name="fk_logged_models_experiment_id",
         ),
+        Index(f"index_{__tablename__}_experiment_id", "experiment_id"),
     )
 
     def to_mlflow_entity(self) -> LoggedModel:
