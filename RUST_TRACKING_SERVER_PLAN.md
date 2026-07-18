@@ -5,36 +5,27 @@ Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app pa
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
-Status: **in progress — Phases 2–8 and 10 complete; Phase 9 complete except
-T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
-Phase 12 complete except T12.3 (client-suite conformance, now unblocked) —
-the T12.4 differential corpus is GREEN (133 cases, 0 non-allowlisted diffs)
-and the compliance CI job is a required gate.** · Branch:
+Status: **in progress — Phases 2–8, 10, and 12 complete; Phase 9 complete
+except T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
+Phase 13 started (T13.1 done; T13.2/T13.3 in flight). The T12.4 differential
+corpus is GREEN (133 cases, 0 non-allowlisted diffs), the compliance CI job is
+a required gate, and the client suites are green against Rust (T12.3: 0
+failures across tracking/auth/client/RBAC).** · Branch:
 `feature/rust-tracking-server` · Last updated: 2026-07-18
 
-**Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
-T12.4's differential harness was salvaged and landed as foundation, and the two
-real parity bugs it surfaced are fixed (experiment `workspace` proto field 9,
-and `searchExperiments` `view_type` proto2 default → ACTIVE_ONLY). All merged
-and green (fmt/clippy/full workspace suite by exit code).
-
-**In flight:** T10.3 (workspace request scoping), T11.1 (CLI/env parity).
+**Resume notes (2026-07-18):** implementation subagents now run via Codex
+(gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
 **Open:**
-- **T12.4 (differential replay harness)** — scaffolding + 133-case corpus +
-  engine landed under `rust/compliance/` (runs via `uv run python
-  rust/compliance/replay.py`; `--list` works). NOT yet green end-to-end: needs
-  a full dual-server run to triage the remaining reported diffs (tag ordering,
-  search pagination page-count, duplicate-experiment error message). Keep the
-  checkbox unticked until the run is zero-non-allowlisted-diffs.
-- **T12.6 (chaos test)** — partial WIP checkpointed on
-  `worktree-agent-ad634b20ba0a07ff0` @ `cdd95e09f` (`chaos.rs` + `rust.yml` CI
-  job), NOT verified/complete. Salvage or redo on resume.
-- Remaining pre-existing: **T9.9** (admin/account UI validation),
-  **T10.4** (workspace-aware auth — several T10.4 seams already marked in the
-  auth code; needs T10.3 first), **T11.6** (UI smoke checklist),
-  **T12.3/T12.5** (client-suite conformance + CI matrix), and **Phases 13–14**
-  (scale benchmarks, memory/soak validation).
+- **T13.2 (span_attributes table)** and **T13.3 (benchmark suite)** — in
+  flight (Codex worktrees).
+- **T13.4** — design doc, after T13.3's measurements.
+- **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
+  done together.
+- **Phase 14** (memory baseline, soak, operational docs).
+- Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
+  tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
+  tests.
 - Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
   messages (serde text vs Python's "Invalid value … for parameter …"); #3
   HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
@@ -1807,11 +1798,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       gate in test_auth.py (backlog #3), verified live both ways. Backlog #1
       (validation messages) deliberately ungated until T12.3's mass sweep;
       #2 left to close via T9.4.)*
-- [ ] **T12.3 Client-suite conformance**: `tests/tracking/test_tracking.py`, client
+- [x] **T12.3 Client-suite conformance**: `tests/tracking/test_tracking.py`, client
       tests, and `tests/store/model_registry/test_rest_store*.py`-derived HTTP checks
       with `MLFLOW_TRACKING_URI=http://rust`; DB reset between tests.
       **AC:** suites green (modulo flag-gated diffs).
       **VER:** CI logs.
+      **DONE (2026-07-18):** all four suites run under `MLFLOW_SERVER_TYPE=rust`
+      with per-test DB freshness. Flagship `test_rest_tracking.py`: 122 passed /
+      0 failed / 149 skipped / 1 xfail / 1 xpass (baseline was 39 failed; 26
+      triaged skips, each with a stated reason — Python-process internals,
+      monkeypatch-dependent, or unimplemented genai APIs). Auth
+      `test_auth.py`: 95 passed / 0 failed (was 7 failed). `test_client.py` +
+      `test_client_rbac.py`: 94 passed / 0 failed (was 8 failed). Parity fixes
+      landed en route: artifact headers/MIME, nonfinite protobuf floats,
+      assessments, logged-model metrics/version links, trace attributes,
+      relative artifact locations (new `uri_util.rs`), bulk-metric param
+      validation, trace-link source permissions, permission-filtered run
+      search, security-middleware disable flag, role-management authorization,
+      workspace-scoped role visibility, per-user grant validation, malformed
+      scorer-resource handling. No `_MLFLOW_RUST_STORE_TESTING` gate was
+      needed. Verified post-merge: cargo fmt/clippy/test-workspace exit 0,
+      T12.4 replay corpus exit 0 with no allowlist changes.
 - [x] **T12.4 Differential replay harness** (`rust/compliance/`): request corpus covering
       every §3 endpoint (success + error + pagination walks + multi-user auth scenarios +
       workspace headers), replayed against Python and Rust, normalized diff; token
