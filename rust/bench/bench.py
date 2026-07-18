@@ -1,14 +1,13 @@
 """T13.3 benchmark runner: Python vs Rust MLflow server, same seeded DB.
 
-Boots the Python (flask ``mlflow.server:app``) and Rust
-(``rust/target/release/mlflow-server``) tracking servers on *identical-bytes*
-copies of a seeded DB (see ``seed.py``), then replays each benchmark scenario
-``--iterations`` times against each server, recording per-request wall time and
-reporting p50/p95/p99 per scenario per server.
+Boots the Python FastAPI wrapper and Rust
+(``rust/target/release/mlflow-server``) tracking servers sequentially on
+*identical-bytes* copies of a seeded DB (see ``seed.py``), then replays each
+benchmark scenario ``--iterations`` times against each server, recording
+per-request wall time and reporting p50/p95/p99 per scenario per server.
 
-Reuses the compliance harness' dual-boot machinery (``DualServers``,
-``_resolve_rust_server_bin``, ...) so the launch path matches the differential
-suite exactly.
+Reuses the compliance harness' process/environment plumbing. The FastAPI wrapper
+is required on Python because the Flask app alone does not expose ``/v1/traces``.
 
 Scenarios (plan T13.3 wording):
 
@@ -31,8 +30,10 @@ Usage (from repo root)::
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import platform
+import shutil
 import statistics
 import subprocess
 import sys
@@ -42,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import requests
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 
 _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parents[1]
@@ -49,18 +51,13 @@ _COMPLIANCE = _REPO_ROOT / "rust" / "compliance"
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_COMPLIANCE))
 
-import shutil  # noqa: E402
+from replay import LOCALHOST, DualServers, ServerHandle, _free_port
 
-from replay import LOCALHOST, DualServers, ServerHandle, _free_port  # noqa: E402
-
-from tests.tracking.integration_test_utils import (  # noqa: E402
-    _resolve_rust_server_bin,
-    _rust_server_cmd,
-)
+from tests.tracking.integration_test_utils import _rust_server_cmd
 
 
-class UvicornDualServers(DualServers):
-    """Like ``DualServers`` but boots the Python side via uvicorn (FastAPI).
+class SequentialServers(DualServers):
+    """Boot Python and Rust one at a time against equivalent database copies.
 
     The compliance harness launches Python through the pure-flask
     ``mlflow.server:app``. That app does not serve the OTLP ``/v1/traces``
@@ -70,36 +67,59 @@ class UvicornDualServers(DualServers):
     server must be the FastAPI app so both servers expose the same routes.
     """
 
-    def __enter__(self) -> "UvicornDualServers":
-        py_db = self.workdir / "python.db"
-        rust_db = self.workdir / "rust.db"
-        shutil.copy(self.seed_db, py_db)
-        shutil.copy(self.seed_db, rust_db)
-        py_art = self.artifact_root / "python"
-        rust_art = self.artifact_root / "rust"
-        py_art.mkdir(parents=True, exist_ok=True)
-        rust_art.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self,
+        workdir: Path,
+        seed_db: Path | None,
+        artifact_root: Path,
+        rust_bin: Path,
+        postgres_uris: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(workdir, seed_db or Path("."), artifact_root)
+        self.rust_bin = rust_bin
+        if seed_db is not None:
+            py_db = workdir / "python.db"
+            rust_db = workdir / "rust.db"
+            shutil.copy(seed_db, py_db)
+            shutil.copy(seed_db, rust_db)
+            self.db_uris = {
+                "python": f"sqlite:///{py_db}",
+                "rust": f"sqlite:///{rust_db}",
+            }
+        else:
+            if not postgres_uris:
+                raise ValueError("Postgres runs require separate Python and Rust database URIs")
+            self.db_uris = postgres_uris
 
-        py_port = _free_port()
-        py_cmd = [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "mlflow.server.fastapi_app:app",
-            "--host",
-            LOCALHOST,
-            "--port",
-            str(py_port),
-            "--log-level",
-            "warning",
-        ]
-        self.python = self._boot("python", py_cmd, f"sqlite:///{py_db}", py_art)
-
-        rust_port = _free_port()
-        rust_bin = _resolve_rust_server_bin()
-        rust_cmd = _rust_server_cmd(rust_bin, rust_port, f"sqlite:///{rust_db}", str(rust_art))
-        self.rust = self._boot("rust", rust_cmd, f"sqlite:///{rust_db}", rust_art)
-        return self
+    @contextlib.contextmanager
+    def server(self, name: str):
+        art = self.artifact_root / name
+        art.mkdir(parents=True, exist_ok=True)
+        port = _free_port()
+        if name == "python":
+            cmd = [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "mlflow.server.fastapi_app:app",
+                "--host",
+                LOCALHOST,
+                "--port",
+                str(port),
+                "--log-level",
+                "warning",
+            ]
+        else:
+            cmd = _rust_server_cmd(self.rust_bin, port, self.db_uris[name], str(art))
+        handle = self._boot(name, cmd, self.db_uris[name], art)
+        try:
+            yield handle
+        finally:
+            handle.proc.terminate()
+            try:
+                handle.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                handle.proc.kill()
 
 
 @dataclass
@@ -140,7 +160,7 @@ def _timed(fn: Callable[[], requests.Response]) -> tuple[float, requests.Respons
     return dt, resp
 
 
-def _pick_experiment_and_run(handle: ServerHandle) -> tuple[str, list[str]]:
+def _pick_experiment_and_run(handle: ServerHandle) -> tuple[list[str], list[str]]:
     """Find a populated experiment id and a handful of run ids for scenarios."""
     resp = requests.post(
         f"{handle.url}/api/2.0/mlflow/experiments/search",
@@ -159,6 +179,7 @@ def _pick_experiment_and_run(handle: ServerHandle) -> tuple[str, list[str]]:
         json={"experiment_ids": exps or [exp_id], "max_results": 10},
         timeout=30,
     )
+    search.raise_for_status()
     run_ids = [r["info"]["run_id"] for r in search.json().get("runs", [])]
     return (exps or [exp_id]), run_ids
 
@@ -178,11 +199,11 @@ def scenario_run_search_metric_filter(handle: ServerHandle, ctx: dict, iters: in
     }
     for _ in range(iters):
         dt, resp = _timed(
-            lambda: requests.post(
-                f"{handle.url}/api/2.0/mlflow/runs/search", json=body, timeout=60
-            )
+            lambda: requests.post(f"{handle.url}/api/2.0/mlflow/runs/search", json=body, timeout=60)
         )
         resp.raise_for_status()
+        if not resp.json().get("runs"):
+            raise RuntimeError("run-search metric filter returned no rows")
         t.samples_ms.append(dt)
     return t
 
@@ -195,7 +216,7 @@ def scenario_run_search_deep_pagination(handle: ServerHandle, ctx: dict, iters: 
     plus first-vs-last page timing in ``extra``.
     """
     t = Timing(handle.name, "run_search_deep_pagination")
-    max_pages = max(20, iters)
+    max_pages = ctx.get("deep_pages", max(20, iters))
     body = {
         "experiment_ids": ctx["exp_ids"],
         "order_by": ["attributes.start_time ASC"],
@@ -213,15 +234,31 @@ def scenario_run_search_deep_pagination(handle: ServerHandle, ctx: dict, iters: 
             )
         )
         resp.raise_for_status()
+        if not resp.json().get("runs"):
+            raise RuntimeError(f"deep-pagination page {page + 1} returned no rows")
         per_page.append(dt)
         token = resp.json().get("next_page_token")
         if not token:
             break
     t.samples_ms = per_page
+    bucket_size = max(1, min(5, len(per_page) // 3))
+    first = statistics.median(per_page[:bucket_size]) if per_page else None
+    middle_start = max(0, (len(per_page) - bucket_size) // 2)
+    middle = (
+        statistics.median(per_page[middle_start : middle_start + bucket_size]) if per_page else None
+    )
+    last = statistics.median(per_page[-bucket_size:]) if per_page else None
+    late_to_early = last / first if first and last else None
     t.extra = {
         "pages_walked": len(per_page),
-        "first_page_ms": round(per_page[0], 2) if per_page else None,
-        "last_page_ms": round(per_page[-1], 2) if per_page else None,
+        "bucket_size": bucket_size,
+        "first_pages_median_ms": round(first, 2) if first is not None else None,
+        "middle_pages_median_ms": round(middle, 2) if middle is not None else None,
+        "last_pages_median_ms": round(last, 2) if last is not None else None,
+        "last_to_first_ratio": round(late_to_early, 3) if late_to_early is not None else None,
+        "o1_verdict": "consistent with O(1)"
+        if late_to_early and late_to_early <= 2
+        else "not O(1)",
     }
     return t
 
@@ -230,7 +267,15 @@ def scenario_metric_history_bulk_interval(handle: ServerHandle, ctx: dict, iters
     t = Timing(handle.name, "metric_history_bulk_interval")
     run_ids = ctx["run_ids"][:5] or ctx["run_ids"]
     params = [("run_ids", r) for r in run_ids]
-    params += [("metric_key", "loss"), ("max_results", "100")]
+    max_step = max(0, ctx.get("history_points", 100) - 1)
+    start_step = max_step // 4
+    end_step = max(start_step, (max_step * 3) // 4)
+    params += [
+        ("metric_key", "loss"),
+        ("start_step", str(start_step)),
+        ("end_step", str(end_step)),
+        ("max_results", "100"),
+    ]
     for _ in range(iters):
         dt, resp = _timed(
             lambda: requests.get(
@@ -240,6 +285,8 @@ def scenario_metric_history_bulk_interval(handle: ServerHandle, ctx: dict, iters
             )
         )
         resp.raise_for_status()
+        if not resp.json().get("metrics"):
+            raise RuntimeError("bulk-interval metric history returned no rows")
         t.samples_ms.append(dt)
     return t
 
@@ -261,66 +308,61 @@ def scenario_trace_search_span_filter(handle: ServerHandle, ctx: dict, iters: in
             )
         )
         resp.raise_for_status()
+        if not resp.json().get("traces"):
+            raise RuntimeError("trace span-attribute filter returned no rows")
         t.samples_ms.append(dt)
     return t
 
 
-def _otlp_payload(exp_id: str, n_spans: int, batch: int) -> dict:
-    """A minimal OTLP JSON export request with ``n_spans`` spans in one resource."""
-    spans = []
+def _otlp_payload(n_spans: int, batch: int) -> bytes:
+    """Serialize a minimal binary OTLP export containing new traces and spans."""
+    request = ExportTraceServiceRequest()
+    resource_spans = request.resource_spans.add()
+    service_name = resource_spans.resource.attributes.add()
+    service_name.key = "service.name"
+    service_name.value.string_value = "bench"
+    scope_spans = resource_spans.scope_spans.add()
     for i in range(n_spans):
-        trace_hex = f"{(batch * 100000 + i):032x}"
-        span_hex = f"{(batch * 100000 + i):016x}"
-        spans.append(
-            {
-                "traceId": trace_hex,
-                "spanId": span_hex,
-                "name": f"bench_span_{i}",
-                "startTimeUnixNano": str(1_000_000_000 + i * 1000),
-                "endTimeUnixNano": str(1_000_000_000 + i * 1000 + 500),
-                "status": {"code": "STATUS_CODE_OK"},
-                "attributes": [
-                    {"key": "mlflow.spanType", "value": {"stringValue": "LLM"}},
-                    {
-                        "key": "mlflow.traceRequestId",
-                        "value": {"stringValue": f'"tr-bench-{batch}-{i}"'},
-                    },
-                ],
-            }
-        )
-    return {
-        "resourceSpans": [
-            {
-                "resource": {
-                    "attributes": [
-                        {"key": "service.name", "value": {"stringValue": "bench"}}
-                    ]
-                },
-                "scopeSpans": [{"spans": spans}],
-            }
-        ]
-    }
+        trace_number = batch * n_spans + i + 1
+        span = scope_spans.spans.add()
+        span.trace_id = trace_number.to_bytes(16, "big")
+        span.span_id = trace_number.to_bytes(8, "big")
+        span.name = f"bench_span_{i}"
+        span.start_time_unix_nano = 1_000_000_000 + i * 1000
+        span.end_time_unix_nano = span.start_time_unix_nano + 500
+        span.status.code = 1
+        span_type = span.attributes.add()
+        span_type.key = "mlflow.spanType"
+        span_type.value.string_value = "LLM"
+        model = span.attributes.add()
+        model.key = "gen_ai.request.model"
+        model.value.string_value = "gpt-4o-mini"
+    return request.SerializeToString()
 
 
 def scenario_otlp_ingest_throughput(handle: ServerHandle, ctx: dict, iters: int) -> Timing:
     """POST OTLP span batches; report per-batch latency + aggregate spans/sec."""
     t = Timing(handle.name, "otlp_ingest_throughput")
     exp_id = ctx["exp_ids"][0]
-    spans_per_batch = 100
-    headers = {"x-mlflow-experiment-id": exp_id, "Content-Type": "application/json"}
+    spans_per_batch = ctx.get("otlp_spans_per_batch", 100)
+    headers = {
+        "x-mlflow-experiment-id": exp_id,
+        "Content-Type": "application/x-protobuf",
+    }
     total_spans = 0
-    wall0 = time.perf_counter()
+    sequence = ctx.setdefault("otlp_sequence", 0)
     for b in range(iters):
-        payload = _otlp_payload(exp_id, spans_per_batch, b)
+        payload = _otlp_payload(spans_per_batch, sequence + b)
         dt, resp = _timed(
             lambda p=payload: requests.post(
-                f"{handle.url}/v1/traces", json=p, headers=headers, timeout=120
+                f"{handle.url}/v1/traces", data=p, headers=headers, timeout=120
             )
         )
         resp.raise_for_status()
         t.samples_ms.append(dt)
         total_spans += spans_per_batch
-    wall = time.perf_counter() - wall0
+    ctx["otlp_sequence"] = sequence + iters
+    wall = sum(t.samples_ms) / 1000
     t.extra = {
         "spans_ingested": total_spans,
         "wall_s": round(wall, 3),
@@ -340,6 +382,11 @@ def scenario_registry_search_prompt_antijoin(handle: ServerHandle, ctx: dict, it
             )
         )
         resp.raise_for_status()
+        registered_models = resp.json().get("registered_models", [])
+        if not registered_models:
+            raise RuntimeError("registered-model search returned no rows")
+        if any(model["name"].startswith("prompt_") for model in registered_models):
+            raise RuntimeError("registered-model search did not exclude seeded prompts")
         t.samples_ms.append(dt)
     return t
 
@@ -388,32 +435,40 @@ def _hardware_notes() -> dict[str, str]:
 # --------------------------------------------------------------------------
 
 
-def _warmup(handle: ServerHandle, ctx: dict) -> None:
-    for name, fn in SCENARIOS.items():
-        try:
-            fn(handle, ctx, 2 if name != "otlp_ingest_throughput" else 1)
-        except Exception:
-            # Warmup failures surface again in the measured pass; ignore here.
-            pass
+def _warmup(handle: ServerHandle, ctx: dict, names: list[str], iterations: int) -> None:
+    warm_ctx = {**ctx, "deep_pages": iterations}
+    for name in names:
+        SCENARIOS[name](handle, warm_ctx, iterations)
+    ctx["otlp_sequence"] = warm_ctx.get("otlp_sequence", 0)
 
 
 def run_all(
-    servers: DualServers, iterations: int, only: list[str] | None
+    servers: SequentialServers,
+    iterations: int,
+    warmup_iterations: int,
+    only: list[str] | None,
+    history_points: int,
+    deep_pages: int,
+    otlp_spans_per_batch: int,
 ) -> dict[str, dict[str, Timing]]:
-    ctx_by_server: dict[str, dict] = {}
-    for h in (servers.python, servers.rust):
-        exp_ids, run_ids = _pick_experiment_and_run(h)
-        ctx_by_server[h.name] = {"exp_ids": exp_ids, "run_ids": run_ids}
-
-    results: dict[str, dict[str, Timing]] = {}
-    for h in (servers.python, servers.rust):
-        _warmup(h, ctx_by_server[h.name])
-    for name, fn in SCENARIOS.items():
-        if only and name not in only:
-            continue
-        results[name] = {}
-        for h in (servers.python, servers.rust):
-            results[name][h.name] = fn(h, ctx_by_server[h.name], iterations)
+    names = [name for name in SCENARIOS if not only or name in only]
+    results: dict[str, dict[str, Timing]] = {name: {} for name in names}
+    for server_name in ("python", "rust"):
+        with servers.server(server_name) as handle:
+            print(f"{server_name}: {handle.url}")
+            exp_ids, run_ids = _pick_experiment_and_run(handle)
+            ctx = {
+                "exp_ids": exp_ids,
+                "run_ids": run_ids,
+                "history_points": history_points,
+                "deep_pages": deep_pages,
+                "otlp_spans_per_batch": otlp_spans_per_batch,
+                "otlp_sequence": 0,
+            }
+            _warmup(handle, ctx, names, warmup_iterations)
+            for name in names:
+                print(f"  {name}")
+                results[name][server_name] = SCENARIOS[name](handle, ctx, iterations)
     return results
 
 
@@ -422,8 +477,12 @@ def write_results(
     hw: dict[str, str],
     scale: dict[str, int],
     iterations: int,
+    warmup_iterations: int,
+    deep_pages: int,
     out: Path,
     counts: dict[str, int] | None,
+    seed_metadata: dict[str, Any] | None,
+    backend: str,
 ) -> None:
     lines: list[str] = []
     lines.append("# T13.3 Benchmark Results - Python vs Rust MLflow Server")
@@ -444,15 +503,22 @@ def write_results(
         "dedicated benchmark host. Absolute latencies include VM/filesystem overhead and "
         "background noise; treat the Python-vs-Rust *ratio* as the signal, not the raw ms."
     )
-    lines.append("- Backend store: SQLite (single-file, WAL default). See full-scale notes for Postgres.")
+    lines.append(f"- Backend store: {backend}")
+    lines.append("- Server scheduling: sequential; only the measured server process was running.")
+    lines.append("- Rust binary: release profile (`cargo build --release`).")
     lines.append("")
     lines.append("## Scale actually run")
     lines.append("")
     lines.append("| parameter | value |")
     lines.append("|---|---|")
-    for k, v in scale.items():
+    requested_scale = seed_metadata.get("scale", {}) if seed_metadata else {}
+    for k, v in (requested_scale or scale).items():
         lines.append(f"| {k} | {v:,} |")
     lines.append(f"| iterations/scenario | {iterations:,} |")
+    lines.append(f"| unmeasured warmups/scenario | {warmup_iterations:,} |")
+    lines.append(f"| deep-pagination pages | {deep_pages:,} |")
+    if seed_metadata:
+        lines.append(f"| seed total wall seconds | {seed_metadata['total_seconds']:.3f} |")
     lines.append("")
     if counts:
         lines.append("Seeded row counts:")
@@ -506,15 +572,10 @@ def write_results(
             f"{'MET' if ok else 'NOT MET'} |"
         )
     dp = results.get("run_search_deep_pagination", {}).get("rust")
-    if dp and dp.extra.get("first_page_ms") is not None:
-        first = dp.extra["first_page_ms"]
-        last = dp.extra["last_page_ms"]
-        ratio = (last / first) if first else float("nan")
-        ok = ratio < 3.0
-        lines.append(
-            f"| deep-page O(1) | rust first={first}ms last={last}ms (ratio {ratio:.2f}x) -> "
-            f"{'roughly O(1)' if ok else 'super-linear, investigate'} |"
-        )
+    if dp and dp.extra.get("first_pages_median_ms") is not None:
+        ratio = dp.extra["last_to_first_ratio"]
+        verdict = dp.extra["o1_verdict"]
+        lines.append(f"| deep-page O(1) | rust late/early bucket ratio {ratio:.2f}x -> {verdict} |")
     otlp_py = results.get("otlp_ingest_throughput", {}).get("python")
     otlp_rust = results.get("otlp_ingest_throughput", {}).get("rust")
     if otlp_py and otlp_rust:
@@ -528,37 +589,90 @@ def write_results(
         )
     lines.append("")
 
+    lines.append("## Deep-pagination curve")
+    lines.append("")
+    lines.append(
+        "The operational verdict is `consistent with O(1)` when the median of the last "
+        "five pages is no more than 2x the median of the first five pages. This is an "
+        "empirical bounded-depth verdict, not an asymptotic proof."
+    )
+    lines.append("")
+    lines.append("| server | first pages | middle pages | last pages | late/early | verdict |")
+    lines.append("|---|---:|---:|---:|---:|---|")
+    for server, timing in results.get("run_search_deep_pagination", {}).items():
+        extra = timing.extra
+        lines.append(
+            f"| {server} | {extra['first_pages_median_ms']:.2f} ms | "
+            f"{extra['middle_pages_median_ms']:.2f} ms | "
+            f"{extra['last_pages_median_ms']:.2f} ms | "
+            f"{extra['last_to_first_ratio']:.2f}x | {extra['o1_verdict']} |"
+        )
+    lines.append("")
+
+    lines.append("## OTLP protobuf ingest throughput")
+    lines.append("")
+    lines.append("| server | spans | measured request wall | spans/second |")
+    lines.append("|---|---:|---:|---:|")
+    for server, timing in results.get("otlp_ingest_throughput", {}).items():
+        extra = timing.extra
+        lines.append(
+            f"| {server} | {extra['spans_ingested']:,} | {extra['wall_s']:.3f} s | "
+            f"{extra['spans_per_sec']:,.1f} |"
+        )
+    lines.append("")
+
     lines.append("## Reproducing at full (100 GB) scale")
     lines.append("")
     lines.append(
-        "Scale is fully parameterized. On a dedicated host (>= 16 physical cores, >= 64 GB RAM, "
-        "NVMe, Postgres backend), a ~100 GB dataset is roughly:"
+        "Use fresh databases on a dedicated host (>=16 physical cores, >=64 GB RAM, NVMe). "
+        "The following starts with a high-volume candidate scale; database size varies by "
+        "Postgres version and index/storage settings, so verify it with `pg_total_relation_size` "
+        "and adjust the scale instead of treating the flags as an exact byte estimate."
     )
     lines.append("")
     lines.append("```bash")
-    lines.append("# Postgres backend (recommended at scale; sqlite single-writer stalls on ingest)")
-    lines.append("export BENCH_DB='postgresql://mlflow:mlflow@localhost:5432/mlflow_bench'")
-    lines.append("uv run python rust/bench/seed.py --db \"$BENCH_DB\" \\")
-    lines.append("    --runs 5000000 --metrics-per-run 50 --history-points 200 \\")
-    lines.append("    --traces 10000000 --spans-per-trace 8 --model-versions 100000 \\")
-    lines.append("    --experiments 500 --seed 42")
-    lines.append("uv run python rust/bench/bench.py --db \"$BENCH_DB\" --iterations 200 \\")
+    lines.append("createdb mlflow_bench_seed")
+    lines.append("export BENCH_SEED='postgresql://mlflow:mlflow@localhost/mlflow_bench_seed'")
+    lines.append('uv run python rust/bench/seed.py --db "$BENCH_SEED" \\')
+    lines.append("    --runs 750000 --metrics-per-run 5 --history-points 100 \\")
+    lines.append("    --traces 2000000 --spans-per-trace 5 --model-versions 100000 \\")
+    lines.append("    --experiments 500 --seed 42 --metadata /tmp/t133-seed.json")
+    lines.append('psql "$BENCH_SEED" -Atc \\')
+    lines.append("    \"SELECT pg_size_pretty(pg_total_relation_size('metrics'));\"")
+    lines.append("createdb mlflow_bench_python")
+    lines.append("createdb mlflow_bench_rust")
+    lines.append('pg_dump --format=custom "$BENCH_SEED" --file=/tmp/mlflow-bench.dump')
+    lines.append("pg_restore --dbname=mlflow_bench_python --jobs=8 /tmp/mlflow-bench.dump")
+    lines.append("pg_restore --dbname=mlflow_bench_rust --jobs=8 /tmp/mlflow-bench.dump")
+    lines.append("cargo build --manifest-path rust/Cargo.toml --release")
+    lines.append("uv run python rust/bench/bench.py \\")
+    lines.append("    --python-db-uri postgresql://mlflow:mlflow@localhost/mlflow_bench_python \\")
+    lines.append("    --rust-db-uri postgresql://mlflow:mlflow@localhost/mlflow_bench_rust \\")
+    lines.append("    --seed-metadata /tmp/t133-seed.json --iterations 200 --deep-pages 100 \\")
     lines.append("    --results rust/bench/RESULTS.md")
     lines.append("```")
     lines.append("")
     lines.append(
-        "The generator writes ~5M runs x 50 metrics x 200 history points (~50B metric rows) and "
-        "10M traces x 8 spans; on Postgres this lands near 100 GB. Increase `--history-points` "
-        "and `--traces` to grow the DB further. Use `--seed` to keep runs reproducible."
+        "Do not point both servers at one database: OTLP is a write benchmark. Restoring the "
+        "same dump into two databases gives both servers equivalent starting rows while keeping "
+        "their writes isolated. Run `ANALYZE` on both restored databases if autovacuum has not."
     )
     lines.append("")
     lines.append("## Analysis")
     lines.append("")
+    faster_rust = []
+    faster_python = []
+    for name, by_server in results.items():
+        py, rust = by_server.get("python"), by_server.get("rust")
+        if not py or not rust:
+            continue
+        (faster_rust if rust.p95 < py.p95 else faster_python).append(name)
     lines.append(
-        "_Fill in after a run: where Rust wins (typically search/pagination and OTLP ingest "
-        "under load), where it doesn't (endpoints dominated by SQLite I/O look similar since "
-        "both hit the same file), and any anomalies (cold-cache first pages, GC pauses)._ "
-        "The auto-generated tables above are the measured ground truth."
+        f"Rust had the lower measured p95 in {', '.join(faster_rust) or 'no scenarios'}; "
+        f"Python had the lower or equal p95 in {', '.join(faster_python) or 'no scenarios'}. "
+        "The deep-page table reports the observed curve independently for each server. "
+        "These SQLite/WSL2 results are sensitive to cache state and VM noise, and the OTLP "
+        "measurement is sequential batch ingest rather than a concurrent saturation test."
     )
     lines.append("")
 
@@ -568,23 +682,53 @@ def write_results(
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--db", required=True, help="Seeded SQLite path or SQLAlchemy URI")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--db", help="seeded SQLite file (copied byte-for-byte per server)")
+    source.add_argument("--python-db-uri", help="Python server Postgres URI")
+    p.add_argument("--rust-db-uri", help="Rust server Postgres URI; required with --python-db-uri")
     p.add_argument("--iterations", type=int, default=30)
+    p.add_argument("--warmup-iterations", type=int, default=3)
+    p.add_argument("--deep-pages", type=int, default=25)
+    p.add_argument("--otlp-spans-per-batch", type=int, default=100)
+    p.add_argument(
+        "--rust-bin", default=str(_REPO_ROOT / "rust" / "target" / "release" / "mlflow-server")
+    )
     p.add_argument("--results", default=str(_HERE / "RESULTS.md"))
     p.add_argument("-k", dest="only", action="append", help="only run matching scenario(s)")
-    p.add_argument("--counts-json", help="optional path to seed counts JSON for the report")
+    p.add_argument("--seed-metadata", help="JSON written by seed.py --metadata")
     args = p.parse_args()
 
-    db_path = Path(args.db) if "://" not in args.db else None
+    if args.iterations < 1 or args.warmup_iterations < 1:
+        p.error("iterations and warmup iterations must be positive")
+    if args.deep_pages < 20:
+        p.error("--deep-pages must be at least 20")
+    if args.otlp_spans_per_batch < 1:
+        p.error("--otlp-spans-per-batch must be positive")
+    unknown = set(args.only or []) - set(SCENARIOS)
+    if unknown:
+        p.error(f"unknown scenarios: {', '.join(sorted(unknown))}")
+
+    db_path = Path(args.db).resolve() if args.db else None
     if db_path is not None and not db_path.exists():
         print(f"Seeded DB not found: {db_path}. Run seed.py first.", file=sys.stderr)
         return 2
+    if bool(args.python_db_uri) != bool(args.rust_db_uri):
+        p.error("--python-db-uri and --rust-db-uri must be supplied together")
+    rust_bin = Path(args.rust_bin).resolve()
+    if not rust_bin.exists():
+        print(
+            f"Release Rust server not found at {rust_bin}. Run `cargo build --release` in rust/.",
+            file=sys.stderr,
+        )
+        return 2
 
-    counts = None
-    if args.counts_json and Path(args.counts_json).exists():
-        counts = json.loads(Path(args.counts_json).read_text())
+    seed_metadata = None
+    if args.seed_metadata:
+        seed_metadata = json.loads(Path(args.seed_metadata).read_text())
 
-    scale = _infer_scale(args.db)
+    inspect_db = args.db or args.python_db_uri
+    scale = _infer_scale(inspect_db)
+    counts = seed_metadata.get("counts") if seed_metadata else scale
 
     import tempfile
 
@@ -592,13 +736,39 @@ def main() -> int:
         workdir = Path(td)
         artifact_root = workdir / "artifacts"
         artifact_root.mkdir(parents=True, exist_ok=True)
-        seed_db = db_path or _copy_uri_to_sqlite(args.db, workdir)
-        with UvicornDualServers(workdir, seed_db, artifact_root) as servers:
-            print(f"python: {servers.python.url}  rust: {servers.rust.url}")
-            results = run_all(servers, args.iterations, args.only)
+        postgres_uris = (
+            {"python": args.python_db_uri, "rust": args.rust_db_uri} if args.python_db_uri else None
+        )
+        servers = SequentialServers(
+            workdir,
+            db_path,
+            artifact_root,
+            rust_bin,
+            postgres_uris=postgres_uris,
+        )
+        results = run_all(
+            servers,
+            args.iterations,
+            args.warmup_iterations,
+            args.only,
+            scale.get("history_points", 100),
+            args.deep_pages,
+            args.otlp_spans_per_batch,
+        )
 
     hw = _hardware_notes()
-    write_results(results, hw, scale, args.iterations, Path(args.results), counts)
+    write_results(
+        results,
+        hw,
+        scale,
+        args.iterations,
+        args.warmup_iterations,
+        args.deep_pages,
+        Path(args.results),
+        counts,
+        seed_metadata,
+        "SQLite (byte-identical per-server copies)" if db_path else "Postgres (dump clones)",
+    )
     return 0
 
 
@@ -616,6 +786,9 @@ def _infer_scale(db: str) -> dict[str, int]:
         "spans": "SELECT COUNT(*) FROM spans",
         "model_versions": "SELECT COUNT(*) FROM model_versions",
         "experiments": "SELECT COUNT(*) FROM experiments",
+        "span_attributes": "SELECT COUNT(*) FROM span_attributes",
+        "registered_models": "SELECT COUNT(*) FROM registered_models",
+        "history_points": "SELECT COALESCE(MAX(step), -1) + 1 FROM metrics",
     }
     with engine.begin() as conn:
         for k, q in queries.items():
@@ -625,13 +798,6 @@ def _infer_scale(db: str) -> dict[str, int]:
                 scale[k] = -1
     engine.dispose()
     return scale
-
-
-def _copy_uri_to_sqlite(uri: str, workdir: Path) -> Path:
-    raise SystemExit(
-        "Non-sqlite backends: point both servers at the URI directly is not yet wired; "
-        "run against a sqlite file for the laptop harness, or extend DualServers for Postgres."
-    )
 
 
 if __name__ == "__main__":
