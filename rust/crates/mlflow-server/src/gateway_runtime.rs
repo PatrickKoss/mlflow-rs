@@ -1,23 +1,26 @@
 //! Native database-backed AI Gateway invocation runtime.
 //!
-//! T18.3 intentionally exposes only the two unified MLflow routes. Provider
-//! passthrough/raw proxy routes remain owned by T18.4.
+//! The T18.3 unified runtime and T18.4 provider matrix deliberately share one
+//! provider trait, transport choke point, and SSE implementation.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, State};
+use axum::extract::{OriginalUri, Path, State};
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::Response;
 use futures::future::BoxFuture;
 use futures::{stream, FutureExt, StreamExt};
+use hmac::{Hmac, Mac};
 use md5::{Digest, Md5};
 use mlflow_store::{python_json_dumps, ResolvedGatewayEndpointConfig, ResolvedGatewayModelConfig};
 use reqwest::Url;
 use serde_json::{json, Map, Value};
+use sha2::Sha256;
 
+use crate::gateway_provider_matrix::{default_api_base, is_supported_provider, normalize_provider};
 use crate::state::AppState;
 use crate::workspace::Workspace;
 
@@ -32,6 +35,37 @@ const ACCEPT_ENCODING: &str = "gzip, deflate, identity";
 pub enum InvocationKind {
     Chat,
     Embeddings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassthroughAction {
+    OpenAiChat,
+    OpenAiEmbeddings,
+    OpenAiResponses,
+    OpenAiResponsesCompact,
+    AnthropicMessages,
+    GeminiGenerateContent,
+    GeminiStreamGenerateContent,
+}
+
+impl PassthroughAction {
+    fn provider_path(self, model: &str) -> String {
+        match self {
+            Self::OpenAiChat => "chat/completions".to_string(),
+            Self::OpenAiEmbeddings => "embeddings".to_string(),
+            Self::OpenAiResponses => "responses".to_string(),
+            Self::OpenAiResponsesCompact => "responses/compact".to_string(),
+            Self::AnthropicMessages => "messages".to_string(),
+            Self::GeminiGenerateContent => format!("{model}:generateContent"),
+            Self::GeminiStreamGenerateContent => format!("{model}:streamGenerateContent"),
+        }
+    }
+
+    fn streaming(self, payload: &Value) -> bool {
+        self == Self::GeminiStreamGenerateContent
+            || (self != Self::OpenAiEmbeddings
+                && payload.get("stream").and_then(Value::as_bool) == Some(true))
+    }
 }
 
 #[derive(Debug)]
@@ -138,6 +172,46 @@ pub trait GatewayProviderAdapter: Send + Sync + std::fmt::Debug {
         model: &ResolvedGatewayModelConfig,
         headers: &mut HeaderMap,
     ) -> Result<(), GatewayRuntimeError>;
+
+    fn passthrough_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        action: PassthroughAction,
+        mut payload: Value,
+        client_headers: &HeaderMap,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        let object = object_mut(&mut payload)?;
+        object.insert("model".to_string(), Value::String(model.model_name.clone()));
+        let base = provider_api_base(model)?;
+        let mut headers = merged_passthrough_headers(model, client_headers)?;
+        if !has_provider_auth(&headers) {
+            self.inject_auth(model, &mut headers)?;
+        }
+        Ok(ProviderRequest {
+            url: append_provider_path(&base, &action.provider_path(&model.model_name))?,
+            headers,
+            body: payload,
+        })
+    }
+
+    fn proxy_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        path: &str,
+        payload: Value,
+        client_headers: &HeaderMap,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        let base = proxy_root(&provider_api_base(model)?)?;
+        let mut headers = merged_passthrough_headers(model, client_headers)?;
+        if !has_provider_auth(&headers) {
+            self.inject_auth(model, &mut headers)?;
+        }
+        Ok(ProviderRequest {
+            url: append_provider_path(&base, path)?,
+            headers,
+            body: payload,
+        })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -159,6 +233,17 @@ pub struct AnthropicAdapter;
 
 #[derive(Debug)]
 pub struct GeminiAdapter;
+
+#[derive(Debug)]
+pub struct OpenAiCompatibleAdapter {
+    provider: String,
+}
+
+#[derive(Debug)]
+pub struct BedrockAdapter;
+
+#[derive(Debug)]
+pub struct DatabricksAdapter;
 
 impl GatewayProviderAdapter for OpenAiAdapter {
     fn provider_name(&self) -> &'static str {
@@ -426,6 +511,630 @@ impl GatewayProviderAdapter for GeminiAdapter {
     ) -> Result<(), GatewayRuntimeError> {
         insert_header(headers, "x-goog-api-key", secret_string(model, "api_key")?)
     }
+
+    fn passthrough_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        action: PassthroughAction,
+        payload: Value,
+        client_headers: &HeaderMap,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        let mut headers = merged_passthrough_headers(model, client_headers)?;
+        if !has_provider_auth(&headers) {
+            self.inject_auth(model, &mut headers)?;
+        }
+        Ok(ProviderRequest {
+            url: append_provider_path(
+                &provider_api_base(model)?,
+                &action.provider_path(&model.model_name),
+            )?,
+            headers,
+            body: payload,
+        })
+    }
+}
+
+impl GatewayProviderAdapter for OpenAiCompatibleAdapter {
+    fn provider_name(&self) -> &'static str {
+        "openai"
+    }
+
+    fn transform_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        mut payload: Value,
+        stream: bool,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        let object = object_mut(&mut payload)?;
+        object.insert("model".to_string(), Value::String(model.model_name.clone()));
+        if stream && kind == InvocationKind::Chat {
+            let options = object
+                .entry("stream_options")
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Some(options) = options.as_object_mut() {
+                options.entry("include_usage").or_insert(Value::Bool(true));
+            }
+        }
+        let route = match kind {
+            InvocationKind::Chat => "chat/completions",
+            InvocationKind::Embeddings => "embeddings",
+        };
+        let mut headers = HeaderMap::new();
+        self.inject_auth(model, &mut headers)?;
+        Ok(ProviderRequest {
+            url: append_provider_path(&provider_api_base(model)?, route)?,
+            headers,
+            body: payload,
+        })
+    }
+
+    fn transform_response(
+        &self,
+        _model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        response: Value,
+        _now: i64,
+    ) -> Result<Value, GatewayRuntimeError> {
+        match kind {
+            InvocationKind::Chat => openai_chat_response(response, &self.provider),
+            InvocationKind::Embeddings => openai_embeddings_response(response),
+        }
+    }
+
+    fn transform_stream_frame(
+        &self,
+        _model: &ResolvedGatewayModelConfig,
+        frame: Value,
+        _state: &mut StreamTransformState,
+        _now: i64,
+    ) -> Result<Vec<Value>, GatewayRuntimeError> {
+        Ok(vec![openai_chat_stream_frame(frame, &self.provider)?])
+    }
+
+    fn inject_auth(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        headers: &mut HeaderMap,
+    ) -> Result<(), GatewayRuntimeError> {
+        match normalize_provider(&self.provider) {
+            "ollama" => {
+                if let Some(key) = secret_string_optional(model, "api_key") {
+                    if key != "ollama" {
+                        insert_header(headers, "authorization", &format!("Bearer {key}"))?;
+                    }
+                }
+                Ok(())
+            }
+            "portkey" => insert_header(
+                headers,
+                "x-portkey-api-key",
+                secret_string(model, "api_key")?,
+            ),
+            _ => insert_header(
+                headers,
+                "authorization",
+                &format!("Bearer {}", secret_string(model, "api_key")?),
+            ),
+        }
+    }
+}
+
+impl GatewayProviderAdapter for DatabricksAdapter {
+    fn provider_name(&self) -> &'static str {
+        "openai"
+    }
+
+    fn transform_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        payload: Value,
+        stream: bool,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        OpenAiCompatibleAdapter {
+            provider: "databricks".to_string(),
+        }
+        .transform_request(model, kind, payload, stream)
+    }
+
+    fn transform_response(
+        &self,
+        _model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        mut response: Value,
+        _now: i64,
+    ) -> Result<Value, GatewayRuntimeError> {
+        if kind == InvocationKind::Chat {
+            normalize_databricks_content(&mut response);
+            openai_chat_response(response, "databricks")
+        } else {
+            openai_embeddings_response(response)
+        }
+    }
+
+    fn transform_stream_frame(
+        &self,
+        _model: &ResolvedGatewayModelConfig,
+        mut frame: Value,
+        _state: &mut StreamTransformState,
+        _now: i64,
+    ) -> Result<Vec<Value>, GatewayRuntimeError> {
+        normalize_databricks_content(&mut frame);
+        Ok(vec![openai_chat_stream_frame(frame, "databricks")?])
+    }
+
+    fn inject_auth(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        headers: &mut HeaderMap,
+    ) -> Result<(), GatewayRuntimeError> {
+        if model.auth_config.get("auth_mode").map(String::as_str) == Some("oauth_m2m") {
+            return Ok(());
+        }
+        let environment_token = std::env::var("DATABRICKS_TOKEN").ok();
+        let token = secret_string_optional(model, "api_key")
+            .or(environment_token.as_deref())
+            .ok_or_else(|| missing_auth("api_key"))?;
+        insert_header(headers, "authorization", &format!("Bearer {token}"))
+    }
+
+    fn passthrough_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        action: PassthroughAction,
+        mut payload: Value,
+        client_headers: &HeaderMap,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        let path = match action {
+            PassthroughAction::OpenAiChat => "chat/completions".to_string(),
+            PassthroughAction::OpenAiEmbeddings => "embeddings".to_string(),
+            PassthroughAction::OpenAiResponses => "responses".to_string(),
+            PassthroughAction::OpenAiResponsesCompact => "responses/compact".to_string(),
+            PassthroughAction::AnthropicMessages => "anthropic/v1/messages".to_string(),
+            PassthroughAction::GeminiGenerateContent => {
+                format!("gemini/v1beta/models/{}:generateContent", model.model_name)
+            }
+            PassthroughAction::GeminiStreamGenerateContent => format!(
+                "gemini/v1beta/models/{}:streamGenerateContent",
+                model.model_name
+            ),
+        };
+        if !matches!(
+            action,
+            PassthroughAction::GeminiGenerateContent
+                | PassthroughAction::GeminiStreamGenerateContent
+        ) {
+            object_mut(&mut payload)?
+                .insert("model".to_string(), Value::String(model.model_name.clone()));
+        }
+        let mut headers = merged_passthrough_headers(model, client_headers)?;
+        if !has_provider_auth(&headers) {
+            self.inject_auth(model, &mut headers)?;
+        }
+        Ok(ProviderRequest {
+            url: append_provider_path(&provider_api_base(model)?, &path)?,
+            headers,
+            body: payload,
+        })
+    }
+}
+
+impl GatewayProviderAdapter for BedrockAdapter {
+    fn provider_name(&self) -> &'static str {
+        "openai"
+    }
+
+    fn transform_request(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        mut payload: Value,
+        stream: bool,
+    ) -> Result<ProviderRequest, GatewayRuntimeError> {
+        if kind == InvocationKind::Embeddings {
+            let object = object_mut(&mut payload)?;
+            let input = object.remove("input").unwrap_or(Value::Null);
+            payload = json!({"inputText": input});
+        } else if model.model_name.contains("anthropic") || model.model_name.contains("claude") {
+            anthropic_chat_request(&mut payload, &model.model_name)?;
+            let object = object_mut(&mut payload)?;
+            object.remove("model");
+            object.insert(
+                "anthropic_version".to_string(),
+                Value::String("bedrock-2023-05-31".to_string()),
+            );
+            if let Some(max_tokens) = object.get_mut("max_tokens") {
+                if max_tokens.as_u64().is_some_and(|value| value > 8_191) {
+                    *max_tokens = json!(8_191);
+                }
+            }
+        }
+        let region = bedrock_region(model);
+        let base = model
+            .auth_config
+            .get("api_base")
+            .cloned()
+            .unwrap_or_else(|| format!("https://bedrock-runtime.{region}.amazonaws.com"));
+        let suffix = if stream {
+            format!("model/{}/invoke-with-response-stream", model.model_name)
+        } else {
+            format!("model/{}/invoke", model.model_name)
+        };
+        let mut request = ProviderRequest {
+            url: append_provider_path(&parse_url(&base)?, &suffix)?,
+            headers: HeaderMap::new(),
+            body: payload,
+        };
+        self.inject_auth(model, &mut request.headers)?;
+        if !matches!(
+            model.auth_config.get("auth_mode").map(String::as_str),
+            Some("api_key" | "iam_role")
+        ) {
+            sign_bedrock_request(model, &mut request)?;
+        }
+        Ok(request)
+    }
+
+    fn transform_response(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        kind: InvocationKind,
+        response: Value,
+        now: i64,
+    ) -> Result<Value, GatewayRuntimeError> {
+        if kind == InvocationKind::Embeddings {
+            return gemini_embeddings_response(
+                json!({"embedding":{"values":response.get("embedding").cloned().unwrap_or(Value::Null)}}),
+                &model.model_name,
+            );
+        }
+        if model.model_name.contains("anthropic") || model.model_name.contains("claude") {
+            anthropic_chat_response(response, now)
+        } else {
+            openai_chat_response(response, "bedrock")
+        }
+    }
+
+    fn transform_stream_frame(
+        &self,
+        _model: &ResolvedGatewayModelConfig,
+        frame: Value,
+        _state: &mut StreamTransformState,
+        _now: i64,
+    ) -> Result<Vec<Value>, GatewayRuntimeError> {
+        Ok(vec![frame])
+    }
+
+    fn inject_auth(
+        &self,
+        model: &ResolvedGatewayModelConfig,
+        headers: &mut HeaderMap,
+    ) -> Result<(), GatewayRuntimeError> {
+        if model
+            .auth_config
+            .get("auth_mode")
+            .map(String::as_str)
+            .unwrap_or("api_key")
+            == "api_key"
+        {
+            insert_header(
+                headers,
+                "authorization",
+                &format!("Bearer {}", secret_string(model, "api_key")?),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub async fn openai_passthrough_chat(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_model_route(
+        state,
+        workspace,
+        headers,
+        body,
+        PassthroughAction::OpenAiChat,
+    )
+    .await
+}
+
+pub async fn openai_passthrough_embeddings(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_model_route(
+        state,
+        workspace,
+        headers,
+        body,
+        PassthroughAction::OpenAiEmbeddings,
+    )
+    .await
+}
+
+pub async fn openai_passthrough_responses(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_model_route(
+        state,
+        workspace,
+        headers,
+        body,
+        PassthroughAction::OpenAiResponses,
+    )
+    .await
+}
+
+pub async fn openai_passthrough_responses_compact(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_model_route(
+        state,
+        workspace,
+        headers,
+        body,
+        PassthroughAction::OpenAiResponsesCompact,
+    )
+    .await
+}
+
+pub async fn anthropic_passthrough_messages(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_model_route(
+        state,
+        workspace,
+        headers,
+        body,
+        PassthroughAction::AnthropicMessages,
+    )
+    .await
+}
+
+pub async fn gemini_passthrough(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    Path(model_action): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let (endpoint_name, action) =
+        if let Some(endpoint_name) = model_action.strip_suffix(":streamGenerateContent") {
+            (
+                endpoint_name,
+                PassthroughAction::GeminiStreamGenerateContent,
+            )
+        } else if let Some(endpoint_name) = model_action.strip_suffix(":generateContent") {
+            (endpoint_name, PassthroughAction::GeminiGenerateContent)
+        } else {
+            return json_response(StatusCode::NOT_FOUND, json!({"detail":"Not Found"}));
+        };
+    passthrough_path_route(
+        state,
+        workspace,
+        endpoint_name.to_string(),
+        headers,
+        body,
+        action,
+    )
+    .await
+}
+
+pub async fn gemini_passthrough_generate_content(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    Path(endpoint_name): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_path_route(
+        state,
+        workspace,
+        endpoint_name,
+        headers,
+        body,
+        PassthroughAction::GeminiGenerateContent,
+    )
+    .await
+}
+
+pub async fn gemini_passthrough_stream_generate_content(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    Path(endpoint_name): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    passthrough_path_route(
+        state,
+        workspace,
+        endpoint_name,
+        headers,
+        body,
+        PassthroughAction::GeminiStreamGenerateContent,
+    )
+    .await
+}
+
+async fn passthrough_model_route(
+    state: AppState,
+    workspace: String,
+    headers: HeaderMap,
+    body: Bytes,
+    action: PassthroughAction,
+) -> Response {
+    let start = Instant::now();
+    let mut payload = match parse_body(&body) {
+        Ok(payload) => payload,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    if action == PassthroughAction::OpenAiResponsesCompact
+        && payload.get("stream").and_then(Value::as_bool) == Some(true)
+    {
+        return GatewayRuntimeError::http(
+            StatusCode::BAD_REQUEST,
+            Value::String(
+                "stream=true is not supported on /responses/compact; compaction is a unary request."
+                    .to_string(),
+            ),
+        )
+        .response(start.elapsed());
+    }
+    let endpoint_name = match payload
+        .get("model")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => value.to_string(),
+        None => {
+            return GatewayRuntimeError::http(
+                StatusCode::BAD_REQUEST,
+                Value::String("Missing required 'model' parameter in request body".to_string()),
+            )
+            .response(start.elapsed())
+        }
+    };
+    payload
+        .as_object_mut()
+        .expect("validated object")
+        .remove("model");
+    passthrough_value_route(
+        state,
+        workspace,
+        endpoint_name,
+        headers,
+        payload,
+        action,
+        start,
+    )
+    .await
+}
+
+async fn passthrough_path_route(
+    state: AppState,
+    workspace: String,
+    endpoint_name: String,
+    headers: HeaderMap,
+    body: Bytes,
+    action: PassthroughAction,
+) -> Response {
+    let start = Instant::now();
+    let payload = match parse_body(&body) {
+        Ok(payload) => payload,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    passthrough_value_route(
+        state,
+        workspace,
+        endpoint_name,
+        headers,
+        payload,
+        action,
+        start,
+    )
+    .await
+}
+
+async fn passthrough_value_route(
+    state: AppState,
+    workspace: String,
+    endpoint_name: String,
+    headers: HeaderMap,
+    payload: Value,
+    action: PassthroughAction,
+    start: Instant,
+) -> Response {
+    let (model, adapter) = match resolve_runtime_provider(&state, &workspace, &endpoint_name).await
+    {
+        Ok(value) => value,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    if !supports_passthrough(&model.provider, action) {
+        return unsupported_passthrough(&model.provider, action).response(start.elapsed());
+    }
+    let streaming = action.streaming(&payload);
+    let mut request = match adapter.passthrough_request(&model, action, payload, &headers) {
+        Ok(request) => request,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    if let Err(error) = prepare_dynamic_auth(&model, &mut request).await {
+        return error.response(start.elapsed());
+    }
+    if streaming {
+        raw_stream_response(request, start)
+    } else {
+        raw_non_stream_response(request, start).await
+    }
+}
+
+pub async fn raw_proxy(
+    State(state): State<AppState>,
+    Workspace(workspace): Workspace,
+    Path((endpoint_name, path)): Path<(String, String)>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let start = Instant::now();
+    let payload = match parse_body(&body) {
+        Ok(payload) => payload,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    let (model, adapter) = match resolve_runtime_provider(&state, &workspace, &endpoint_name).await
+    {
+        Ok(value) => value,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    let path = match uri.query() {
+        Some(query) => format!("{path}?{query}"),
+        None => path,
+    };
+    let mut request = match adapter.proxy_request(&model, &path, payload, &headers) {
+        Ok(request) => request,
+        Err(error) => return error.response(start.elapsed()),
+    };
+    if let Err(error) = prepare_dynamic_auth(&model, &mut request).await {
+        return error.response(start.elapsed());
+    }
+    raw_proxy_response(request, start).await
+}
+
+async fn resolve_runtime_provider(
+    state: &AppState,
+    workspace: &str,
+    endpoint_name: &str,
+) -> Result<(ResolvedGatewayModelConfig, Box<dyn GatewayProviderAdapter>), GatewayRuntimeError> {
+    let endpoint = state
+        .tracking_store()
+        .get_resolved_gateway_endpoint_config(workspace, endpoint_name)
+        .await
+        .map_err(|error| {
+            GatewayRuntimeError::http(
+                StatusCode::NOT_FOUND,
+                json!({"error_code":"RESOURCE_DOES_NOT_EXIST","message":error.to_string()}),
+            )
+        })?;
+    let model = primary_model(&endpoint)?.clone();
+    check_provider_allowed(&model.provider)?;
+    let adapter = adapter_for(&model.provider)?;
+    Ok((model, adapter))
 }
 
 pub async fn invocations(
@@ -593,13 +1302,7 @@ async fn non_stream_response(
     start: Instant,
 ) -> Response {
     let provider_start = Instant::now();
-    let response = match client()
-        .post(request.url)
-        .headers(request.headers)
-        .json(&request.body)
-        .send()
-        .await
-    {
+    let response = match send_provider_request(request).await {
         Ok(response) => response,
         Err(error) => {
             let response = GatewayRuntimeError::http(
@@ -678,6 +1381,206 @@ fn with_non_stream_timing(
     response
 }
 
+async fn send_provider_request(
+    request: ProviderRequest,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let body = serde_json::to_vec(&request.body).expect("JSON value serialization cannot fail");
+    client()
+        .post(request.url)
+        .headers(request.headers)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(body)
+        .send()
+        .await
+}
+
+async fn raw_non_stream_response(request: ProviderRequest, start: Instant) -> Response {
+    let provider_start = Instant::now();
+    let response = match send_provider_request(request).await {
+        Ok(response) => response,
+        Err(error) => {
+            let response = GatewayRuntimeError::http(
+                StatusCode::BAD_GATEWAY,
+                Value::String(error.to_string()),
+            )
+            .response(start.elapsed());
+            return with_non_stream_timing(response, start, provider_start.elapsed());
+        }
+    };
+    let provider_elapsed = provider_start.elapsed();
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let value = if content_type.contains("application/json") {
+        response.json::<Value>().await.unwrap_or(Value::Null)
+    } else if content_type.contains("text/plain") {
+        json!({"message":response.text().await.unwrap_or_default()})
+    } else {
+        let response = GatewayRuntimeError::http(
+            StatusCode::BAD_GATEWAY,
+            Value::String(format!(
+                "The returned data type from the route service is not supported. Received content type: {}",
+                if content_type.is_empty() { "None" } else { &content_type }
+            )),
+        )
+        .response(start.elapsed());
+        return with_non_stream_timing(response, start, provider_elapsed);
+    };
+    let response = if status.is_success() {
+        json_response(status, value)
+    } else {
+        let detail = value.pointer("/error/message").cloned().unwrap_or(value);
+        GatewayRuntimeError::http(status, detail).response(start.elapsed())
+    };
+    with_non_stream_timing(response, start, provider_elapsed)
+}
+
+struct RawProviderStream {
+    initial: Option<BoxFuture<'static, Result<reqwest::Response, reqwest::Error>>>,
+    upstream: Option<futures::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>>,
+    done: bool,
+}
+
+fn raw_stream_response(request: ProviderRequest, start: Instant) -> Response {
+    let state = RawProviderStream {
+        initial: Some(send_provider_request(request).boxed()),
+        upstream: None,
+        done: false,
+    };
+    let output = stream::unfold(state, next_raw_stream_chunk).map(Ok::<_, Infallible>);
+    let mut response = Response::new(Body::from_stream(output));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream; charset=utf-8"),
+    );
+    insert_timing_header(&mut response, DURATION_HEADER, start.elapsed().as_millis());
+    response
+}
+
+async fn next_raw_stream_chunk(mut state: RawProviderStream) -> Option<(Bytes, RawProviderStream)> {
+    if state.done {
+        return None;
+    }
+    if let Some(initial) = state.initial.take() {
+        match initial.await {
+            Ok(response) if response.status().is_success() => {
+                state.upstream = Some(response.bytes_stream().boxed());
+            }
+            Ok(response) => {
+                let status = response.status();
+                let value = response.json::<Value>().await.unwrap_or(Value::Null);
+                let message = value
+                    .pointer("/error/message")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| {
+                        status
+                            .canonical_reason()
+                            .unwrap_or("HTTP error")
+                            .to_string()
+                    });
+                state.done = true;
+                return Some((
+                    sse_error(&format!("{}: {message}", status.as_u16()), "HTTPException"),
+                    state,
+                ));
+            }
+            Err(error) => {
+                state.done = true;
+                return Some((sse_error(&error.to_string(), "ClientError"), state));
+            }
+        }
+    }
+    match state.upstream.as_mut()?.next().await {
+        Some(Ok(bytes)) => Some((bytes, state)),
+        Some(Err(error)) => {
+            state.done = true;
+            Some((sse_error(&error.to_string(), "ClientPayloadError"), state))
+        }
+        None => None,
+    }
+}
+
+async fn raw_proxy_response(request: ProviderRequest, start: Instant) -> Response {
+    let provider_start = Instant::now();
+    let response = match send_provider_request(request).await {
+        Ok(response) => response,
+        Err(error) => {
+            let response = GatewayRuntimeError::http(
+                StatusCode::BAD_GATEWAY,
+                Value::String(error.to_string()),
+            )
+            .response(start.elapsed());
+            return with_non_stream_timing(response, start, provider_start.elapsed());
+        }
+    };
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+    if !status.is_success() {
+        let value = response.json::<Value>().await.unwrap_or(Value::Null);
+        let detail = value
+            .pointer("/error/message")
+            .cloned()
+            .unwrap_or_else(|| Value::String(value.to_string()));
+        return GatewayRuntimeError::http(status, detail).response(start.elapsed());
+    }
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
+    if matches!(media_type, "text/event-stream" | "application/x-ndjson") {
+        let output = response.bytes_stream().map(|result| {
+            Ok::<_, Infallible>(
+                result.unwrap_or_else(|error| sse_error(&error.to_string(), "ClientPayloadError")),
+            )
+        });
+        let mut result = Response::new(Body::from_stream(output));
+        result.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/event-stream; charset=utf-8"),
+        );
+        insert_timing_header(&mut result, DURATION_HEADER, start.elapsed().as_millis());
+        return result;
+    }
+    if content_type.contains("application/json") {
+        return match response.json::<Value>().await {
+            Ok(value) => with_non_stream_timing(
+                json_response(StatusCode::OK, value),
+                start,
+                provider_start.elapsed(),
+            ),
+            Err(error) => {
+                GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
+                    .response(start.elapsed())
+            }
+        };
+    }
+    if content_type.contains("text/plain") {
+        return with_non_stream_timing(
+            json_response(
+                StatusCode::OK,
+                json!({"message":response.text().await.unwrap_or_default()}),
+            ),
+            start,
+            provider_start.elapsed(),
+        );
+    }
+    GatewayRuntimeError::http(
+        StatusCode::BAD_GATEWAY,
+        Value::String(format!(
+            "Unsupported Content-Type from upstream proxy: {content_type}"
+        )),
+    )
+    .response(start.elapsed())
+}
+
 struct ProviderStream {
     initial: Option<BoxFuture<'static, Result<reqwest::Response, reqwest::Error>>>,
     upstream: Option<futures::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>>,
@@ -695,12 +1598,7 @@ async fn stream_response(
     request: ProviderRequest,
     start: Instant,
 ) -> Response {
-    let initial = client()
-        .post(request.url)
-        .headers(request.headers)
-        .json(&request.body)
-        .send()
-        .boxed();
+    let initial = send_provider_request(request).boxed();
 
     let state = ProviderStream {
         initial: Some(initial),
@@ -950,13 +1848,19 @@ fn primary_model(
 }
 
 fn adapter_for(provider: &str) -> Result<Box<dyn GatewayProviderAdapter>, GatewayRuntimeError> {
-    match provider {
+    let normalized = normalize_provider(provider);
+    match normalized {
         "openai" | "azure" | "azure-openai" => Ok(Box::new(OpenAiAdapter)),
         "anthropic" => Ok(Box::new(AnthropicAdapter)),
         "gemini" => Ok(Box::new(GeminiAdapter)),
+        "bedrock" => Ok(Box::new(BedrockAdapter)),
+        "databricks" => Ok(Box::new(DatabricksAdapter)),
+        provider if is_supported_provider(provider) => Ok(Box::new(OpenAiCompatibleAdapter {
+            provider: provider.to_string(),
+        })),
         provider => Err(GatewayRuntimeError::new(
-            StatusCode::NOT_IMPLEMENTED,
-            format!("Provider '{provider}' is not implemented by the native gateway runtime."),
+            StatusCode::BAD_REQUEST,
+            format!("Provider '{provider}' is not present in the pinned native provider manifest."),
         )),
     }
 }
@@ -965,10 +1869,12 @@ fn check_provider_allowed(provider: &str) -> Result<(), GatewayRuntimeError> {
     let Ok(allowed) = std::env::var(ALLOWED_PROVIDERS_ENV) else {
         return Ok(());
     };
+    let normalized = normalize_provider(provider);
     if allowed
         .split(',')
         .map(str::trim)
-        .any(|value| value == provider)
+        .map(|value| value.to_ascii_lowercase())
+        .any(|value| normalize_provider(&value) == normalized)
     {
         Ok(())
     } else {
@@ -979,6 +1885,492 @@ fn check_provider_allowed(provider: &str) -> Result<(), GatewayRuntimeError> {
                 "message":format!("Provider '{provider}' is not allowed by the current gateway provider policy.")
             }),
         ))
+    }
+}
+
+fn supports_passthrough(provider: &str, action: PassthroughAction) -> bool {
+    match normalize_provider(provider) {
+        "openai" | "azure" => matches!(
+            action,
+            PassthroughAction::OpenAiChat
+                | PassthroughAction::OpenAiEmbeddings
+                | PassthroughAction::OpenAiResponses
+                | PassthroughAction::OpenAiResponsesCompact
+        ),
+        "anthropic" => action == PassthroughAction::AnthropicMessages,
+        "gemini" => matches!(
+            action,
+            PassthroughAction::GeminiGenerateContent
+                | PassthroughAction::GeminiStreamGenerateContent
+        ),
+        "databricks" => action != PassthroughAction::OpenAiResponsesCompact,
+        "groq" | "deepseek" | "xai" | "openrouter" | "ollama" | "portkey" => matches!(
+            action,
+            PassthroughAction::OpenAiChat | PassthroughAction::OpenAiEmbeddings
+        ),
+        "bedrock" => false,
+        provider => is_supported_provider(provider),
+    }
+}
+
+fn unsupported_passthrough(provider: &str, action: PassthroughAction) -> GatewayRuntimeError {
+    GatewayRuntimeError::new(
+        StatusCode::BAD_REQUEST,
+        format!(
+            "Unsupported passthrough endpoint '{}' for {provider} provider.",
+            passthrough_route(action)
+        ),
+    )
+}
+
+fn passthrough_route(action: PassthroughAction) -> &'static str {
+    match action {
+        PassthroughAction::OpenAiChat => "/openai/v1/chat/completions",
+        PassthroughAction::OpenAiEmbeddings => "/openai/v1/embeddings",
+        PassthroughAction::OpenAiResponses => "/openai/v1/responses",
+        PassthroughAction::OpenAiResponsesCompact => "/openai/v1/responses/compact",
+        PassthroughAction::AnthropicMessages => "/anthropic/v1/messages",
+        PassthroughAction::GeminiGenerateContent => {
+            "/gemini/v1beta/models/{endpoint_name}:generateContent"
+        }
+        PassthroughAction::GeminiStreamGenerateContent => {
+            "/gemini/v1beta/models/{endpoint_name}:streamGenerateContent"
+        }
+    }
+}
+
+fn provider_api_base(model: &ResolvedGatewayModelConfig) -> Result<Url, GatewayRuntimeError> {
+    let provider = normalize_provider(&model.provider);
+    let configured = model.auth_config.get("api_base").cloned();
+    if provider == "azure" {
+        let base = configured.ok_or_else(|| missing_auth("api_base"))?;
+        let version = required_auth(model, "api_version")?;
+        let deployment = model
+            .auth_config
+            .get("deployment_name")
+            .unwrap_or(&model.model_name);
+        return parse_url(&format!(
+            "{}/openai/deployments/{deployment}?api-version={version}",
+            base.trim_end_matches('/')
+        ));
+    }
+    if provider == "databricks" {
+        let base = configured
+            .or_else(|| std::env::var("DATABRICKS_HOST").ok())
+            .ok_or_else(|| missing_auth("api_base"))?;
+        let base = base.trim_end_matches('/');
+        let normalized = if base.contains("/serving-endpoints") {
+            base.to_string()
+        } else {
+            format!("{base}/serving-endpoints")
+        };
+        return parse_url(&normalized);
+    }
+    let base = configured
+        .or_else(|| default_api_base(provider).map(str::to_string))
+        .ok_or_else(|| {
+            GatewayRuntimeError::new(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Provider '{provider}' requires 'api_base' in the pinned native runtime configuration."
+                ),
+            )
+        })?;
+    parse_url(&base)
+}
+
+fn append_provider_path(base: &Url, path: &str) -> Result<Url, GatewayRuntimeError> {
+    let (path, query) = path.split_once('?').unwrap_or((path, ""));
+    let mut url = base.clone();
+    let joined = format!(
+        "{}/{}",
+        url.path().trim_end_matches('/'),
+        path.trim_start_matches('/')
+    );
+    url.set_path(&joined);
+    if !query.is_empty() {
+        url.set_query(Some(query));
+    }
+    Ok(url)
+}
+
+fn proxy_root(base: &Url) -> Result<Url, GatewayRuntimeError> {
+    let mut url = base.clone();
+    let path = url.path().trim_end_matches('/');
+    let root = path
+        .rsplit_once('/')
+        .map(|(head, _)| head)
+        .unwrap_or("")
+        .to_string();
+    url.set_path(&root);
+    url.set_query(None);
+    Ok(url)
+}
+
+fn merged_passthrough_headers(
+    _model: &ResolvedGatewayModelConfig,
+    client: &HeaderMap,
+) -> Result<HeaderMap, GatewayRuntimeError> {
+    let preserve_auth = client_provides_auth(client);
+    let mut headers = HeaderMap::new();
+    for (name, value) in client {
+        let lower = name.as_str().to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "host" | "content-length" | "accept-encoding" | "x-mlflow-authorization"
+        ) || (!preserve_auth && is_auth_header(&lower))
+        {
+            continue;
+        }
+        headers.insert(name.clone(), value.clone());
+    }
+    Ok(headers)
+}
+
+fn client_provides_auth(headers: &HeaderMap) -> bool {
+    let agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    ["claude-cli", "codex", "geminicli"]
+        .iter()
+        .any(|prefix| agent.contains(prefix))
+        && headers.keys().any(|name| is_auth_header(name.as_str()))
+}
+
+fn is_auth_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "authorization" | "x-api-key" | "x-goog-api-key" | "api-key"
+    )
+}
+
+fn has_provider_auth(headers: &HeaderMap) -> bool {
+    headers.keys().any(|name| is_auth_header(name.as_str()))
+}
+
+async fn prepare_dynamic_auth(
+    model: &ResolvedGatewayModelConfig,
+    request: &mut ProviderRequest,
+) -> Result<(), GatewayRuntimeError> {
+    if normalize_provider(&model.provider) == "bedrock"
+        && model.auth_config.get("auth_mode").map(String::as_str) == Some("iam_role")
+    {
+        let credentials = assume_bedrock_role(model).await?;
+        return sign_bedrock_with_credentials(model, request, &credentials);
+    }
+    if normalize_provider(&model.provider) != "databricks"
+        || model.auth_config.get("auth_mode").map(String::as_str) != Some("oauth_m2m")
+        || has_provider_auth(&request.headers)
+    {
+        return Ok(());
+    }
+    let client_id = required_auth(model, "client_id")?;
+    let client_secret = secret_string(model, "client_secret")?;
+    let mut token_url = provider_api_base(model)?;
+    token_url.set_path("/oidc/v1/token");
+    token_url.set_query(None);
+    let response = client()
+        .post(token_url)
+        .basic_auth(client_id, Some(client_secret))
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body("grant_type=client_credentials&scope=all-apis")
+        .send()
+        .await
+        .map_err(|error| {
+            GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
+        })?;
+    let status = response.status();
+    let value = response.json::<Value>().await.map_err(|error| {
+        GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
+    })?;
+    if !status.is_success() {
+        return Err(GatewayRuntimeError::http(status, value));
+    }
+    let token = value
+        .get("access_token")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            GatewayRuntimeError::internal("Databricks OAuth response omitted access_token")
+        })?;
+    insert_header(
+        &mut request.headers,
+        "authorization",
+        &format!("Bearer {token}"),
+    )
+}
+
+#[derive(Debug)]
+struct AwsCredentials {
+    access_key: String,
+    secret_key: String,
+    session_token: Option<String>,
+}
+
+async fn assume_bedrock_role(
+    model: &ResolvedGatewayModelConfig,
+) -> Result<AwsCredentials, GatewayRuntimeError> {
+    let base = AwsCredentials {
+        access_key: secret_string_optional(model, "aws_access_key_id")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
+            .ok_or_else(|| missing_auth("aws_access_key_id"))?,
+        secret_key: secret_string_optional(model, "aws_secret_access_key")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok())
+            .ok_or_else(|| missing_auth("aws_secret_access_key"))?,
+        session_token: secret_string_optional(model, "aws_session_token")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_SESSION_TOKEN").ok()),
+    };
+    let region = bedrock_region(model);
+    let url = parse_url(
+        &model
+            .auth_config
+            .get("aws_sts_endpoint")
+            .cloned()
+            .unwrap_or_else(|| format!("https://sts.{region}.amazonaws.com")),
+    )?;
+    let role = required_auth(model, "aws_role_name")?;
+    let session_name = model
+        .auth_config
+        .get("aws_session_name")
+        .map(String::as_str)
+        .unwrap_or("ai-gateway-bedrock");
+    let body = format!(
+        "Action=AssumeRole&Version=2011-06-15&RoleArn={}&RoleSessionName={}",
+        form_encode(role),
+        form_encode(session_name)
+    );
+    let headers = aws_sigv4_headers(&url, body.as_bytes(), &region, "sts", &base)?;
+    let response = client()
+        .post(url)
+        .headers(headers)
+        .header(
+            header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded; charset=utf-8",
+        )
+        .body(body)
+        .send()
+        .await
+        .map_err(|error| {
+            GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
+        })?;
+    let status = response.status();
+    let text = response.text().await.map_err(|error| {
+        GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
+    })?;
+    if !status.is_success() {
+        return Err(GatewayRuntimeError::http(status, Value::String(text)));
+    }
+    Ok(AwsCredentials {
+        access_key: xml_value(&text, "AccessKeyId")?,
+        secret_key: xml_value(&text, "SecretAccessKey")?,
+        session_token: Some(xml_value(&text, "SessionToken")?),
+    })
+}
+
+fn form_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
+fn xml_value(xml: &str, tag: &str) -> Result<String, GatewayRuntimeError> {
+    let start_tag = format!("<{tag}>");
+    let end_tag = format!("</{tag}>");
+    let start = xml
+        .find(&start_tag)
+        .map(|index| index + start_tag.len())
+        .ok_or_else(|| GatewayRuntimeError::internal(format!("STS response omitted {tag}")))?;
+    let end = xml[start..]
+        .find(&end_tag)
+        .map(|index| start + index)
+        .ok_or_else(|| GatewayRuntimeError::internal(format!("STS response omitted {tag}")))?;
+    Ok(xml[start..end].to_string())
+}
+
+fn bedrock_region(model: &ResolvedGatewayModelConfig) -> String {
+    model
+        .auth_config
+        .get("aws_region_name")
+        .cloned()
+        .or_else(|| std::env::var("AWS_REGION").ok())
+        .or_else(|| std::env::var("AWS_DEFAULT_REGION").ok())
+        .unwrap_or_else(|| "us-east-1".to_string())
+}
+
+fn sign_bedrock_request(
+    model: &ResolvedGatewayModelConfig,
+    request: &mut ProviderRequest,
+) -> Result<(), GatewayRuntimeError> {
+    let credentials = AwsCredentials {
+        access_key: secret_string_optional(model, "aws_access_key_id")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
+            .ok_or_else(|| missing_auth("aws_access_key_id"))?,
+        secret_key: secret_string_optional(model, "aws_secret_access_key")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok())
+            .ok_or_else(|| missing_auth("aws_secret_access_key"))?,
+        session_token: secret_string_optional(model, "aws_session_token")
+            .map(str::to_string)
+            .or_else(|| std::env::var("AWS_SESSION_TOKEN").ok()),
+    };
+    sign_bedrock_with_credentials(model, request, &credentials)
+}
+
+fn sign_bedrock_with_credentials(
+    model: &ResolvedGatewayModelConfig,
+    request: &mut ProviderRequest,
+    credentials: &AwsCredentials,
+) -> Result<(), GatewayRuntimeError> {
+    let payload = serde_json::to_vec(&request.body)
+        .map_err(|error| GatewayRuntimeError::internal(error.to_string()))?;
+    let headers = aws_sigv4_headers(
+        &request.url,
+        &payload,
+        &bedrock_region(model),
+        "bedrock",
+        credentials,
+    )?;
+    request.headers.extend(headers);
+    Ok(())
+}
+
+fn aws_sigv4_headers(
+    url: &Url,
+    payload: &[u8],
+    region: &str,
+    service: &str,
+    credentials: &AwsCredentials,
+) -> Result<HeaderMap, GatewayRuntimeError> {
+    type HmacSha256 = Hmac<Sha256>;
+
+    let amz_date = std::env::var("MLFLOW_GATEWAY_TEST_AWS_AMZ_DATE")
+        .unwrap_or_else(|_| chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string());
+    let date = amz_date
+        .get(..8)
+        .ok_or_else(|| GatewayRuntimeError::internal("Invalid MLFLOW_GATEWAY_TEST_AWS_AMZ_DATE"))?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| GatewayRuntimeError::internal("AWS URL has no host"))?;
+    let payload_hash = sha256_hex(payload);
+    let mut headers = HeaderMap::new();
+    insert_header(&mut headers, "host", host)?;
+    insert_header(&mut headers, "x-amz-date", &amz_date)?;
+    insert_header(&mut headers, "x-amz-content-sha256", &payload_hash)?;
+    if let Some(token) = &credentials.session_token {
+        insert_header(&mut headers, "x-amz-security-token", token)?;
+    }
+    let mut canonical_headers =
+        format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n");
+    let mut signed_headers = "host;x-amz-content-sha256;x-amz-date".to_string();
+    if let Some(token) = &credentials.session_token {
+        canonical_headers.push_str(&format!("x-amz-security-token:{token}\n"));
+        signed_headers.push_str(";x-amz-security-token");
+    }
+    let canonical_request = format!(
+        "POST\n{}\n{}\n{canonical_headers}\n{signed_headers}\n{payload_hash}",
+        url.path(),
+        url.query().unwrap_or_default(),
+    );
+    let scope = format!("{date}/{region}/{service}/aws4_request");
+    let string_to_sign = format!(
+        "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
+        sha256_hex(canonical_request.as_bytes())
+    );
+    let date_key = hmac_bytes::<HmacSha256>(
+        format!("AWS4{}", credentials.secret_key).as_bytes(),
+        date.as_bytes(),
+    )?;
+    let region_key = hmac_bytes::<HmacSha256>(&date_key, region.as_bytes())?;
+    let service_key = hmac_bytes::<HmacSha256>(&region_key, service.as_bytes())?;
+    let signing_key = hmac_bytes::<HmacSha256>(&service_key, b"aws4_request")?;
+    let signature = hex_bytes(&hmac_bytes::<HmacSha256>(
+        &signing_key,
+        string_to_sign.as_bytes(),
+    )?);
+    insert_header(
+        &mut headers,
+        "authorization",
+        &format!(
+            "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={signed_headers}, Signature={signature}",
+            credentials.access_key
+        ),
+    )?;
+    Ok(headers)
+}
+
+fn hmac_bytes<M>(key: &[u8], value: &[u8]) -> Result<Vec<u8>, GatewayRuntimeError>
+where
+    M: Mac + hmac::digest::KeyInit,
+{
+    let mut mac = <M as Mac>::new_from_slice(key)
+        .map_err(|_| GatewayRuntimeError::internal("Invalid HMAC key"))?;
+    mac.update(value);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+fn sha256_hex(value: &[u8]) -> String {
+    use sha2::Digest as _;
+    hex_bytes(&Sha256::digest(value))
+}
+
+fn hex_bytes(value: &[u8]) -> String {
+    value.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn normalize_databricks_content(response: &mut Value) {
+    let Some(choices) = response.get_mut("choices").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for choice in choices {
+        let message = if choice.get("message").is_some() {
+            choice.get_mut("message")
+        } else {
+            choice.get_mut("delta")
+        };
+        let Some(content) = message.and_then(|value| value.get_mut("content")) else {
+            continue;
+        };
+        let Some(parts) = content.as_array() else {
+            continue;
+        };
+        let supported = parts
+            .iter()
+            .filter(|part| {
+                matches!(
+                    part.get("type").and_then(Value::as_str),
+                    Some("text" | "image_url" | "input_audio")
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if supported
+            .iter()
+            .all(|part| part.get("type") == Some(&json!("text")))
+        {
+            let text = supported
+                .iter()
+                .filter_map(|part| part.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n");
+            *content = if text.is_empty() {
+                Value::Null
+            } else {
+                Value::String(text)
+            };
+        } else {
+            *content = Value::Array(supported);
+        }
     }
 }
 
@@ -1897,6 +3289,13 @@ fn required_auth<'a>(
         })
 }
 
+fn missing_auth(key: &str) -> GatewayRuntimeError {
+    GatewayRuntimeError::new(
+        StatusCode::BAD_REQUEST,
+        format!("Missing required provider authentication field '{key}'."),
+    )
+}
+
 fn secret_string<'a>(
     model: &'a ResolvedGatewayModelConfig,
     key: &str,
@@ -1906,6 +3305,10 @@ fn secret_string<'a>(
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| GatewayRuntimeError::internal(format!("Missing provider secret: {key}")))
+}
+
+fn secret_string_optional<'a>(model: &'a ResolvedGatewayModelConfig, key: &str) -> Option<&'a str> {
+    model.secret_value.get(key).and_then(Value::as_str)
 }
 
 fn parse_url(value: &str) -> Result<Url, GatewayRuntimeError> {
@@ -2188,5 +3591,364 @@ mod tests {
         );
         assert_eq!(error.status, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(error.detail, "fixture limit");
+    }
+
+    #[test]
+    fn every_pinned_provider_resolves_without_python_fallback() {
+        let providers = crate::gateway_provider_matrix::supported_provider_names();
+        assert_eq!(providers.len(), 191);
+        for provider in providers {
+            let adapter =
+                adapter_for(provider).unwrap_or_else(|error| panic!("{provider}: {error:?}"));
+            if crate::gateway_provider_matrix::provider_adapter_kind(provider)
+                == Some("pinned_litellm_transform")
+            {
+                let mut model = fixture_model(provider);
+                model
+                    .auth_config
+                    .insert("api_base".to_string(), "http://127.0.0.1:9/v1".to_string());
+                let payload = json!({"messages":[{"role":"user","content":"fixture"}]});
+                for stream in [false, true] {
+                    let request = adapter
+                        .transform_request(&model, InvocationKind::Chat, payload.clone(), stream)
+                        .unwrap_or_else(|error| panic!("{provider} request: {error:?}"));
+                    assert_eq!(request.body["model"], model.model_name, "{provider}");
+                    assert!(
+                        request.url.path().ends_with("/chat/completions"),
+                        "{provider}"
+                    );
+                }
+
+                let response = adapter
+                    .transform_response(
+                        &model,
+                        InvocationKind::Chat,
+                        json!({
+                            "id":"fixture-id",
+                            "object":"chat.completion",
+                            "created":7,
+                            "model":"fixture-model",
+                            "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],
+                            "usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}
+                        }),
+                        7,
+                    )
+                    .unwrap_or_else(|error| panic!("{provider} response: {error:?}"));
+                assert_eq!(response["usage"]["total_tokens"], 5, "{provider}");
+
+                let frames = adapter
+                    .transform_stream_frame(
+                        &model,
+                        json!({
+                            "id":"fixture-stream-id",
+                            "object":"chat.completion.chunk",
+                            "created":7,
+                            "model":"fixture-model",
+                            "choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]
+                        }),
+                        &mut StreamTransformState::default(),
+                        7,
+                    )
+                    .unwrap_or_else(|error| panic!("{provider} stream: {error:?}"));
+                assert_eq!(frames.len(), 1, "{provider}");
+
+                let error = adapter.map_error(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    json!({"error":{"message":"fixture limit"}}),
+                );
+                assert_eq!(error.status, StatusCode::TOO_MANY_REQUESTS, "{provider}");
+                assert_eq!(
+                    crate::gateway_provider_matrix::classify_retry(
+                        error.status.as_u16(),
+                        &json!({"error":{"message":"fixture limit"}})
+                    ),
+                    Some(crate::gateway_provider_matrix::RetryClass::RateLimitError),
+                    "{provider}"
+                );
+            }
+        }
+        assert!(adapter_for("obvious-future-provider-not-in-pin").is_err());
+    }
+
+    #[test]
+    fn openai_compatible_family_pins_base_url_auth_and_quirks() {
+        let cases = [
+            ("groq", "https://api.groq.com/openai/v1", "authorization"),
+            ("deepseek", "https://api.deepseek.com/v1", "authorization"),
+            ("xai", "https://api.x.ai/v1", "authorization"),
+            (
+                "openrouter",
+                "https://openrouter.ai/api/v1",
+                "authorization",
+            ),
+            ("ollama", "http://localhost:11434/v1", "authorization"),
+            ("portkey", "http://127.0.0.1:9/v1", "x-portkey-api-key"),
+        ];
+        for (provider, expected_base, auth_header) in cases {
+            let mut model = fixture_model(provider);
+            if provider != "portkey" {
+                model.auth_config.remove("api_base");
+            }
+            if provider == "ollama" {
+                model.secret_value = json!({"api_key":"ollama"});
+            }
+            let adapter = OpenAiCompatibleAdapter {
+                provider: provider.to_string(),
+            };
+            let request = adapter
+                .transform_request(
+                    &model,
+                    InvocationKind::Chat,
+                    json!({"messages":[{"role":"user","content":"hi"}]}),
+                    false,
+                )
+                .unwrap();
+            assert!(
+                request.url.as_str().starts_with(expected_base),
+                "{provider}"
+            );
+            if provider == "ollama" {
+                assert!(request.headers.get("authorization").is_none());
+            } else {
+                assert!(request.headers.contains_key(auth_header), "{provider}");
+            }
+        }
+    }
+
+    #[test]
+    fn subscription_clients_keep_their_own_auth_on_passthrough() {
+        let model = fixture_model("openai");
+        let headers = HeaderMap::from_iter([
+            (
+                header::USER_AGENT,
+                HeaderValue::from_static("codex_cli_rs/1.0"),
+            ),
+            (
+                header::AUTHORIZATION,
+                HeaderValue::from_static("Bearer obvious-fake-client-subscription"),
+            ),
+            (
+                HeaderName::from_static("x-mlflow-authorization"),
+                HeaderValue::from_static("obvious-fake-mlflow-rbac"),
+            ),
+        ]);
+        let request = OpenAiAdapter
+            .passthrough_request(
+                &model,
+                PassthroughAction::OpenAiChat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                &headers,
+            )
+            .unwrap();
+        assert_eq!(
+            request.headers[header::AUTHORIZATION],
+            "Bearer obvious-fake-client-subscription"
+        );
+        assert!(request.headers.get("x-mlflow-authorization").is_none());
+    }
+
+    #[test]
+    fn bedrock_access_keys_are_sigv4_signed_without_live_credentials() {
+        let mut model = fixture_model("bedrock");
+        model.model_name = "anthropic.claude-fixture".to_string();
+        model.auth_config.extend([
+            ("auth_mode".to_string(), "access_keys".to_string()),
+            ("aws_region_name".to_string(), "us-test-1".to_string()),
+        ]);
+        model.secret_value = json!({
+            "aws_access_key_id":"OBVIOUSFAKEACCESSKEY",
+            "aws_secret_access_key":"obvious-fake-secret-access-key",
+            "aws_session_token":"obvious-fake-session-token"
+        });
+        let request = BedrockAdapter
+            .transform_request(
+                &model,
+                InvocationKind::Chat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                false,
+            )
+            .unwrap();
+        let authorization = request.headers[header::AUTHORIZATION].to_str().unwrap();
+        assert!(authorization.starts_with("AWS4-HMAC-SHA256 Credential=OBVIOUSFAKEACCESSKEY/"));
+        assert!(authorization.contains("/us-test-1/bedrock/aws4_request"));
+        assert!(authorization.contains("x-amz-security-token"));
+        assert_eq!(
+            request.headers["x-amz-security-token"],
+            "obvious-fake-session-token"
+        );
+        assert_eq!(request.body["anthropic_version"], "bedrock-2023-05-31");
+    }
+
+    #[test]
+    fn bedrock_api_key_and_default_chain_auth_modes_are_native() {
+        let mut token_model = fixture_model("bedrock");
+        token_model
+            .auth_config
+            .insert("auth_mode".to_string(), "api_key".to_string());
+        let token_request = BedrockAdapter
+            .transform_request(
+                &token_model,
+                InvocationKind::Chat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            token_request.headers[header::AUTHORIZATION],
+            "Bearer obvious-fake-key"
+        );
+
+        let mut model = fixture_model("bedrock");
+        model.auth_config.extend([
+            ("auth_mode".to_string(), "default_chain".to_string()),
+            ("aws_region_name".to_string(), "us-test-1".to_string()),
+        ]);
+        // Recorded fake credentials stand in for default-chain resolution;
+        // the runtime never contacts AWS in tests.
+        model.secret_value = json!({
+            "aws_access_key_id":"OBVIOUSFAKEDEFAULTKEY",
+            "aws_secret_access_key":"obvious-fake-default-secret",
+            "aws_session_token":"obvious-fake-default-session"
+        });
+        let request = BedrockAdapter
+            .transform_request(
+                &model,
+                InvocationKind::Chat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                false,
+            )
+            .unwrap();
+        assert!(request.headers[header::AUTHORIZATION]
+            .to_str()
+            .unwrap()
+            .starts_with("AWS4-HMAC-SHA256"));
+    }
+
+    #[tokio::test]
+    async fn bedrock_iam_role_uses_mock_sts_then_signs_with_assumed_credentials() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let sts_base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new().fallback(axum::routing::post(
+            |headers: HeaderMap, body: Bytes| async move {
+                let authorization = headers[header::AUTHORIZATION].to_str().unwrap();
+                assert!(
+                    authorization.starts_with("AWS4-HMAC-SHA256 Credential=OBVIOUSFAKEBASEKEY/")
+                );
+                assert!(authorization.contains("/sts/aws4_request"));
+                assert!(String::from_utf8_lossy(&body).contains("Action=AssumeRole"));
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "text/xml")
+                    .body(Body::from(
+                        "<AssumeRoleResponse><AssumeRoleResult><Credentials>\
+                         <AccessKeyId>OBVIOUSFAKEASSUMEDKEY</AccessKeyId>\
+                         <SecretAccessKey>obvious-fake-assumed-secret</SecretAccessKey>\
+                         <SessionToken>obvious-fake-assumed-session</SessionToken>\
+                         </Credentials></AssumeRoleResult></AssumeRoleResponse>",
+                    ))
+                    .unwrap()
+            },
+        ));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut model = fixture_model("bedrock");
+        model.auth_config.extend([
+            ("auth_mode".to_string(), "iam_role".to_string()),
+            ("aws_region_name".to_string(), "us-test-1".to_string()),
+            (
+                "aws_role_name".to_string(),
+                "arn:aws:iam::000000000000:role/obvious-fake-role".to_string(),
+            ),
+            ("aws_sts_endpoint".to_string(), sts_base),
+        ]);
+        model.secret_value = json!({
+            "aws_access_key_id":"OBVIOUSFAKEBASEKEY",
+            "aws_secret_access_key":"obvious-fake-base-secret"
+        });
+        let mut request = BedrockAdapter
+            .transform_request(
+                &model,
+                InvocationKind::Chat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                false,
+            )
+            .unwrap();
+        assert!(request.headers.get(header::AUTHORIZATION).is_none());
+        prepare_dynamic_auth(&model, &mut request).await.unwrap();
+        let authorization = request.headers[header::AUTHORIZATION].to_str().unwrap();
+        assert!(authorization.contains("Credential=OBVIOUSFAKEASSUMEDKEY/"));
+        assert_eq!(
+            request.headers["x-amz-security-token"],
+            "obvious-fake-assumed-session"
+        );
+    }
+
+    #[test]
+    fn databricks_pat_uses_normalized_serving_base_and_bearer_auth() {
+        let mut model = fixture_model("databricks");
+        model
+            .auth_config
+            .insert("auth_mode".to_string(), "pat_token".to_string());
+        let request = DatabricksAdapter
+            .transform_request(
+                &model,
+                InvocationKind::Chat,
+                json!({"messages":[{"role":"user","content":"hi"}]}),
+                false,
+            )
+            .unwrap();
+        assert!(request
+            .url
+            .path()
+            .contains("/serving-endpoints/chat/completions"));
+        assert_eq!(
+            request.headers[header::AUTHORIZATION],
+            "Bearer obvious-fake-key"
+        );
+    }
+
+    #[tokio::test]
+    async fn databricks_oauth_m2m_injects_mock_token_response() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let app = axum::Router::new().route(
+            "/oidc/v1/token",
+            axum::routing::post(|headers: HeaderMap, body: Bytes| async move {
+                assert!(headers[header::AUTHORIZATION]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("Basic "));
+                assert_eq!(
+                    body,
+                    Bytes::from_static(b"grant_type=client_credentials&scope=all-apis")
+                );
+                json_response(
+                    StatusCode::OK,
+                    json!({"access_token":"obvious-fake-oauth-access-token","token_type":"Bearer"}),
+                )
+            }),
+        );
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut model = fixture_model("databricks");
+        model.auth_config = HashMap::from([
+            ("api_base".to_string(), base.clone()),
+            ("auth_mode".to_string(), "oauth_m2m".to_string()),
+            (
+                "client_id".to_string(),
+                "obvious-fake-client-id".to_string(),
+            ),
+        ]);
+        model.secret_value = json!({"client_secret":"obvious-fake-client-secret"});
+        let mut request = ProviderRequest {
+            url: parse_url(&format!("{base}/serving-endpoints/chat/completions")).unwrap(),
+            headers: HeaderMap::new(),
+            body: json!({}),
+        };
+        prepare_dynamic_auth(&model, &mut request).await.unwrap();
+        assert_eq!(
+            request.headers[header::AUTHORIZATION],
+            "Bearer obvious-fake-oauth-access-token"
+        );
     }
 }

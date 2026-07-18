@@ -1,0 +1,2900 @@
+{
+  "coverage": {
+    "explicit_native": 6,
+    "models": 2908,
+    "openai_compatible": 6,
+    "pinned_litellm_transform": 179,
+    "providers": 191,
+    "unsupported": 0
+  },
+  "providers": [
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.a2a.chat.transformation.A2AConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "a2a",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "a2a_agent",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ai21.chat.transformation.AI21ChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 12,
+      "name": "ai21",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ai21.chat.transformation.AI21ChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "ai21_chat",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "ai21labs",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 13,
+      "name": "aiml",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.aiohttp_openai.chat.transformation.AiohttpOpenAIChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "aiohttp_openai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "amazon-bedrock",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.amazon_nova.chat.transformation.AmazonNovaChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "amazon_nova",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.anthropic.chat.transformation.AnthropicConfig",
+      "embedding_transform": null,
+      "model_entry_count": 22,
+      "name": "anthropic",
+      "unsupported": false,
+      "verification": "differential_fixture"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.anthropic.completion.transformation.AnthropicTextConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "anthropic_text",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 12,
+      "name": "anyscale",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "apertis",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "apiserpent",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "assemblyai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "auto_router",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "aws_polly",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.azure.chat.gpt_transformation.AzureOpenAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 199,
+      "name": "azure",
+      "unsupported": false,
+      "verification": "differential_fixture"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.azure_ai.chat.transformation.AzureAIStudioConfig",
+      "embedding_transform": null,
+      "model_entry_count": 95,
+      "name": "azure_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.azure.completion.transformation.AzureOpenAITextConfig",
+      "embedding_transform": null,
+      "model_entry_count": 3,
+      "name": "azure_text",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.baseten.chat.BasetenConfig",
+      "embedding_transform": null,
+      "model_entry_count": 11,
+      "name": "baseten",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.bedrock.chat.invoke_transformations.amazon_ai21_transformation.AmazonAI21Config",
+      "embedding_transform": null,
+      "model_entry_count": 267,
+      "name": "bedrock",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 131,
+      "name": "bedrock_converse",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.bedrock_mantle.chat.transformation.BedrockMantleChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 9,
+      "name": "bedrock_mantle",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 8,
+      "name": "black_forest_labs",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.bytez.chat.transformation.BytezChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "bytez",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.cerebras.chat.CerebrasConfig",
+      "embedding_transform": null,
+      "model_entry_count": 7,
+      "name": "cerebras",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "charity_engine",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.chatgpt.chat.transformation.ChatGPTConfig",
+      "embedding_transform": null,
+      "model_entry_count": 10,
+      "name": "chatgpt",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "chutes",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.clarifai.chat.transformation.ClarifaiConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "clarifai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.cloudflare.chat.transformation.CloudflareChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 30,
+      "name": "cloudflare",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.mistral.chat.transformation.MistralConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "codestral",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.cohere.chat.v2_transformation.CohereV2ChatConfig",
+      "embedding_transform": "litellm.llms.cohere.embed.transformation.CohereEmbeddingConfig",
+      "model_entry_count": 15,
+      "name": "cohere",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.cohere.chat.v2_transformation.CohereV2ChatConfig",
+      "embedding_transform": "litellm.llms.cohere.embed.transformation.CohereEmbeddingConfig",
+      "model_entry_count": 7,
+      "name": "cohere_chat",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.cometapi.chat.transformation.CometAPIConfig",
+      "embedding_transform": "litellm.llms.cometapi.embed.transformation.CometAPIEmbeddingConfig",
+      "model_entry_count": 0,
+      "name": "cometapi",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.compactifai.chat.transformation.CompactifAIChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "compactifai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 7,
+      "name": "crusoe",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "cursor",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.chat.transformation.OpenAILikeChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "custom",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.chat.transformation.OpenAILikeChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "custom_openai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "darkbloom",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.dashscope.chat.transformation.DashScopeChatConfig",
+      "embedding_transform": "litellm.llms.dashscope.embed.transformation.DashScopeEmbeddingConfig",
+      "model_entry_count": 34,
+      "name": "dashscope",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.databricks.chat.transformation.DatabricksConfig",
+      "embedding_transform": null,
+      "model_entry_count": 28,
+      "name": "databricks",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "databricks-model-serving",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "dataforseo",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.datarobot.chat.transformation.DataRobotConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "datarobot",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 36,
+      "name": "deepgram",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.deepinfra.chat.transformation.DeepInfraConfig",
+      "embedding_transform": null,
+      "model_entry_count": 67,
+      "name": "deepinfra",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.deepseek.chat.transformation.DeepSeekChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 12,
+      "name": "deepseek",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.docker_model_runner.chat.transformation.DockerModelRunnerChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "docker_model_runner",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "dotprompt",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "duckduckgo",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "elevenlabs",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.empower.chat.transformation.EmpowerChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "empower",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "exa_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 14,
+      "name": "fal_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.featherless_ai.chat.transformation.FeatherlessAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "featherless_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "firecrawl",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.fireworks_ai.chat.transformation.FireworksAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 293,
+      "name": "fireworks_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": true,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 7,
+      "name": "fireworks_ai-embedding-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.friendliai.chat.transformation.FriendliaiChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "friendliai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.galadriel.chat.transformation.GaladrielChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "galadriel",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.gemini.chat.transformation.GoogleAIStudioGeminiConfig",
+      "embedding_transform": null,
+      "model_entry_count": 68,
+      "name": "gemini",
+      "unsupported": false,
+      "verification": "differential_fixture"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.gigachat.chat.transformation.GigaChatConfig",
+      "embedding_transform": "litellm.llms.gigachat.embedding.transformation.GigaChatEmbeddingConfig",
+      "model_entry_count": 6,
+      "name": "gigachat",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.github.chat.transformation.GithubChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "github",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.github_copilot.chat.transformation.GithubCopilotConfig",
+      "embedding_transform": "litellm.llms.github_copilot.embedding.transformation.GithubCopilotEmbeddingConfig",
+      "model_entry_count": 33,
+      "name": "github_copilot",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 17,
+      "name": "gmi",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "google_pse",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.gradient_ai.chat.transformation.GradientAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 13,
+      "name": "gradient_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.groq.chat.transformation.GroqChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 14,
+      "name": "groq",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "helicone",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.heroku.chat.transformation.HerokuChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "heroku",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.hosted_vllm.chat.transformation.HostedVLLMChatConfig",
+      "embedding_transform": "litellm.llms.hosted_vllm.embedding.transformation.HostedVLLMEmbeddingConfig",
+      "model_entry_count": 0,
+      "name": "hosted_vllm",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.huggingface.chat.transformation.HuggingFaceChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "huggingface",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "huggingface-text-generation-inference",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "humanloop",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.hyperbolic.chat.transformation.HyperbolicChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 16,
+      "name": "hyperbolic",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.inception.chat.transformation.InceptionChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "inception",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": true,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": "litellm.llms.infinity.embedding.transformation.InfinityEmbeddingConfig",
+      "model_entry_count": 0,
+      "name": "infinity",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": true,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": "litellm.llms.jina_ai.embedding.transformation.JinaAIEmbeddingConfig",
+      "model_entry_count": 1,
+      "name": "jina_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.lambda_ai.chat.transformation.LambdaAIChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 20,
+      "name": "lambda_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.langflow.chat.transformation.LangFlowConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "langflow",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "langfuse",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.langgraph.chat.transformation.LangGraphConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "langgraph",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 5,
+      "name": "lemonade",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 12,
+      "name": "libertai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "linkup",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "litellm",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "litellm_agent",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.litellm_proxy.chat.transformation.LiteLLMProxyChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "litellm_proxy",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.llamafile.chat.transformation.LlamafileChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "llamafile",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 16,
+      "name": "llamagate",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.lm_studio.chat.transformation.LMStudioChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "lm_studio",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "manus",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.maritalk.MaritalkConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "maritalk",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.meta_llama.chat.transformation.LlamaAPIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "meta_llama",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "milvus",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.minimax.chat.transformation.MinimaxChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 10,
+      "name": "minimax",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.mistral.chat.transformation.MistralConfig",
+      "embedding_transform": null,
+      "model_entry_count": 58,
+      "name": "mistral",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "mlflow-model-serving",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.modelscope.chat.transformation.ModelScopeChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "modelscope",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.moonshot.chat.transformation.MoonshotChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 22,
+      "name": "moonshot",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.morph.chat.transformation.MorphChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "morph",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "mosaicml",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "nano-gpt",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.nebius.chat.transformation.NebiusConfig",
+      "embedding_transform": null,
+      "model_entry_count": 30,
+      "name": "nebius",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "neosantara",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.nlp_cloud.chat.transformation.NLPCloudConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "nlp_cloud",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.novita.chat.transformation.NovitaConfig",
+      "embedding_transform": null,
+      "model_entry_count": 85,
+      "name": "novita",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.nscale.chat.transformation.NscaleConfig",
+      "embedding_transform": null,
+      "model_entry_count": 16,
+      "name": "nscale",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.nvidia_nim.chat.transformation.NvidiaNimConfig",
+      "embedding_transform": null,
+      "model_entry_count": 3,
+      "name": "nvidia_nim",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "nvidia_riva",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.oci.chat.transformation.OCIChatConfig",
+      "embedding_transform": "litellm.llms.oci.embed.transformation.OCIEmbedConfig",
+      "model_entry_count": 44,
+      "name": "oci",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ollama.completion.transformation.OllamaConfig",
+      "embedding_transform": null,
+      "model_entry_count": 29,
+      "name": "ollama",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ollama.chat.transformation.OllamaChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "ollama_chat",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.oobabooga.chat.transformation.OobaboogaConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "oobabooga",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "explicit_native",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai.chat.gpt_transformation.OpenAIGPTConfig",
+      "embedding_transform": null,
+      "model_entry_count": 213,
+      "name": "openai",
+      "unsupported": false,
+      "verification": "differential_fixture"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.chat.transformation.OpenAILikeChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "openai_like",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openrouter.chat.transformation.OpenrouterConfig",
+      "embedding_transform": "litellm.llms.openrouter.embedding.transformation.OpenrouterEmbeddingConfig",
+      "model_entry_count": 95,
+      "name": "openrouter",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ovhcloud.chat.transformation.OVHCloudChatConfig",
+      "embedding_transform": "litellm.llms.ovhcloud.embedding.transformation.OVHCloudEmbeddingConfig",
+      "model_entry_count": 15,
+      "name": "ovhcloud",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 6,
+      "name": "palm",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "parallel_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "parasail",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.perplexity.chat.transformation.PerplexityChatConfig",
+      "embedding_transform": "litellm.llms.perplexity.embedding.transformation.PerplexityEmbeddingConfig",
+      "model_entry_count": 41,
+      "name": "perplexity",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.petals.completion.transformation.PetalsConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "petals",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "pg_vector",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 6,
+      "name": "pinstripes",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "poe",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "portkey",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.predibase.chat.transformation.PredibaseConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "predibase",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 9,
+      "name": "publicai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.ragflow.chat.transformation.RAGFlowConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "ragflow",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "recraft",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "reducto",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.replicate.chat.transformation.ReplicateConfig",
+      "embedding_transform": null,
+      "model_entry_count": 40,
+      "name": "replicate",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 6,
+      "name": "runwayml",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "s3_vectors",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.sagemaker.completion.transformation.SagemakerConfig",
+      "embedding_transform": "litellm.llms.sagemaker.embedding.transformation.SagemakerEmbeddingConfig",
+      "model_entry_count": 6,
+      "name": "sagemaker",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.sagemaker.chat.transformation.SagemakerChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "sagemaker_chat",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.sagemaker.nova.transformation.SagemakerNovaConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "sagemaker_nova",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.sambanova.chat.SambanovaConfig",
+      "embedding_transform": "litellm.llms.sambanova.embedding.transformation.SambaNovaEmbeddingConfig",
+      "model_entry_count": 19,
+      "name": "sambanova",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.sap.chat.transformation.GenAIHubOrchestrationConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "sap",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "sarvam",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 17,
+      "name": "scaleway",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "searxng",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "serper",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.snowflake.chat.transformation.SnowflakeConfig",
+      "embedding_transform": "litellm.llms.snowflake.embedding.transformation.SnowflakeEmbeddingConfig",
+      "model_entry_count": 37,
+      "name": "snowflake",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "soniox",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 23,
+      "name": "stability",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "synthetic",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "tavily",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 10,
+      "name": "tensormesh",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.codestral.completion.transformation.CodestralTextCompletionConfig",
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "text-completion-codestral",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.inception.completion.transformation.InceptionTextCompletionConfig",
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "text-completion-inception",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai.completion.transformation.OpenAITextCompletionConfig",
+      "embedding_transform": null,
+      "model_entry_count": 6,
+      "name": "text-completion-openai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "tinyfish",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.together_ai.chat.TogetherAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 43,
+      "name": "together_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "togetherai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "topaz",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.triton.completion.transformation.TritonConfig",
+      "embedding_transform": "litellm.llms.triton.embedding.transformation.TritonEmbeddingConfig",
+      "model_entry_count": 0,
+      "name": "triton",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.v0.chat.transformation.V0ChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 3,
+      "name": "v0",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.vercel_ai_gateway.chat.transformation.VercelAIGatewayConfig",
+      "embedding_transform": "litellm.llms.vercel_ai_gateway.embedding.transformation.VercelAIGatewayEmbeddingConfig",
+      "model_entry_count": 101,
+      "name": "vercel_ai_gateway",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini.VertexGeminiConfig",
+      "embedding_transform": null,
+      "model_entry_count": 15,
+      "name": "vertex_ai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 5,
+      "name": "vertex_ai-ai21_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 33,
+      "name": "vertex_ai-anthropic_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 3,
+      "name": "vertex_ai-deepseek_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": true,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 10,
+      "name": "vertex_ai-embedding-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 8,
+      "name": "vertex_ai-image-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 34,
+      "name": "vertex_ai-language-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 11,
+      "name": "vertex_ai-llama_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "vertex_ai-minimax_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 19,
+      "name": "vertex_ai-mistral_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "vertex_ai-moonshot_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 3,
+      "name": "vertex_ai-openai_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 4,
+      "name": "vertex_ai-qwen_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "vertex_ai-text-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 7,
+      "name": "vertex_ai-video-models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 2,
+      "name": "vertex_ai-zai_models",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini.VertexGeminiConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "vertex_ai_beta",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.vllm.completion.transformation.VLLMConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "vllm",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.volcengine.chat.transformation.VolcEngineChatConfig",
+      "embedding_transform": "litellm.llms.volcengine.embedding.transformation.VolcEngineEmbeddingConfig",
+      "model_entry_count": 12,
+      "name": "volcengine",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": true,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": "litellm.llms.voyage.embedding.transformation.VoyageEmbeddingConfig",
+      "model_entry_count": 19,
+      "name": "voyage",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.wandb.chat.transformation.WandbConfig",
+      "embedding_transform": null,
+      "model_entry_count": 16,
+      "name": "wandb",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": true,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.watsonx.chat.transformation.IBMWatsonXChatConfig",
+      "embedding_transform": "litellm.llms.watsonx.embed.transformation.IBMWatsonXEmbeddingConfig",
+      "model_entry_count": 29,
+      "name": "watsonx",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.watsonx.completion.transformation.IBMWatsonXAIConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "watsonx_text",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "openai_compatible",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.xai.chat.transformation.XAIChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 38,
+      "name": "xai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": false,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.openai_like.dynamic_config.create_config_class.<locals>.JSONProviderConfig",
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "xiaomi_mimo",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": false,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 0,
+      "name": "xinference",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": false,
+        "cost": true,
+        "embeddings": false,
+        "stream": false
+      },
+      "chat_transform": null,
+      "embedding_transform": null,
+      "model_entry_count": 1,
+      "name": "you_com",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    },
+    {
+      "adapter": "pinned_litellm_transform",
+      "capabilities": {
+        "chat": true,
+        "cost": true,
+        "embeddings": false,
+        "stream": true
+      },
+      "chat_transform": "litellm.llms.zai.chat.transformation.ZAIChatConfig",
+      "embedding_transform": null,
+      "model_entry_count": 11,
+      "name": "zai",
+      "unsupported": false,
+      "verification": "hermetic_matrix"
+    }
+  ],
+  "reference": {
+    "litellm_pin": "litellm==1.91.2",
+    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "price_snapshot_sha256": "c17510d67f23b28100e6cc332fc0546c249d1ca654f338b46e897e168f826bc9",
+    "price_source_policy": "wheel backup snapshot; never fetch LiteLLM main at runtime",
+    "source_url": "https://github.com/BerriAI/litellm/tree/v1.91.2"
+  },
+  "retry_classification": {
+    "classes": [
+      "AuthenticationError",
+      "Timeout",
+      "RateLimitError",
+      "ContentPolicyViolationError",
+      "BadRequestError"
+    ],
+    "source_asset": "router_utils/get_retry_from_policy.py"
+  },
+  "schema_version": 1,
+  "source_manifest": "providers.json",
+  "tokenizer_mapping": {
+    "policy": "port _select_tokenizer/create_tokenizer behavior and model metadata exactly",
+    "source_asset": "utils.py"
+  }
+}

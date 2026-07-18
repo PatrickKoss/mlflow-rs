@@ -171,6 +171,7 @@ pub enum Validator {
     UpdateGatewayEndpoint,
     DeleteGatewayEndpoint,
     UseGatewayEndpoint,
+    MissingGatewayEndpointName,
     CreateGatewayModelDefinition,
     ReadGatewayModelDefinition,
     UpdateGatewayModelDefinition,
@@ -301,6 +302,9 @@ impl Validator {
                 .await?
                 .can_delete),
             UseGatewayEndpoint => validate_gateway_endpoint_use(ctx).await,
+            MissingGatewayEndpointName => Err(MlflowError::invalid_parameter_value(
+                "No endpoint name found",
+            )),
             CreateGatewayModelDefinition => {
                 validate_gateway_dependencies(ctx, "secret_id", "gateway_secret").await
             }

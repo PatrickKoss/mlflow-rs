@@ -419,6 +419,137 @@ async fn native_embedding_adapters_use_the_unified_input_branch() {
     }
 }
 
+#[tokio::test]
+async fn passthrough_and_raw_proxy_routes_share_the_hermetic_transport() {
+    let fixture = Fixture::new().await;
+    let unary_cases = [
+        (
+            "/gateway/openai/v1/chat/completions",
+            json!({"model":"openai-endpoint","messages":[{"role":"user","content":"hello"}]}),
+        ),
+        (
+            "/gateway/openai/v1/embeddings",
+            json!({"model":"openai-endpoint","input":"hello"}),
+        ),
+        (
+            "/gateway/openai/v1/responses",
+            json!({"model":"openai-endpoint","input":"hello"}),
+        ),
+        (
+            "/gateway/openai/v1/responses/compact",
+            json!({"model":"openai-endpoint","previous_response_id":"obvious-fake-response"}),
+        ),
+        (
+            "/gateway/anthropic/v1/messages",
+            json!({"model":"anthropic-endpoint","messages":[{"role":"user","content":"hello"}],"max_tokens":8}),
+        ),
+        (
+            "/gateway/gemini/v1beta/models/gemini-endpoint:generateContent",
+            json!({"contents":[{"role":"user","parts":[{"text":"hello"}]}]}),
+        ),
+    ];
+    for (path, body) in unary_cases {
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(path)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-mlflow-authorization", "obvious-fake-rbac-token")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert!(response
+            .headers()
+            .contains_key("x-mlflow-gateway-duration-ms"));
+        let value: Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert!(value.is_object(), "{path}: {value}");
+    }
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/gemini/v1beta/models/gemini-endpoint:streamGenerateContent")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"contents":[{"role":"user","parts":[{"text":"hello"}]}]}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let stream = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(stream.windows(6).any(|window| window == b"[DONE]"));
+    assert!(stream.windows(10).any(|window| window == b"keep-alive"));
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/proxy/openai-endpoint/v1/chat/completions?fixture=1")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"model":"caller-selected-model","messages":[{"role":"user","content":"hello"}]})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let value: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(value["model"], "caller-selected-model");
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/openai/v1/chat/completions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"model":"openai-endpoint","messages":[{"role":"user","content":"error-429"}]})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/openai/v1/responses/compact")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({"model":"openai-endpoint","stream":true}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 fn provider_name(provider: &str) -> &str {
     if provider == "azure" {
         "openai"

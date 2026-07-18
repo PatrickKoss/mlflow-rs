@@ -20,6 +20,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod gateway;
+pub mod gateway_provider_matrix;
 pub mod gateway_runtime;
 pub mod graphql;
 pub mod invoke;
@@ -412,9 +413,7 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
     );
     // ---- end GenAI invoke submissions ----
 
-    // ---- Gateway runtime core (T18.3, §12.9) ----
-    // These native FastAPI-equivalent routes deliberately exclude provider
-    // passthrough and raw proxy paths, which remain T18.4 accounting.
+    // ---- Gateway runtime (T18.3/T18.4, §12.9) ----
     router = router.route(
         "/gateway/{endpoint_name}/mlflow/invocations",
         axum::routing::post(gateway_runtime::invocations),
@@ -423,7 +422,35 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         "/gateway/mlflow/v1/chat/completions",
         axum::routing::post(gateway_runtime::chat_completions),
     );
-    // ---- end Gateway runtime core ----
+    router = router.route(
+        "/gateway/openai/v1/chat/completions",
+        axum::routing::post(gateway_runtime::openai_passthrough_chat),
+    );
+    router = router.route(
+        "/gateway/openai/v1/embeddings",
+        axum::routing::post(gateway_runtime::openai_passthrough_embeddings),
+    );
+    router = router.route(
+        "/gateway/openai/v1/responses",
+        axum::routing::post(gateway_runtime::openai_passthrough_responses),
+    );
+    router = router.route(
+        "/gateway/openai/v1/responses/compact",
+        axum::routing::post(gateway_runtime::openai_passthrough_responses_compact),
+    );
+    router = router.route(
+        "/gateway/anthropic/v1/messages",
+        axum::routing::post(gateway_runtime::anthropic_passthrough_messages),
+    );
+    router = router.route(
+        "/gateway/gemini/v1beta/models/{*model_action}",
+        axum::routing::post(gateway_runtime::gemini_passthrough),
+    );
+    router = router.route(
+        "/gateway/proxy/{endpoint_name}/{*path}",
+        axum::routing::post(gateway_runtime::raw_proxy),
+    );
+    // ---- end Gateway runtime ----
 
     // AUTH GAP: online configs (D21) are authenticated-only in Python; no
     // experiment/scorer-specific validator is applied.
