@@ -168,6 +168,25 @@ async fn concurrent_claim_has_exactly_one_winner() {
 }
 
 #[tokio::test]
+async fn claim_exclusion_skips_a_backoff_delayed_job() {
+    let temp = TempDb::new("jobs_claim_exclusion").await;
+    let store = store(&temp).await;
+    let delayed = store.create_job(WS, "retry", "{}", None).await.unwrap();
+    let ready = store.create_job(WS, "retry", "{}", None).await.unwrap();
+
+    let claimed = store
+        .claim_next_job_excluding(WS, Some("retry"), std::slice::from_ref(&delayed.job_id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(claimed.job_id, ready.job_id);
+    assert_eq!(
+        store.get_job(WS, &delayed.job_id).await.unwrap().status,
+        JobStatus::Pending
+    );
+}
+
+#[tokio::test]
 async fn delete_jobs_only_removes_finalized_rows() {
     let temp = TempDb::new("jobs_delete").await;
     let store = store(&temp).await;

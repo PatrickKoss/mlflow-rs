@@ -466,10 +466,35 @@ impl JobStore {
         workspace: &str,
         job_name: Option<&str>,
     ) -> Result<Option<Job>, MlflowError> {
+        self.claim_next_job_excluding(workspace, job_name, &[])
+            .await
+    }
+
+    /// Atomically claim the oldest pending job that is not locally delayed.
+    ///
+    /// The runner uses `excluded_job_ids` while transient retries are in their
+    /// Python-compatible backoff window. Keeping the exclusion inside these
+    /// dialect-specific claim operations preserves T16.5's atomic selection;
+    /// the runner never reimplements a read-then-start claim race.
+    pub async fn claim_next_job_excluding(
+        &self,
+        workspace: &str,
+        job_name: Option<&str>,
+        excluded_job_ids: &[String],
+    ) -> Result<Option<Job>, MlflowError> {
         match self.db.dialect() {
-            Dialect::Sqlite => self.claim_sqlite(workspace, job_name).await,
-            Dialect::Postgres => self.claim_postgres(workspace, job_name).await,
-            Dialect::MySql => self.claim_mysql(workspace, job_name).await,
+            Dialect::Sqlite => {
+                self.claim_sqlite(workspace, job_name, excluded_job_ids)
+                    .await
+            }
+            Dialect::Postgres => {
+                self.claim_postgres(workspace, job_name, excluded_job_ids)
+                    .await
+            }
+            Dialect::MySql => {
+                self.claim_mysql(workspace, job_name, excluded_job_ids)
+                    .await
+            }
         }
     }
 
@@ -477,18 +502,24 @@ impl JobStore {
         &self,
         workspace: &str,
         job_name: Option<&str>,
+        excluded_job_ids: &[String],
     ) -> Result<Option<Job>, MlflowError> {
         let mut vals = vec![Val::Int(now_millis()), Val::Text(workspace.to_string())];
         let name_clause = if let Some(name) = job_name {
             vals.push(Val::Text(name.to_string()));
-            format!(" AND job_name = {}", self.db.dialect().placeholder(3))
+            format!(
+                " AND job_name = {}",
+                self.db.dialect().placeholder(vals.len())
+            )
         } else {
             String::new()
         };
+        let exclusion_clause = exclusion_clause(self.db.dialect(), &mut vals, excluded_job_ids);
         let sql = format!(
             "UPDATE {JOBS} SET status = {RUNNING}, last_update_time = ? \
              WHERE id = (SELECT id FROM {JOBS} WHERE workspace = ? AND status = {PENDING}\
-             {name_clause} ORDER BY creation_time, id LIMIT 1) AND status = {PENDING} \
+             {name_clause}{exclusion_clause} ORDER BY creation_time, id LIMIT 1) \
+             AND status = {PENDING} \
              RETURNING {}",
             job_columns()
         );
@@ -502,19 +533,25 @@ impl JobStore {
         &self,
         workspace: &str,
         job_name: Option<&str>,
+        excluded_job_ids: &[String],
     ) -> Result<Option<Job>, MlflowError> {
         let mut vals = vec![Val::Text(workspace.to_string())];
         let name_clause = if let Some(name) = job_name {
             vals.push(Val::Text(name.to_string()));
-            format!(" AND job_name = {}", self.db.dialect().placeholder(2))
+            format!(
+                " AND job_name = {}",
+                self.db.dialect().placeholder(vals.len())
+            )
         } else {
             String::new()
         };
+        let exclusion_clause = exclusion_clause(self.db.dialect(), &mut vals, excluded_job_ids);
         vals.push(Val::Int(now_millis()));
         let now_placeholder = self.db.dialect().placeholder(vals.len());
         let sql = format!(
             "WITH candidate AS (SELECT id FROM {JOBS} WHERE workspace = $1 AND status = {PENDING}\
-             {name_clause} ORDER BY creation_time, id LIMIT 1 FOR UPDATE SKIP LOCKED) \
+             {name_clause}{exclusion_clause} ORDER BY creation_time, id LIMIT 1 \
+             FOR UPDATE SKIP LOCKED) \
              UPDATE {JOBS} AS jobs SET status = {RUNNING}, last_update_time = {now_placeholder} \
              FROM candidate WHERE jobs.id = candidate.id AND jobs.status = {PENDING} \
              RETURNING {}",
@@ -530,6 +567,7 @@ impl JobStore {
         &self,
         workspace: &str,
         job_name: Option<&str>,
+        excluded_job_ids: &[String],
     ) -> Result<Option<Job>, MlflowError> {
         let mut tx = self.db.begin_tx().await.map_err(internal)?;
         let mut vals = vec![Val::Text(workspace.to_string())];
@@ -539,8 +577,10 @@ impl JobStore {
         } else {
             String::new()
         };
+        let exclusion_clause = exclusion_clause(self.db.dialect(), &mut vals, excluded_job_ids);
         let select = format!(
-            "SELECT id FROM {JOBS} WHERE workspace = ? AND status = {PENDING}{name_clause} \
+            "SELECT id FROM {JOBS} WHERE workspace = ? AND status = {PENDING}{name_clause}\
+             {exclusion_clause} \
              ORDER BY creation_time, id LIMIT 1 FOR UPDATE SKIP LOCKED"
         );
         let Some(id) = tx
@@ -670,6 +710,18 @@ impl JobStore {
             .await
             .map_err(internal)
     }
+}
+
+fn exclusion_clause(dialect: Dialect, vals: &mut Vec<Val>, excluded_job_ids: &[String]) -> String {
+    if excluded_job_ids.is_empty() {
+        return String::new();
+    }
+    let mut placeholders = Vec::with_capacity(excluded_job_ids.len());
+    for job_id in excluded_job_ids {
+        vals.push(Val::Text(job_id.clone()));
+        placeholders.push(dialect.placeholder(vals.len()));
+    }
+    format!(" AND id NOT IN ({})", placeholders.join(", "))
 }
 
 async fn fetch_job_tx(

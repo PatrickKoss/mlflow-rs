@@ -1826,6 +1826,7 @@ dependencies = [
  "mlflow-registry",
  "mlflow-search",
  "mlflow-store",
+ "mlflow-test-support",
  "mlflow-webhooks",
  "prost",
  "prost-types",

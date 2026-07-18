@@ -21,6 +21,7 @@ pub mod datasets;
 pub mod experiments;
 pub mod graphql;
 pub mod issues;
+pub mod job_runner;
 pub mod jobs;
 pub mod label_schemas;
 pub mod logged_models;
@@ -741,6 +742,7 @@ mod tests {
             // metrics-endpoint assertion, so enable it here.
             expose_prometheus: true,
             auth_enabled: false,
+            job_execution_enabled: true,
             enable_workspaces: false,
             workspace_store_uri: None,
         }
