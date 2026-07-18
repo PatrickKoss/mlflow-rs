@@ -568,6 +568,16 @@ async fn span_attribute_like_uses_extracted_values() {
         search_ids(
             &s,
             &[exp.clone()],
+            Some("span.attributes.`model` LIKE \"%gpt-4%\""),
+            &[],
+        )
+        .await,
+        vec!["exact", "substring", "suffix-quirk"]
+    );
+    assert_eq!(
+        search_ids(
+            &s,
+            &[exp.clone()],
             Some("span.attributes.hostile LIKE \"%snowman%\""),
             &[],
         )

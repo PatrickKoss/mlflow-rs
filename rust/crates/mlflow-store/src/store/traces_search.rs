@@ -600,6 +600,11 @@ fn build_span_condition(
     binds: &mut Vec<Val>,
 ) -> Result<String, MlflowError> {
     if let Some(attr) = key.strip_prefix("attributes.") {
+        // Python trims identifier backticks after removing the `attributes.`
+        // prefix, so dotted keys such as
+        // `span.attributes.`gen_ai.request.model`` address the same extracted
+        // key as their unquoted form.
+        let attr = attr.trim_matches('`');
         let val = as_str(value)?;
         let pattern = format!("%\"{attr}\"{val}%");
         if comparator == "RLIKE" {
