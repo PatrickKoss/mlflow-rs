@@ -16,7 +16,10 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
 **Open:**
-- **Part 2 (genai port)** — starting now per user directive.
+- **Part 2 (genai port)** — Phase 15 (foundations) COMPLETE 2026-07-18; Phase
+  16 (GenAI CRUD) in progress.
+- **D23 Phoenix license blocker** — awaiting user review (affects six T19.3
+  evaluators; everything else unblocked).
 - **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
   done together.
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
@@ -2910,7 +2913,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       an empty temp dir (python/python3 NotFound) and both flows still pass.
       Scratch jobs adapter marked T15.4-only pending T16.5's real store.
       cargo + replay gates exit 0 pre- and post-merge.
-- [ ] **T15.5 Reachability, test, and corpus inventory**: enumerate every
+- [x] **T15.5 Reachability, test, and corpus inventory**: enumerate every
       `mlflow/genai` module/function/test plus §12 gateway/jobs/assistant/
       archival suites; classify server reachability, record the native owner
       and fixture, generate the pinned scorer/provider/GEPA compatibility
@@ -2920,6 +2923,18 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       third-party metric/provider in the pinned reference has an implementation
       and test owner; a missing or license-blocked port blocks Part II.
       **VER:** checked-in machine-readable manifest + generated Markdown report.
+      **DONE (2026-07-18):** `rust/genai-inventory/` — ledger.json (1,546
+      server_reachable / 346 client_only / 0 dead / 0 unclassified; per-phase:
+      T16 138, T17 6, T18 55, T19 1,331, T20 12, T21 4), REPORT.md generated
+      byte-stably from the ledger, validator script enforces the invariants;
+      manifests: scorers.json (138), providers.json (191 providers / 2,908
+      model records, litellm==1.91.2 wheel-pinned incl. price-table SHA-256
+      per D16), algorithms (GEPA 0.0.27 + MetaPrompt); corpus-recorders.md
+      (scripted Python semantic/model transcripts + framing-aware SSE
+      recordings, T12.4 normalization patterns). License audit: all sources
+      MIT/Apache-2.0 EXCEPT Phoenix evaluators (Elastic-2.0) → BLOCKER
+      recorded as D23 (explicit Rust rejection of those scorer families;
+      user review requested). ruff/report-stability/validator/fmt exit 0.
 
 ### Phase 16 — GenAI CRUD (Tier A)
 
@@ -3182,6 +3197,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 | D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. During migration the Python and Rust runners must never run simultaneously against the same DB (double execution); after cutover only native Rust workers exist. | Recovery improves because queue and lifecycle state cannot diverge. | decided (T15.1 pass 2026-07-18) |
 | D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | decided (T15.1 pass 2026-07-18) |
 | D22 | **FastAPI-vs-Flask error-shape split**: gateway/assistant routes emit FastAPI-style errors (`{"detail": ...}`, 422 validation shape) while Flask routes emit MLflow proto-style errors. Rust must keep the per-route split (Part I already did this for OTLP's 422). | | accepted |
+| D23 | **Phoenix evaluators license blocker** (T15.5 audit): `arize-phoenix-evals` is Elastic-2.0 — usable as a Python runtime dependency but NOT reimplementable/vendorable into Apache-2.0 MLflow. Rust explicitly REJECTS the six Phoenix-derived serialized scorer families with a clear error naming the license constraint (never silently approximates). Unblock paths: upstream relicense/permission grant, or counsel-approved clean-room from public behavior + recorded oracles only. The rejection is a deliberate wire deviation → Phase 22 corpus allowlist entry. All other Part II sources are MIT/Apache-2.0 (see rust/genai-inventory/licenses.md). USER REVIEW REQUESTED — this narrows T19.3 scope. | Six evaluators affected; everything else unblocked. | decided (T15.5 audit 2026-07-18), pending user review |
 | R4 | **Provider API drift**: the explicit gateway adapters plus the pinned LiteLLM compatibility manifest chase moving upstream APIs. | Hermetic request/stream/cost conformance pins today's behavior; manifest regeneration is required with each supported MLflow/provider snapshot (extends D8). | mitigated |
 | R5 | **SSE byte-parity is fragile** across providers/chunk boundaries. | Frame-level recorder + recorded fixtures (T15.5/T22.3); allowlist only documented deviations. | mitigated |
 | R6 | **KEK/secret ops**: AAD immutability means renames brick secrets; wrong passphrase = silent unusable gateway. | Startup probe decrypts a sentinel; runbook coverage (T22.6). | open |
