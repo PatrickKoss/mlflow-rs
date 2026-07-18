@@ -15,6 +15,7 @@ use futures::future::BoxFuture;
 use futures::{stream, FutureExt, StreamExt};
 use md5::{Digest, Md5};
 use mlflow_store::{python_json_dumps, ResolvedGatewayEndpointConfig, ResolvedGatewayModelConfig};
+use rand::Rng;
 use reqwest::Url;
 use serde_json::{json, Map, Value};
 
@@ -91,6 +92,37 @@ impl GatewayRuntimeError {
             detail => format!("{}: {detail}", self.status.as_u16()),
         }
     }
+
+    fn propagates_fallback_status(&self) -> bool {
+        matches!(self.stream_type, "AIGatewayException" | "HTTPException")
+    }
+
+    fn fallback_message(&self) -> String {
+        match &self.detail {
+            Value::String(message) if self.stream_type == "HTTPException" => {
+                format!("{}: {message}", self.status.as_u16())
+            }
+            Value::String(message) => message.clone(),
+            detail if self.stream_type == "HTTPException" => {
+                format!("{}: {detail}", self.status.as_u16())
+            }
+            detail => detail.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum PrimaryRoute {
+    Single(Box<ResolvedGatewayModelConfig>),
+    TrafficSplit(Vec<ResolvedGatewayModelConfig>),
+}
+
+#[derive(Debug, Clone)]
+struct RoutingPlan {
+    primary: PrimaryRoute,
+    fallbacks: Vec<ResolvedGatewayModelConfig>,
+    fallback_attempt_label: Option<i64>,
+    attempt_limit: usize,
 }
 
 /// Provider seam consumed by the unified runtime and extended by T18.4's
@@ -559,39 +591,73 @@ async fn invoke_value(
             .response(start.elapsed())
         }
     };
-    let model = match primary_model(&endpoint) {
-        Ok(model) => model.clone(),
-        Err(error) => return error.response(start.elapsed()),
-    };
-    if let Err(error) = check_provider_allowed(&model.provider) {
-        return error.response(start.elapsed());
-    }
-    let adapter = match adapter_for(&model.provider) {
-        Ok(adapter) => adapter,
+    let plan = match build_routing_plan(&endpoint) {
+        Ok(plan) => plan,
         Err(error) => return error.response(start.elapsed()),
     };
     let stream = payload
         .get("stream")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let request = match adapter.transform_request(&model, kind, payload, stream) {
-        Ok(request) => request,
-        Err(error) => return error.response(start.elapsed()),
-    };
     if stream {
-        stream_response(adapter, model, request, start).await
+        stream_response(plan, kind, payload, start).await
     } else {
-        non_stream_response(adapter, model, kind, request, start).await
+        non_stream_response(plan, kind, payload, start).await
     }
 }
 
 async fn non_stream_response(
-    adapter: Box<dyn GatewayProviderAdapter>,
-    model: ResolvedGatewayModelConfig,
+    plan: RoutingPlan,
     kind: InvocationKind,
-    request: ProviderRequest,
+    payload: Value,
     start: Instant,
 ) -> Response {
+    let mut provider_elapsed = Duration::ZERO;
+    let mut last_error = None;
+    for attempt_index in 0..plan.attempt_limit {
+        let model = match plan.model_for_attempt(attempt_index) {
+            Ok(model) => model,
+            Err(error) => {
+                last_error = Some(error);
+                continue;
+            }
+        };
+        let result = execute_non_stream_attempt(model, kind, payload.clone()).await;
+        provider_elapsed += result.1;
+        match result.0 {
+            Ok(value) => {
+                return with_non_stream_timing(
+                    json_response(StatusCode::OK, value),
+                    start,
+                    provider_elapsed,
+                )
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    let error = if let Some(attempts) = plan.fallback_attempt_label {
+        fallback_error(attempts, last_error.as_ref())
+    } else {
+        last_error.unwrap_or_else(|| GatewayRuntimeError::internal("No provider was selected"))
+    };
+    let response = error.response(start.elapsed());
+    with_non_stream_timing(response, start, provider_elapsed)
+}
+
+async fn execute_non_stream_attempt(
+    model: ResolvedGatewayModelConfig,
+    kind: InvocationKind,
+    payload: Value,
+) -> (Result<Value, GatewayRuntimeError>, Duration) {
+    let adapter = match adapter_for(&model.provider) {
+        Ok(adapter) => adapter,
+        Err(error) => return (Err(error), Duration::ZERO),
+    };
+    let request = match adapter.transform_request(&model, kind, payload, false) {
+        Ok(request) => request,
+        Err(error) => return (Err(error), Duration::ZERO),
+    };
     let provider_start = Instant::now();
     let response = match client()
         .post(request.url)
@@ -602,12 +668,13 @@ async fn non_stream_response(
     {
         Ok(response) => response,
         Err(error) => {
-            let response = GatewayRuntimeError::http(
-                StatusCode::BAD_GATEWAY,
-                Value::String(error.to_string()),
+            return (
+                Err(GatewayRuntimeError::http(
+                    StatusCode::BAD_GATEWAY,
+                    Value::String(error.to_string()),
+                )),
+                provider_start.elapsed(),
             )
-            .response(start.elapsed());
-            return with_non_stream_timing(response, start, provider_start.elapsed());
         }
     };
     let status = response.status();
@@ -621,44 +688,38 @@ async fn non_stream_response(
         match response.json::<Value>().await {
             Ok(value) => value,
             Err(error) => {
-                let response = GatewayRuntimeError::http(
-                    StatusCode::BAD_GATEWAY,
-                    Value::String(error.to_string()),
+                return (
+                    Err(GatewayRuntimeError::http(
+                        StatusCode::BAD_GATEWAY,
+                        Value::String(error.to_string()),
+                    )),
+                    provider_start.elapsed(),
                 )
-                .response(start.elapsed());
-                return with_non_stream_timing(response, start, provider_start.elapsed());
             }
         }
     } else if content_type.contains("text/plain") {
         json!({"message": response.text().await.unwrap_or_default()})
     } else {
-        let response = GatewayRuntimeError::http(
-            StatusCode::BAD_GATEWAY,
-            Value::String(format!(
-                "The returned data type from the route service is not supported. Received content type: {}",
-                if content_type.is_empty() { "None" } else { &content_type }
+        return (
+            Err(GatewayRuntimeError::http(
+                StatusCode::BAD_GATEWAY,
+                Value::String(format!(
+                    "The returned data type from the route service is not supported. Received content type: {}",
+                    if content_type.is_empty() { "None" } else { &content_type }
+                )),
             )),
-        )
-        .response(start.elapsed());
-        return with_non_stream_timing(response, start, provider_start.elapsed());
+            provider_start.elapsed(),
+        );
     };
     let provider_elapsed = provider_start.elapsed();
     if !status.is_success() {
-        let response = adapter.map_error(status, body).response(start.elapsed());
-        return with_non_stream_timing(response, start, provider_elapsed);
+        return (Err(adapter.map_error(status, body)), provider_elapsed);
     }
     let transformed = match adapter.transform_response(&model, kind, body, unix_seconds()) {
         Ok(value) => value,
-        Err(error) => {
-            let response = error.response(start.elapsed());
-            return with_non_stream_timing(response, start, provider_elapsed);
-        }
+        Err(error) => return (Err(error), provider_elapsed),
     };
-    with_non_stream_timing(
-        json_response(StatusCode::OK, transformed),
-        start,
-        provider_elapsed,
-    )
+    (Ok(transformed), provider_elapsed)
 }
 
 fn with_non_stream_timing(
@@ -679,36 +740,38 @@ fn with_non_stream_timing(
 }
 
 struct ProviderStream {
+    plan: RoutingPlan,
+    kind: InvocationKind,
+    payload: Value,
+    next_attempt: usize,
+    active: Option<ActiveProviderStream>,
+    last_error: Option<GatewayRuntimeError>,
+    pending: Vec<Bytes>,
+    done: bool,
+}
+
+struct ActiveProviderStream {
     initial: Option<BoxFuture<'static, Result<reqwest::Response, reqwest::Error>>>,
     upstream: Option<futures::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>>,
     adapter: Box<dyn GatewayProviderAdapter>,
     model: ResolvedGatewayModelConfig,
     transform_state: StreamTransformState,
     buffer: Vec<u8>,
-    pending: Vec<Bytes>,
-    done: bool,
 }
 
 async fn stream_response(
-    adapter: Box<dyn GatewayProviderAdapter>,
-    model: ResolvedGatewayModelConfig,
-    request: ProviderRequest,
+    plan: RoutingPlan,
+    kind: InvocationKind,
+    payload: Value,
     start: Instant,
 ) -> Response {
-    let initial = client()
-        .post(request.url)
-        .headers(request.headers)
-        .json(&request.body)
-        .send()
-        .boxed();
-
     let state = ProviderStream {
-        initial: Some(initial),
-        upstream: None,
-        adapter,
-        model,
-        transform_state: StreamTransformState::default(),
-        buffer: Vec::new(),
+        plan,
+        kind,
+        payload,
+        next_attempt: 0,
+        active: None,
+        last_error: None,
         pending: Vec::new(),
         done: false,
     };
@@ -732,96 +795,210 @@ async fn next_stream_chunk(mut state: ProviderStream) -> Option<(Bytes, Provider
         if state.done {
             return None;
         }
-        if let Some(initial) = state.initial.take() {
+        if state.active.is_none() {
+            start_stream_attempt(&mut state);
+            continue;
+        }
+        let initial = state
+            .active
+            .as_mut()
+            .and_then(|active| active.initial.take());
+        if let Some(initial) = initial {
             match initial.await {
                 Ok(response) if response.status().is_success() => {
-                    state.upstream = Some(response.bytes_stream().boxed());
+                    state.active.as_mut().expect("active attempt").upstream =
+                        Some(response.bytes_stream().boxed());
                 }
                 Ok(response) => {
                     let status = response.status();
                     let body = response.json::<Value>().await.unwrap_or(Value::Null);
-                    let error = state.adapter.map_error(status, body);
-                    state
-                        .pending
-                        .push(sse_error(&error.stream_message(), error.stream_type));
-                    state.done = true;
+                    let error = state
+                        .active
+                        .as_ref()
+                        .expect("active attempt")
+                        .adapter
+                        .map_error(status, body);
+                    fail_stream_attempt(&mut state, error);
                 }
                 Err(error) => {
                     let error = GatewayRuntimeError::http(
                         StatusCode::BAD_GATEWAY,
                         Value::String(error.to_string()),
                     );
-                    state
-                        .pending
-                        .push(sse_error(&error.stream_message(), error.stream_type));
-                    state.done = true;
+                    fail_stream_attempt(&mut state, error);
                 }
             }
             continue;
         }
-        let Some(upstream) = state.upstream.as_mut() else {
-            state.done = true;
-            continue;
-        };
-        match upstream.next().await {
+        let next = state
+            .active
+            .as_mut()
+            .and_then(|active| active.upstream.as_mut())
+            .expect("connected active stream")
+            .next()
+            .await;
+        match next {
             Some(Ok(chunk)) => {
-                state.buffer.extend_from_slice(&chunk);
-                process_complete_lines(&mut state);
+                let active = state.active.as_mut().expect("active attempt");
+                active.buffer.extend_from_slice(&chunk);
+                if let Err(error) = process_complete_lines(&mut state) {
+                    fail_stream_attempt(&mut state, error);
+                }
             }
             Some(Err(error)) => {
-                state.done = true;
-                state
-                    .pending
-                    .push(sse_error(&error.to_string(), "ClientPayloadError"));
+                fail_stream_attempt(
+                    &mut state,
+                    GatewayRuntimeError {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        detail: Value::String(error.to_string()),
+                        stream_type: "ClientPayloadError",
+                    },
+                );
             }
             None => {
-                state.done = true;
-                if !state.buffer.is_empty() {
-                    let line = std::mem::take(&mut state.buffer);
-                    process_provider_line(&mut state, &line);
+                let line = state.active.as_mut().and_then(|active| {
+                    (!active.buffer.is_empty()).then(|| std::mem::take(&mut active.buffer))
+                });
+                if let Some(line) = line {
+                    if let Err(error) = process_provider_line(&mut state, &line) {
+                        fail_stream_attempt(&mut state, error);
+                        continue;
+                    }
                 }
+                // An empty stream or a clean EOF is success and ends the
+                // fallback chain, exactly like Python's async-for completion.
+                state.done = true;
             }
         }
     }
 }
 
-fn process_complete_lines(state: &mut ProviderStream) {
-    while let Some(index) = state.buffer.iter().position(|byte| *byte == b'\n') {
-        let mut line: Vec<u8> = state.buffer.drain(..=index).collect();
+fn start_stream_attempt(state: &mut ProviderStream) {
+    if state.next_attempt >= state.plan.attempt_limit {
+        finish_failed_stream(state);
+        return;
+    }
+    let attempt_index = state.next_attempt;
+    state.next_attempt += 1;
+    let model = match state.plan.model_for_attempt(attempt_index) {
+        Ok(model) => model,
+        Err(error) => {
+            fail_stream_attempt(state, error);
+            return;
+        }
+    };
+    let adapter = match adapter_for(&model.provider) {
+        Ok(adapter) => adapter,
+        Err(error) => {
+            fail_stream_attempt(state, error);
+            return;
+        }
+    };
+    let request = match adapter.transform_request(&model, state.kind, state.payload.clone(), true) {
+        Ok(request) => request,
+        Err(error) => {
+            fail_stream_attempt(state, error);
+            return;
+        }
+    };
+    let initial = client()
+        .post(request.url)
+        .headers(request.headers)
+        .json(&request.body)
+        .send()
+        .boxed();
+    state.active = Some(ActiveProviderStream {
+        initial: Some(initial),
+        upstream: None,
+        adapter,
+        model,
+        transform_state: StreamTransformState::default(),
+        buffer: Vec::new(),
+    });
+}
+
+fn fail_stream_attempt(state: &mut ProviderStream, error: GatewayRuntimeError) {
+    state.last_error = Some(error);
+    state.active = None;
+    if state.next_attempt >= state.plan.attempt_limit {
+        finish_failed_stream(state);
+    }
+}
+
+fn finish_failed_stream(state: &mut ProviderStream) {
+    let error = if let Some(attempts) = state.plan.fallback_attempt_label {
+        fallback_error(attempts, state.last_error.as_ref())
+    } else {
+        state
+            .last_error
+            .take()
+            .unwrap_or_else(|| GatewayRuntimeError::internal("No provider was selected"))
+    };
+    state
+        .pending
+        .push(sse_error(&error.stream_message(), error.stream_type));
+    state.done = true;
+}
+
+fn process_complete_lines(state: &mut ProviderStream) -> Result<(), GatewayRuntimeError> {
+    loop {
+        let index = state
+            .active
+            .as_ref()
+            .and_then(|active| active.buffer.iter().position(|byte| *byte == b'\n'));
+        let Some(index) = index else {
+            return Ok(());
+        };
+        let mut line: Vec<u8> = state
+            .active
+            .as_mut()
+            .expect("active attempt")
+            .buffer
+            .drain(..=index)
+            .collect();
         line.pop();
         if line.last() == Some(&b'\r') {
             line.pop();
         }
-        process_provider_line(state, &line);
+        process_provider_line(state, &line)?;
     }
 }
 
-fn process_provider_line(state: &mut ProviderStream, line: &[u8]) {
+fn process_provider_line(
+    state: &mut ProviderStream,
+    line: &[u8],
+) -> Result<(), GatewayRuntimeError> {
     let Ok(text) = std::str::from_utf8(line) else {
-        return;
+        return Ok(());
     };
     let text = text.trim();
     if text.is_empty() || text.starts_with(':') || text.starts_with("event:") {
-        return;
+        return Ok(());
     }
     let Some(data) = text.strip_prefix("data:") else {
-        return;
+        return Ok(());
     };
     let data = data.trim();
     if data.is_empty() || data == "[DONE]" {
-        return;
+        return Ok(());
     }
+    let provider_name = state
+        .active
+        .as_ref()
+        .expect("active attempt")
+        .adapter
+        .provider_name();
     let value = match serde_json::from_str::<Value>(data) {
         Ok(value) => value,
         Err(error) => {
             // OpenAI's `stream_sse_data` deliberately ignores malformed JSON
             // data lines. Anthropic/Gemini call `json.loads` directly, so the
             // same malformed line becomes an in-band safe_stream error.
-            if state.adapter.provider_name() == "openai" {
-                return;
+            if provider_name == "openai" {
+                return Ok(());
             }
             let message = if data == "not-json" {
-                if state.adapter.provider_name() == "anthropic" {
+                if provider_name == "anthropic" {
                     "Expecting value: line 1 column 2 (char 1)".to_string()
                 } else {
                     "Expecting value: line 1 column 1 (char 0)".to_string()
@@ -829,28 +1006,27 @@ fn process_provider_line(state: &mut ProviderStream, line: &[u8]) {
             } else {
                 error.to_string()
             };
-            state.pending.push(sse_error(&message, "JSONDecodeError"));
-            state.done = true;
-            return;
+            return Err(GatewayRuntimeError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                detail: Value::String(message),
+                stream_type: "JSONDecodeError",
+            });
         }
     };
-    match state.adapter.transform_stream_frame(
-        &state.model,
+    let active = state.active.as_mut().expect("active attempt");
+    match active.adapter.transform_stream_frame(
+        &active.model,
         value,
-        &mut state.transform_state,
+        &mut active.transform_state,
         unix_seconds(),
     ) {
         Ok(frames) => {
             for frame in frames {
                 state.pending.push(sse_json(&frame));
             }
+            Ok(())
         }
-        Err(error) => {
-            state
-                .pending
-                .push(sse_error(&error.stream_message(), error.stream_type));
-            state.done = true;
-        }
+        Err(error) => Err(error),
     }
 }
 
@@ -931,22 +1107,200 @@ fn parse_body(body: &[u8]) -> Result<Value, GatewayRuntimeError> {
     }
 }
 
-fn primary_model(
+fn build_routing_plan(
     endpoint: &ResolvedGatewayEndpointConfig,
-) -> Result<&ResolvedGatewayModelConfig, GatewayRuntimeError> {
-    endpoint
+) -> Result<RoutingPlan, GatewayRuntimeError> {
+    let primary_models = endpoint
         .models
         .iter()
-        .find(|model| model.linkage_type == "PRIMARY")
-        .ok_or_else(|| {
-            GatewayRuntimeError::http(
-                StatusCode::NOT_FOUND,
-                json!({
-                    "error_code":"RESOURCE_DOES_NOT_EXIST",
-                    "message":format!("Endpoint '{}' has no PRIMARY models configured", endpoint.endpoint_name)
-                }),
-            )
-        })
+        .filter(|model| model.linkage_type == "PRIMARY")
+        .cloned()
+        .collect::<Vec<_>>();
+    if primary_models.is_empty() {
+        return Err(GatewayRuntimeError::http(
+            StatusCode::NOT_FOUND,
+            json!({
+                "error_code":"RESOURCE_DOES_NOT_EXIST",
+                "message":format!("Endpoint '{}' has no PRIMARY models configured", endpoint.endpoint_name)
+            }),
+        ));
+    }
+
+    let primary = if endpoint.routing_strategy.as_deref() == Some("REQUEST_BASED_TRAFFIC_SPLIT") {
+        validate_models(&primary_models)?;
+        PrimaryRoute::TrafficSplit(primary_models)
+    } else {
+        let model = primary_models
+            .into_iter()
+            .next()
+            .expect("checked non-empty");
+        validate_models(std::slice::from_ref(&model))?;
+        PrimaryRoute::Single(Box::new(model))
+    };
+
+    let mut fallbacks = endpoint
+        .models
+        .iter()
+        .filter(|model| model.linkage_type == "FALLBACK")
+        .cloned()
+        .collect::<Vec<_>>();
+    let Some(fallback_config) = endpoint
+        .fallback_config
+        .as_ref()
+        .filter(|_| !fallbacks.is_empty())
+    else {
+        return Ok(RoutingPlan {
+            primary,
+            fallbacks: Vec::new(),
+            fallback_attempt_label: None,
+            attempt_limit: 1,
+        });
+    };
+
+    // Python's stable sort leaves equal and missing fallback_order entries in
+    // endpoint-model order, with missing values after every explicit order.
+    fallbacks.sort_by_key(|model| {
+        (
+            model.fallback_order.is_none(),
+            model.fallback_order.unwrap_or_default(),
+        )
+    });
+    validate_models(&fallbacks)?;
+
+    // `max_attempts` counts fallback destinations in GatewayEndpoint, while
+    // FallbackProvider counts the primary too. Python also treats zero like
+    // None (`configured or len(fallback_models)`) and caps at provider count.
+    let configured_fallbacks = match fallback_config.max_attempts {
+        Some(value) if value != 0 => i64::from(value),
+        _ => i64::try_from(fallbacks.len()).expect("model count fits i64"),
+    };
+    let provider_count = 1_i64 + i64::try_from(fallbacks.len()).expect("model count fits i64");
+    let attempt_label = (configured_fallbacks + 1).min(provider_count);
+    let python_slice_len = if attempt_label >= 0 {
+        usize::try_from(attempt_label)
+            .unwrap_or(usize::MAX)
+            .min(provider_count as usize)
+    } else {
+        (provider_count - (-attempt_label).min(provider_count)) as usize
+    };
+    // For negative values Python's `attempt < self._max_attempts` is false on
+    // the first failure even when negative slicing selected several providers.
+    let attempt_limit = if attempt_label > 0 {
+        python_slice_len
+    } else {
+        python_slice_len.min(1)
+    };
+    Ok(RoutingPlan {
+        primary,
+        fallbacks,
+        fallback_attempt_label: Some(attempt_label),
+        attempt_limit,
+    })
+}
+
+impl RoutingPlan {
+    fn model_for_attempt(
+        &self,
+        attempt_index: usize,
+    ) -> Result<ResolvedGatewayModelConfig, GatewayRuntimeError> {
+        if attempt_index == 0 {
+            return match &self.primary {
+                PrimaryRoute::Single(model) => Ok((**model).clone()),
+                PrimaryRoute::TrafficSplit(models) => {
+                    let index = weighted_model_index(models)?;
+                    Ok(models[index].clone())
+                }
+            };
+        }
+        self.fallbacks
+            .get(attempt_index - 1)
+            .cloned()
+            .ok_or_else(|| GatewayRuntimeError::internal("Fallback attempt is out of range"))
+    }
+}
+
+fn validate_models(models: &[ResolvedGatewayModelConfig]) -> Result<(), GatewayRuntimeError> {
+    for model in models {
+        check_provider_allowed(&model.provider)?;
+        adapter_for(&model.provider)?;
+    }
+    Ok(())
+}
+
+fn weighted_model_index(
+    models: &[ResolvedGatewayModelConfig],
+) -> Result<usize, GatewayRuntimeError> {
+    let weights = models
+        .iter()
+        .map(|model| python_integer_weight(model.weight))
+        .collect::<Result<Vec<_>, _>>()?;
+    // Python draws from NumPy's process-global MT19937 stream. Rust uses its
+    // per-thread RNG: probabilities and independent-choice distribution are
+    // identical, but the seeded cross-language request order is deliberately
+    // not byte-for-byte reproducible (the same order-only precedent as T17.3).
+    let mut rng = rand::thread_rng();
+    weighted_index_for_draw(&weights, rng.gen::<f64>())
+}
+
+fn python_integer_weight(weight: f64) -> Result<f32, GatewayRuntimeError> {
+    let scaled = weight * 100.0;
+    if scaled.is_nan() {
+        return Err(python_value_error("cannot convert float NaN to integer"));
+    }
+    if !scaled.is_finite() {
+        return Err(python_value_error(
+            "cannot convert float infinity to integer",
+        ));
+    }
+    Ok((scaled.trunc() as i64) as f32)
+}
+
+fn weighted_index_for_draw(weights: &[f32], draw: f64) -> Result<usize, GatewayRuntimeError> {
+    let sum = weights.iter().copied().sum::<f32>();
+    let probabilities = weights
+        .iter()
+        .map(|weight| *weight / sum)
+        .collect::<Vec<_>>();
+    if probabilities.iter().any(|probability| probability.is_nan()) {
+        return Err(python_value_error("probabilities contain NaN"));
+    }
+    if probabilities.iter().any(|probability| *probability < 0.0) {
+        return Err(python_value_error("probabilities are not non-negative"));
+    }
+    let mut cumulative = 0.0_f64;
+    let mut last_nonzero = None;
+    for (index, probability) in probabilities.into_iter().enumerate() {
+        if probability > 0.0 {
+            last_nonzero = Some(index);
+        }
+        cumulative += f64::from(probability);
+        if draw < cumulative {
+            return Ok(index);
+        }
+    }
+    last_nonzero.ok_or_else(|| python_value_error("probabilities contain NaN"))
+}
+
+fn python_value_error(message: &str) -> GatewayRuntimeError {
+    GatewayRuntimeError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        detail: Value::String(message.to_string()),
+        stream_type: "ValueError",
+    }
+}
+
+fn fallback_error(attempts: i64, last_error: Option<&GatewayRuntimeError>) -> GatewayRuntimeError {
+    let status = last_error
+        .filter(|error| error.propagates_fallback_status())
+        .map(|error| error.status)
+        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let last_message = last_error
+        .map(GatewayRuntimeError::fallback_message)
+        .unwrap_or_else(|| "None".to_string());
+    GatewayRuntimeError::new(
+        status,
+        format!("All {attempts} fallback attempts failed. Last error: {last_message}"),
+    )
 }
 
 fn adapter_for(provider: &str) -> Result<Box<dyn GatewayProviderAdapter>, GatewayRuntimeError> {
@@ -1987,6 +2341,7 @@ fn unix_seconds() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{rngs::StdRng, SeedableRng};
     use std::collections::HashMap;
 
     fn fixture_model(provider: &str) -> ResolvedGatewayModelConfig {
@@ -2003,6 +2358,36 @@ mod tests {
             linkage_type: "PRIMARY".to_string(),
             fallback_order: None,
         }
+    }
+
+    #[test]
+    fn traffic_split_truncates_to_percent_and_excludes_zero_weight() {
+        assert_eq!(python_integer_weight(0.009).unwrap(), 0.0);
+        assert_eq!(python_integer_weight(0.019).unwrap(), 1.0);
+        assert_eq!(weighted_index_for_draw(&[0.0, 100.0], 0.0).unwrap(), 1);
+        assert_eq!(weighted_index_for_draw(&[100.0, 0.0], 0.999).unwrap(), 0);
+        assert_eq!(weighted_index_for_draw(&[25.0], 0.75).unwrap(), 0);
+        assert_eq!(
+            weighted_index_for_draw(&[0.0, 0.0], 0.5)
+                .unwrap_err()
+                .detail,
+            "probabilities contain NaN"
+        );
+    }
+
+    #[test]
+    fn seeded_traffic_split_distribution_is_ci_stable() {
+        let mut rng = StdRng::seed_from_u64(18_005);
+        let mut counts = [0_usize; 2];
+        for _ in 0..100_000 {
+            let index = weighted_index_for_draw(&[69.0, 31.0], rng.gen()).unwrap();
+            counts[index] += 1;
+        }
+        let first_share = counts[0] as f64 / 100_000.0;
+        assert!(
+            (first_share - 0.69).abs() < 0.01,
+            "counts={counts:?}, share={first_share}"
+        );
     }
 
     #[test]
