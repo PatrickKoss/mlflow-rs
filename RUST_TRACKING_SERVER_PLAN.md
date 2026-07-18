@@ -2966,12 +2966,31 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       restored with a clarifying comment (4410bc04b). Post-merge gates
       fmt/clippy/test/route_parity all 0; replay 133 cases, 0
       non-allowlisted diffs.
-- [ ] **T16.2 Scorers CRUD + online configs**: 5 RPCs + 2 config routes;
+- [x] **T16.2 Scorers CRUD + online configs**: 5 RPCs + 2 config routes;
       MAX+1 versioning, latest-per-name listing, gateway-endpoint name→ID
       payload rewrite, decorator-scorer registration rejection (exact error).
       **AC:** scorer CRUD suites pass; serialized payloads written by either
       server read identically by the other.
       **VER:** Phase 22 runner `-k scorer`.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 9fe2f203a): NO new
+      migration — all 3 scorer tables pre-existed at head `c4a9b7d3e812`.
+      7 logical routes under /api/3.0 + /ajax-api/3.0. MAX+1 collision
+      retry, latest-per-name listing, workspace isolation, gateway
+      name→ID persistence + ID→name reads; decorator-registration
+      rejection matches Python's raw response bytes. D23 rejection hook
+      live: Phoenix metrics rejected naming Elastic-2.0 and pointing to
+      Faithfulness/RelevanceToQuery/Correctness/Safety builtins +
+      instructions judge for Summarization/SQL. Cross-server test:
+      Python- and Rust-written scorer payloads read byte-identical.
+      Agent also REMOVED the rust-skip guards in
+      tests/server/auth/test_client.py + test_rest_tracking.py so scorer
+      suites now run against Rust. VER: Rust-mode Python suites 14
+      passed (REST CRUD 1, genai CRUD 7, auth/RBAC 6), 8 new Rust tests,
+      cross-server 1/1; route_parity §12.3 = 14 implemented/1 planned
+      (T17.4 invoke). Merge conflicts (handler arms, store re-exports,
+      TRACKING_TABLES=29, IMPLEMENTED_PROTO_SECTIONS) resolved by union;
+      post-merge gates all exit 0 (fmt after rustfmt on the hand-merged
+      import list, f6c28993d).
 - [x] **T16.3 Issues + label schemas**: issues CRUD (4 RPCs, trace_count via
       the assessments join) and label schemas (6 RPCs, immutable `type`,
       unique names).
