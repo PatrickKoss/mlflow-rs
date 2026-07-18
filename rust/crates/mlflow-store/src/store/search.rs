@@ -1303,8 +1303,10 @@ impl SearchRow {
 /// Read a `kN` column into a [`Cell`] using its declared kind.
 fn read_cell(r: &dyn RowLike, col: &str, kind: ColKind) -> Result<Cell, sqlx::Error> {
     Ok(match kind {
-        // Rank columns are the CASE output: always a non-null small integer.
-        ColKind::Rank => Cell::Int(r.get_i64(col)?),
+        // Rank columns are the CASE output: always a non-null SQLAlchemy
+        // Integer. Postgres types CASE integer literals as INT4, so use the
+        // cross-dialect widening accessor instead of decoding them as INT8.
+        ColKind::Rank => Cell::Int(r.get_int(col)?),
         // NULL must be detected via the Option decoders: sqlite's plain `get_f64`
         // decodes SQL NULL as 0.0, which would poison the keyset cursor (a NULL
         // order key encoded as 0.0 re-admits the boundary row on the next page).

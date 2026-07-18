@@ -15,7 +15,7 @@
 //! shared schema); those stay as-is and are additionally exercised via
 //! `TempDb` for their non-stress behavior above.
 
-use mlflow_store::{Db, MetricInput, TrackingStore};
+use mlflow_store::{Db, MetricInput, TrackingStore, ViewType};
 use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
@@ -854,6 +854,24 @@ async fn behavioral_smoke(uri: &str) {
         exp.artifact_location.as_deref(),
         Some(format!("{ART_ROOT}/{id}").as_str())
     );
+
+    let run = s
+        .create_run(&ws, &id, None, Some(1000), Some("smoke-run"), &[])
+        .await
+        .unwrap();
+    let page = s
+        .search_runs(
+            &ws,
+            std::slice::from_ref(&id),
+            None,
+            ViewType::ActiveOnly,
+            Some(10),
+            &["attributes.start_time DESC".to_string()],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.runs[0].info.run_id, run.info.run_id);
 
     // Deleted-name conflict.
     s.delete_experiment(&ws, &id).await.unwrap();
