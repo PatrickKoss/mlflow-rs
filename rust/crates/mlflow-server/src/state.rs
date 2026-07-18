@@ -27,7 +27,7 @@ use mlflow_artifacts::ArtifactRepo;
 use mlflow_auth::AuthStore;
 use mlflow_error::MlflowError;
 use mlflow_registry::RegistryStore;
-use mlflow_store::{TrackingStore, WorkspaceStore};
+use mlflow_store::{JobStore, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
 use crate::auth_api::signup::CsrfSecret;
@@ -271,6 +271,13 @@ impl AppState {
     /// The tracking store (experiments, runs, metrics, traces, …).
     pub fn tracking_store(&self) -> &TrackingStore {
         &self.inner.tracking_store
+    }
+
+    /// Generic jobs store over the same backend DB. It remains a distinct
+    /// store surface, matching Python's `_get_job_store`, while cloning only
+    /// the underlying pool handles.
+    pub fn job_store(&self) -> JobStore {
+        JobStore::new(self.inner.tracking_store.db().clone())
     }
 
     /// The model-registry store (`_get_model_registry_store()`,
