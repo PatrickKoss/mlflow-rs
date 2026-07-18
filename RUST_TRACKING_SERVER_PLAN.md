@@ -20,10 +20,13 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
   at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
   invoke endpoints; jobs execute Python-free end to end (fixture mode for
-  Phase 19 semantics). Phase 18 underway: T18.1 (gateway CRUD + crypto)
-  merged 2026-07-18 — 36 endpoints/72 routes, envelope crypto promoted,
-  cross-language secret round-trip verified; replay corpus now 175 cases.
-  Next: T18.2 (discovery + bridge) ∥ T18.3 (runtime core).
+  Phase 19 semantics). Phase 18 (gateway) COMPLETE 2026-07-19: all seven
+  tasks — CRUD + crypto, discovery + proxy bridge, runtime core with SSE
+  parity, full provider matrix (191/191 pinned providers, zero Python
+  fallback), traffic split + fallback, budget enforcement, guardrails.
+  Every §12 route family fully accounted (§12.8 78/0, §12.9 10/0). Replay
+  corpus 188 cases, zero non-allowlisted diffs. Next: Phase 19 (native
+  GenAI execution parity — scorers/judges, evaluation, online scoring).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3333,12 +3336,34 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       connect); restored primary_model helper for T18.4's raw-proxy path
       (raw proxy bypasses split/fallback, per differential). Gates all 0;
       corpus 188, zero non-allowlisted diffs.
-- [ ] **T18.6 Budget enforcement**: policy CRUD already in T18.1; tracker
+- [x] **T18.6 Budget enforcement**: policy CRUD already in T18.1; tracker
       (in-memory + Redis), spend query over span `total_cost`, 429 message
       byte-parity, ALERT webhooks through the Part I dispatcher, gateway-call
       tracing so costs keep accruing.
       **AC:** REJECT/ALERT behaviors match Python on a seeded spend fixture.
       **VER:** budget differential test.
+      **DONE (2026-07-19, codex agent, merge d5a1a4aca — PHASE 18
+      COMPLETE):** tracker keyed by policy ID; Redis keys byte-match Python
+      (`mlflow:budget:window:{id}` etc.), selected via
+      MLFLOW_GATEWAY_BUDGET_REDIS_URL, in-memory default, 600s refresh;
+      epoch-aligned min/hour/day windows, Sunday weeks, calendar months;
+      inclusive spend>=limit, one ALERT per window, rollover reset; global
+      vs workspace policy scoping; in-memory backfill max(current,DB),
+      Redis authoritative DB spend. Spend query = SUM(span_metrics.value)
+      for total_cost over gateway-tagged traces, [start,end). REJECT 429
+      `{"detail":...}` byte-compatible; ALERT = budget_policy.exceeded via
+      existing T8.3 dispatcher, Python field order. Tracing: gateway/{name}
+      root + provider/{prov}/{model} child LLM spans, token usage +
+      input/output/total_cost metrics, error span on budget rejection; SSE
+      unchanged. Seeded differential: under/boundary/over/threshold/reset
+      all matched. Redis service test self-skips without redis-server.
+      Orchestrator merge integration (13 hunks vs T18.7): order = budget →
+      guardrails BEFORE → provider → guardrails AFTER → trace completion
+      (budget cost recorded inside, Python's callback-inside-trace order);
+      traces capture ORIGINAL client request (pre-sanitization) and FINAL
+      post-guardrail response; resolver keeps T18.7 name; ProviderStream
+      carries guardrail + trace state. Gates all 0 post-integration;
+      corpus 188, zero non-allowlisted diffs; 1,300+ workspace tests.
 - [x] **T18.7 Guardrails execution** per D17: BEFORE/AFTER orchestration,
       VALIDATION 400s, SANITIZATION via action endpoint with the bypass
       header, no-post-guardrails-on-streams rule.
