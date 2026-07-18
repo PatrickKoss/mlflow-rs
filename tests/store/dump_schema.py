@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 import sqlalchemy
-from sqlalchemy.schema import CreateTable, MetaData
+from sqlalchemy.schema import CreateIndex, CreateTable, MetaData
 
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 
@@ -20,6 +20,8 @@ def dump_db_schema(db_url, dst_file):
     lines = []
     for ti in created_tables_metadata.sorted_tables:
         lines.extend(line.rstrip() + "\n" for line in str(CreateTable(ti)).splitlines())
+        for index in sorted(ti.indexes, key=lambda index: index.name):
+            lines.extend(line.rstrip() + "\n" for line in str(CreateIndex(index)).splitlines())
     schema = "".join(lines)
     with open(dst_file, "w") as handle:
         handle.write(schema)
