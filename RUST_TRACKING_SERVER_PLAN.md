@@ -26,6 +26,12 @@ benchmarks (T13.3) plus restructure verdicts (T13.4) are in `rust/bench/`.**
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
   tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
   tests.
+- **Rust artifact proxy lacks cloud schemes (S3/GCS/Azure)** — surfaced by
+  the T14.2 soak: `--serve-artifacts` with `--artifacts-destination s3://...`
+  is Python-only today; Rust proxies local FS only. Client-direct uploads
+  (the common client path) are unaffected. Document in the T14.3 runbook
+  (route artifact-proxy traffic to Python, or use client-direct); candidate
+  follow-up task for Part 2 era.
 - Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
   messages (serde text vs Python's "Invalid value … for parameter …"); #3
   HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
@@ -1983,10 +1989,16 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 14 — Memory & production validation
 
-- [ ] **T14.1 Memory baseline**: Python server RSS (4 uvicorn workers, idle + load) vs
+- [x] **T14.1 Memory baseline**: Python server RSS (4 uvicorn workers, idle + load) vs
       Rust on identical workloads.
       **AC:** report with Rust idle/loaded RSS; target ≥ 5x total reduction.
       **VER:** `rust/bench/memory.md` (cgroup memory.current sampling).
+      **DONE (2026-07-18):** measured during the T14.2 soak (same infra).
+      Whole-process-tree RSS via /proc (WSL2 cgroup v1 can't isolate
+      memory.current — documented): idle 2,976 MiB (Python, 4 workers) vs
+      27.95 MiB (Rust) = 106.5x; loaded (final-10-min mean of the 1 h run)
+      3,145 MiB vs 46.7 MiB = 67.3x. ≥5x AC MET by a wide margin. Report:
+      `rust/bench/memory.md`.
 - [ ] **T14.2 Soak + load comparison** *(respecified by user 2026-07-18: 1 h
       instead of 24 h — "1h is good enough with the right measurement and load
       test")*: 1 h mixed workload run TWICE on identical infrastructure — once
@@ -2008,6 +2020,26 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       webhook-delivery task leaks; comparative report Python vs Rust.
       **VER:** soak report (`rust/bench/soak.md`) with graphs/tables + docker
       compose file to reproduce.
+      **DONE (2026-07-18):** `rust/bench/{soak.py,docker-compose.soak.yml,
+      soak.md}`. Two sequential 3,600 s runs on identical infra (postgres:16 +
+      MinIO in docker, fresh DB + bucket prefix per target): 8 trainer workers
+      (create run → batched param/metric logging → S3 artifacts + model →
+      terminate → ONNX-style get-history + get-history-bulk-interval
+      read-back) + trace ingest + 2 UI-poll readers + webhook to a local
+      sink. ~19.4k requests (Python) / ~21.2k (Rust), ~140 runs, ~9.6k metric
+      points, ~855 traces, ~550 S3 objects each. Errors 0/0 (<0.01% AC MET
+      both). Webhooks all delivered, no task leaks (AC MET both). p50/p95
+      highlights (Python → Rust): get-history 49.9/50.3 → 1.0/1.3 ms;
+      bulk-interval 50.0/51.6 → 1.8/2.3 ms; log-batch 9.5/50.0 → 4.6/6.6 ms;
+      runs/search 28.5/89.1 → 5.4/6.7 ms; trace ingest 11.6/14.0 → 3.9/5.4 ms.
+      RSS-trend AC: Python MET (+14.4 MiB/h, <5% bin growth); Rust NOT MET by
+      the strict monotonicity rule (39.9 → 46.7 MiB, near-plateau in final
+      bins — reads as warm-up asymptote, not a leak; longer run would settle
+      it). Pool health fine (peak 31/100 vs 15/100 connections). En route:
+      fixed real Rust PG bug (runs/search order-rank INT4 decoded as i64) +
+      live-PG regression test. LIMITATION surfaced: Rust artifact proxy has
+      no cloud-scheme (S3) support — both sides used client-direct SigV4
+      uploads (realistic client path); see open items.
 - [ ] **T14.3 Operational docs**: deployment guide (compose + k8s), migration runbook
       (Python-only → split; auth DB sharing; secret/key management for Fernet + CSRF),
       rollback procedure (nginx flips routes back to Python — zero data migration, both
