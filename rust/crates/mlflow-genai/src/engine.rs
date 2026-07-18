@@ -102,18 +102,30 @@ impl ScorerExecutor {
             .map(|(_, model)| model)
             .filter(|model| !model.is_empty())
             .ok_or(EngineError::InvalidScorerField("model"))?;
-        let outputs = item
-            .outputs
-            .as_ref()
-            .ok_or(EngineError::InvalidScorerField("outputs"))?;
+        let field_order = instruction_field_order(instructions);
+        for field in &field_order {
+            let missing = match *field {
+                "inputs" => item.inputs.is_none(),
+                "outputs" => item.outputs.is_none(),
+                _ => false,
+            };
+            if missing {
+                return Err(EngineError::InvalidScorerField(field));
+            }
+        }
         let system_content = format!(
             "{JUDGE_BASE_PROMPT}\n\nYour task: {instructions}.\n\nYou *must* format your evaluation rating as a JSON object with the following fields (no markdown). Pay close attention to the field type of the evaluation rating (string, boolean, numeric, etc.), and ensure that it conforms to the instructions.\n\n- result (str): {RESULT_DESCRIPTION}\n- rationale (str): {RATIONALE_DESCRIPTION}"
         );
-        let user_content = format!(
-            "outputs: {}",
-            serde_json::to_string(outputs)
-                .map_err(|error| EngineError::Serialization(error.to_string()))?
-        );
+        let user_content = field_order
+            .iter()
+            .filter_map(|field| match *field {
+                "inputs" => item.inputs.as_ref().map(|value| (field, value)),
+                "outputs" => item.outputs.as_ref().map(|value| (field, value)),
+                _ => None,
+            })
+            .map(|(field, value)| format!("{field}: {}", pretty_json(value)))
+            .collect::<Vec<_>>()
+            .join("\n");
         let response_format = response_format(&payload.pydantic_data)?;
         let request = json!({
             "model": model,
@@ -179,6 +191,41 @@ impl ScorerExecutor {
             metadata: Some(metadata),
         })
     }
+}
+
+fn instruction_field_order(instructions: &str) -> Vec<&'static str> {
+    let mut fields = [("inputs", None), ("outputs", None)];
+    for (field, position) in &mut fields {
+        *position = instructions.match_indices("{{").find_map(|(start, _)| {
+            let tail = &instructions[start + 2..];
+            let end = tail.find("}}")?;
+            (tail[..end].trim() == *field).then_some(start)
+        });
+    }
+    let mut fields = fields
+        .into_iter()
+        .filter_map(|(field, position)| position.map(|position| (position, field)))
+        .collect::<Vec<_>>();
+    fields.sort_unstable_by_key(|(position, _)| *position);
+    let fields = fields
+        .into_iter()
+        .map(|(_, field)| field)
+        .collect::<Vec<_>>();
+    if fields.is_empty() {
+        vec!["outputs"]
+    } else {
+        fields
+    }
+}
+
+fn pretty_json(value: &Value) -> String {
+    let mut buffer = Vec::new();
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"  ");
+    let mut serializer = serde_json::Serializer::with_formatter(&mut buffer, formatter);
+    value
+        .serialize(&mut serializer)
+        .expect("serde_json::Value serialization cannot fail");
+    String::from_utf8(buffer).expect("JSON serialization is UTF-8")
 }
 
 impl Default for ScorerExecutor {

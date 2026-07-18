@@ -20,6 +20,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod gateway;
+mod gateway_guardrails;
 pub mod gateway_provider_matrix;
 pub mod gateway_runtime;
 pub mod graphql;

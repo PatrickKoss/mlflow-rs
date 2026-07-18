@@ -709,6 +709,18 @@ impl TrackingStore {
         Ok(())
     }
 
+    /// Resolve a persisted scorer's internal `gateway:/<endpoint-id>` model
+    /// reference back to the public endpoint name used by gateway execution.
+    pub async fn resolve_endpoint_in_scorer(
+        &self,
+        workspace: &str,
+        scorer: &ScorerVersion,
+    ) -> Result<ScorerVersion, MlflowError> {
+        let mut scorer = scorer.clone();
+        self.resolve_scorer(workspace, &mut scorer).await?;
+        Ok(scorer)
+    }
+
     async fn resolve_scorer_list(
         &self,
         workspace: &str,
