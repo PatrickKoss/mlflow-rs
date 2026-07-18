@@ -55,6 +55,7 @@ from mlflow.store.artifact.artifact_repo import ArtifactRepository
 from mlflow.store.db.db_types import MSSQL, MYSQL, POSTGRES
 from mlflow.store.tracking.dbmodels.models import (
     SqlSpan,
+    SqlSpanAttribute,
     SqlSpanMetrics,
     SqlTraceInfo,
     SqlTraceMetadata,
@@ -1155,6 +1156,45 @@ def test_search_traces_with_span_attributes_filter(store: SqlAlchemyStore):
     )
     assert len(traces) == 1
     assert traces[0].request_id == trace3_id
+
+
+def test_log_spans_maintains_extracted_attributes(store: SqlAlchemyStore):
+    exp_id = store.create_experiment("test_span_attribute_extraction")
+    trace_id = "trace-attributes"
+    first = create_test_span_with_content(
+        trace_id,
+        span_id=111,
+        custom_attributes={"model": "gpt-4", "removed": "old", "long": "x" * 600},
+    )
+    store.log_spans(exp_id, [first])
+
+    with store.ManagedSessionMaker() as session:
+        rows = {
+            row.key: (row.value, row.value_truncated)
+            for row in session.query(SqlSpanAttribute).filter_by(trace_id=trace_id).all()
+        }
+    assert rows["model"] == ('"gpt-4"', False)
+    assert rows["removed"] == ('"old"', False)
+    assert rows["long"] == ('"' + "x" * 499, True)
+
+    relogged = create_test_span_with_content(
+        trace_id,
+        span_id=111,
+        custom_attributes={"model": "claude-3"},
+    )
+    store.log_spans(exp_id, [relogged])
+    with store.ManagedSessionMaker() as session:
+        rows = {
+            row.key: row.value
+            for row in session.query(SqlSpanAttribute).filter_by(trace_id=trace_id).all()
+        }
+    assert rows["model"] == '"claude-3"'
+    assert "removed" not in rows
+    assert "long" not in rows
+
+    assert store.delete_traces(exp_id, trace_ids=[trace_id]) == 1
+    with store.ManagedSessionMaker() as session:
+        assert session.query(SqlSpanAttribute).filter_by(trace_id=trace_id).count() == 0
 
 
 def test_search_traces_with_feedback_and_expectation_filters(store: SqlAlchemyStore):

@@ -42,6 +42,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.store.tracking.dbmodels.models import (
     SqlEntityAssociation,
     SqlExperiment,
+    SqlSpanAttribute,
     SqlTraceInfo,
     SqlTraceTag,
 )
@@ -815,6 +816,36 @@ def test_get_trace_is_workspace_scoped(workspace_tracking_store):
         ) as excinfo:
             workspace_tracking_store.get_trace(trace_id)
         assert excinfo.value.error_code == "RESOURCE_DOES_NOT_EXIST"
+
+
+def test_span_attribute_extraction_preserves_workspace_scoping(workspace_tracking_store):
+    trace_id = f"tr-{uuid.uuid4().hex}"
+    span = create_test_span(trace_id=trace_id, attributes={"model": "gpt-5"})
+
+    with WorkspaceContext("team-a"):
+        exp_id = workspace_tracking_store.create_experiment("trace-attribute-exp-a")
+        workspace_tracking_store.log_spans(exp_id, [span])
+        traces, _ = workspace_tracking_store.search_traces(
+            [exp_id], filter_string='span.attributes.model LIKE "%gpt-5%"'
+        )
+        assert [trace.trace_id for trace in traces] == [trace_id]
+        with workspace_tracking_store.ManagedSessionMaker() as session:
+            assert (
+                session
+                .query(SqlSpanAttribute)
+                .filter_by(trace_id=trace_id, key="model")
+                .one()
+                .value
+                == '"gpt-5"'
+            )
+
+    with WorkspaceContext("team-b"):
+        assert (
+            workspace_tracking_store.search_traces(
+                [exp_id], filter_string='span.attributes.model LIKE "%gpt-5%"'
+            )[0]
+            == []
+        )
 
 
 def test_start_trace_conflict_update_is_workspace_scoped(workspace_tracking_store):
