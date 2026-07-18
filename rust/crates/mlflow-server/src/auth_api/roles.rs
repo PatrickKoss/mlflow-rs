@@ -11,10 +11,9 @@
 //! Authorization (who may call these — super-admin vs workspace-admin vs the
 //! caller themselves) is the T9.4 auth middleware's job. These handlers are the
 //! endpoint surface + store wiring + Python-identical error shapes; they assume
-//! the middleware has already authorized the request. `list_user_roles`'s
-//! response scope filtering (`__init__.py:3119-3128`) likewise rides T9.4 (it
-//! needs the authenticated principal), so this handler returns the target's
-//! full role list.
+//! the middleware has already authorized the request. `list_user_roles` also
+//! uses the authenticated principal stamped by that middleware to apply
+//! Python's workspace-admin response scoping (`__init__.py:3119-3128`).
 //!
 //! ## Self-contained wiring (avoids the contested `AppState.auth_store`)
 //!
@@ -32,7 +31,7 @@
 //! workspace; multi-tenant workspace routing is threaded through the middleware
 //! (T9.4), so this layer uses [`mlflow_auth::DEFAULT_WORKSPACE_NAME`].
 
-use axum::extract::{Query, State};
+use axum::extract::{Extension, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
@@ -40,6 +39,8 @@ use mlflow_auth::{AuthStore, DEFAULT_WORKSPACE_NAME};
 use mlflow_error::MlflowError;
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+use crate::auth_middleware::AuthContext;
 
 // ---------------------------------------------------------------------------
 // Route registration
@@ -336,15 +337,23 @@ async fn unassign_role(
     Ok(ok_json(json!({})))
 }
 
-/// `list_user_roles` (`__init__.py:3113`), `GET /mlflow/users/roles/list`. The
-/// caller-scope response filtering lives in the T9.4 middleware; this returns
-/// the target's full role list.
+/// `list_user_roles` (`__init__.py:3113`), `GET /mlflow/users/roles/list`.
+/// Self/super-admin callers see all roles; workspace admins see only roles in
+/// workspaces they administer.
 async fn list_user_roles(
     State(store): State<AuthStore>,
+    auth: Option<Extension<AuthContext>>,
     Query(params): Query<UsernameParam>,
 ) -> Result<Response, MlflowError> {
     let user = store.get_user(&params.username).await?;
-    let roles = store.list_user_roles(user.id).await?;
+    let mut roles = store.list_user_roles(user.id).await?;
+    if let Some(Extension(auth)) = auth {
+        if !auth.is_admin && auth.username != params.username {
+            let requester = store.get_user(&auth.username).await?;
+            let admin_workspaces = store.list_workspace_admin_workspaces(requester.id).await?;
+            roles.retain(|role| admin_workspaces.contains(&role.workspace));
+        }
+    }
     Ok(ok_json(
         json!({ "roles": roles.iter().map(role_json).collect::<Vec<_>>() }),
     ))

@@ -302,7 +302,7 @@ async fn tracking_store_spans_json_on_both_ajax_prefixes() {
         assert_eq!(res.header("content-type").as_deref(), Some("text/plain"));
         assert_eq!(
             res.header("content-disposition").as_deref(),
-            Some("attachment; filename=\"traces.json\"")
+            Some("attachment; filename=traces.json")
         );
         assert_eq!(
             res.header("x-content-type-options").as_deref(),
@@ -378,7 +378,7 @@ async fn artifact_repo_spans_json_from_local_fs() {
     assert_eq!(res.header("content-type").as_deref(), Some("text/plain"));
     assert_eq!(
         res.header("content-disposition").as_deref(),
-        Some("attachment; filename=\"traces.json\"")
+        Some("attachment; filename=traces.json")
     );
     assert_eq!(
         res.json()["spans"][0]["name"],
@@ -492,7 +492,7 @@ async fn attachment_fetch_via_path_uuid() {
     );
     assert_eq!(
         res.header("content-disposition").as_deref(),
-        Some(format!("attachment; filename=\"{attachment_id}\"").as_str())
+        Some(format!("attachment; filename={attachment_id}").as_str())
     );
     assert_eq!(
         res.header("x-content-type-options").as_deref(),

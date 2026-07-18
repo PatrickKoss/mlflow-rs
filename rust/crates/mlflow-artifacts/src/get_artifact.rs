@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(resp.headers()[header::CONTENT_TYPE], "text/plain");
         assert_eq!(
             resp.headers()[header::CONTENT_DISPOSITION],
-            "attachment; filename=\"output.txt\""
+            "attachment; filename=output.txt"
         );
         assert_eq!(resp.headers()["x-content-type-options"], "nosniff");
         assert_eq!(resp.headers()[header::CONTENT_LENGTH], "5");

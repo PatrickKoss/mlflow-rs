@@ -24,6 +24,8 @@ pub const MLFLOW_STATIC_PREFIX_ENV_VAR: &str = "MLFLOW_STATIC_PREFIX";
 pub const MLFLOW_SERVER_ALLOWED_HOSTS_ENV_VAR: &str = "MLFLOW_SERVER_ALLOWED_HOSTS";
 pub const MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR: &str = "MLFLOW_SERVER_CORS_ALLOWED_ORIGINS";
 pub const MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR: &str = "MLFLOW_SERVER_X_FRAME_OPTIONS";
+pub const MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR: &str =
+    "MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE";
 
 /// `MLFLOW_ENABLE_WORKSPACES` (`environment_variables.py`, default `False`).
 pub const MLFLOW_ENABLE_WORKSPACES_ENV_VAR: &str = "MLFLOW_ENABLE_WORKSPACES";
@@ -212,6 +214,9 @@ pub struct ServerConfig {
     pub allowed_hosts: Option<Vec<String>>,
     pub cors_allowed_origins: Option<Vec<String>>,
     pub x_frame_options: String,
+    /// Disable Host/CORS/security-header middleware, matching
+    /// `MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE=true` on Python servers.
+    pub disable_security_middleware: bool,
     /// Whether the Prometheus `/metrics` exporter is enabled
     /// (`--expose-prometheus`). Python gates the exporter on the env var being
     /// set; we gate route registration on this being true.
@@ -249,6 +254,7 @@ impl Default for ServerConfig {
             allowed_hosts: None,
             cors_allowed_origins: None,
             x_frame_options: DEFAULT_X_FRAME_OPTIONS.to_string(),
+            disable_security_middleware: false,
             expose_prometheus: true,
             auth_enabled: false,
             enable_workspaces: false,
@@ -327,6 +333,9 @@ impl ServerConfig {
             allowed_hosts,
             cors_allowed_origins,
             x_frame_options,
+            disable_security_middleware: env_truthy(
+                MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR,
+            ),
             expose_prometheus: cli.expose_prometheus.is_some(),
             auth_enabled,
             enable_workspaces,
@@ -436,6 +445,7 @@ mod tests {
         assert!(config.serve_artifacts);
         assert!(!config.artifacts_only);
         assert_eq!(config.x_frame_options, "SAMEORIGIN");
+        assert!(!config.disable_security_middleware);
         assert!(!config.expose_prometheus);
         assert!(!config.auth_enabled);
         assert!(!config.enable_workspaces);
@@ -643,6 +653,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn disable_security_middleware_env_is_honored() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        unsafe {
+            std::env::set_var(MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR, "true");
+        }
+        let config = ServerConfig::from_cli(parse(&[])).unwrap();
+        assert!(config.disable_security_middleware);
+        unsafe {
+            std::env::remove_var(MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR);
+        }
+    }
+
     /// Clears every env var the parser reads so a test's outcome does not depend
     /// on the ambient environment (clap `env = ...` reads the live process env).
     fn clear_env() {
@@ -651,6 +675,7 @@ mod tests {
             MLFLOW_SERVER_ALLOWED_HOSTS_ENV_VAR,
             MLFLOW_SERVER_CORS_ALLOWED_ORIGINS_ENV_VAR,
             MLFLOW_SERVER_X_FRAME_OPTIONS_ENV_VAR,
+            MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE_ENV_VAR,
             MLFLOW_ENABLE_WORKSPACES_ENV_VAR,
             MLFLOW_WORKSPACE_STORE_URI_ENV_VAR,
             MLFLOW_AUTH_CONFIG_PATH_ENV_VAR,

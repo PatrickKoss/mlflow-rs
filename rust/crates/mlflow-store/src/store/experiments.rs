@@ -11,7 +11,7 @@ use mlflow_error::{ErrorCode, MlflowError};
 
 use super::dbutil::{Tx, Val};
 use super::entities::{Experiment, ExperimentTag, LifecycleStage};
-use super::uri_util::append_to_uri_path;
+use super::uri_util::{append_to_uri_path, resolve_uri_if_local};
 use super::validation;
 use super::TrackingStore;
 use crate::schema::runs::{EXPERIMENTS, EXPERIMENT_TAGS};
@@ -110,6 +110,11 @@ impl TrackingStore {
         for (k, v) in tags {
             validation::validate_experiment_tag(k, v)?;
         }
+        // Resolve a relative local artifact_location to an absolute path relative
+        // to the server's working directory before persisting, mirroring
+        // `SqlAlchemyStore.create_experiment` (`sqlalchemy_store.py:554`).
+        let resolved_location = resolve_uri_if_local(artifact_location);
+        let artifact_location = resolved_location.as_deref();
         let creation_time = now_millis();
         let dialect = self.db().dialect();
         let ph = |i| dialect.placeholder(i);

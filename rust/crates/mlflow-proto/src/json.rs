@@ -496,8 +496,8 @@ fn write_pretty(out: &mut String, value: &JsonValue, indent: usize) {
         JsonValue::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         JsonValue::Int(v) => out.push_str(&v.to_string()),
         JsonValue::Uint(v) => out.push_str(&v.to_string()),
-        JsonValue::Double(v) => out.push_str(&python_float_repr(*v)),
-        JsonValue::Float(v) => out.push_str(&python_float_repr(*v as f64)),
+        JsonValue::Double(v) => out.push_str(&proto_float_repr(*v)),
+        JsonValue::Float(v) => out.push_str(&proto_float_repr(*v as f64)),
         JsonValue::Str(s) => out.push_str(s),
         JsonValue::Array(items) => {
             if items.is_empty() {
@@ -589,6 +589,29 @@ pub fn quote_json_string(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+/// Render a float field for **protobuf** JSON output (`message_to_json`).
+///
+/// Protobuf's canonical JSON encodes non-finite floats as the *quoted* strings
+/// `"NaN"` / `"Infinity"` / `"-Infinity"` (verified: `message_to_json(Metric(
+/// value=nan))` → `"value": "NaN"`). The Python client's `ParseDict` only accepts
+/// those quoted forms, so bare `NaN`/`Infinity` literals (which
+/// [`python_float_repr`] emits for `json.dumps(allow_nan=True)` parity in
+/// hand-rolled endpoints) would make the client raise `ParseError`. Finite values
+/// use the shared shortest-round-trip formatter.
+fn proto_float_repr(x: f64) -> String {
+    if x.is_nan() {
+        return "\"NaN\"".to_string();
+    }
+    if x.is_infinite() {
+        return if x < 0.0 {
+            "\"-Infinity\"".to_string()
+        } else {
+            "\"Infinity\"".to_string()
+        };
+    }
+    python_float_repr(x)
 }
 
 /// Format an `f64` exactly like CPython's `repr()` / `json.dumps` (shortest

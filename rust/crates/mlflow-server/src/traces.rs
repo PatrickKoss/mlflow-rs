@@ -681,7 +681,7 @@ fn to_otel_span(span: &StoredSpan) -> Result<otel_trace::Span, MlflowError> {
             obj.iter()
                 .map(|(k, v)| otel_common::KeyValue {
                     key: k.clone(),
-                    value: Some(any_value_from_json(v)),
+                    value: Some(any_value_from_json(&decode_stored_attribute(v))),
                 })
                 .collect()
         })
@@ -733,7 +733,7 @@ fn otel_event_from_json(ev: &serde_json::Value) -> otel_trace::span::Event {
             obj.iter()
                 .map(|(k, v)| otel_common::KeyValue {
                     key: k.clone(),
-                    value: Some(any_value_from_json(v)),
+                    value: Some(any_value_from_json(&decode_stored_attribute(v))),
                 })
                 .collect()
         })
@@ -747,6 +747,22 @@ fn otel_event_from_json(ev: &serde_json::Value) -> otel_trace::span::Event {
             .to_string(),
         attributes,
         dropped_attributes_count: 0,
+    }
+}
+
+/// Decode a stored span/event attribute value into the logical value MLflow's
+/// `Span.attributes` exposes. MLflow stores every attribute value JSON-encoded
+/// (`to_dict` saves `dict(self._span.attributes)`, which are the
+/// `json.dumps`-ed values, `span.py:534`); on read, the `attributes` property
+/// `json.loads` each one before `_set_otel_proto_anyvalue` builds the OTLP
+/// `AnyValue` (`span.py:586-589`). So a stored `"\"apple\""` becomes the raw
+/// `apple`. We mirror that: if the stored value is a string that parses as JSON,
+/// use the parsed value; otherwise fall back to the value as stored (robust to
+/// any not-double-encoded legacy content).
+fn decode_stored_attribute(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::String(s) => serde_json::from_str(s).unwrap_or_else(|_| v.clone()),
+        other => other.clone(),
     }
 }
 
