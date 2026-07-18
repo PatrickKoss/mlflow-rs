@@ -191,6 +191,10 @@ pub enum Validator {
     ReadMetricHistoryBulk,
     ReadMetricHistoryBulkInterval,
     SearchDatasets,
+    // ---- Label schemas (inherit experiment) ----
+    CreateLabelSchema,
+    ReadLabelSchema,
+    ManageLabelSchema,
     // ---- OTLP ----
     OtlpExperimentUpdate,
     // ---- Users ----
@@ -275,6 +279,9 @@ impl Validator {
             ReadMetricHistoryBulk => validate_metric_history_bulk(ctx, "run_id").await,
             ReadMetricHistoryBulkInterval => validate_metric_history_bulk(ctx, "run_ids").await,
             SearchDatasets => validate_search_datasets(ctx).await,
+            CreateLabelSchema => Ok(experiment_perm_from_id_param(ctx).await?.can_manage),
+            ReadLabelSchema => Ok(experiment_perm_from_label_schema(ctx).await?.can_read),
+            ManageLabelSchema => Ok(experiment_perm_from_label_schema(ctx).await?.can_manage),
             // OTLP: experiment UPDATE from the X-Mlflow-Experiment-Id header.
             OtlpExperimentUpdate => validate_otlp(ctx).await,
             // Users.
@@ -665,6 +672,17 @@ async fn experiment_perm_from_model(
         .get_logged_model(ctx.workspace, &model_id, true)
         .await?;
     experiment_permission(ctx, &model.experiment_id).await
+}
+
+async fn experiment_perm_from_label_schema(
+    ctx: &RequestCtx<'_>,
+) -> Result<&'static Permission, MlflowError> {
+    let schema_id = require_param(ctx, "schema_id")?;
+    let schema = ctx
+        .tracking_store
+        .get_label_schema(ctx.workspace, &schema_id)
+        .await?;
+    experiment_permission(ctx, &schema.experiment_id).await
 }
 
 /// `_get_permission_from_registered_model_or_prompt_name` on the

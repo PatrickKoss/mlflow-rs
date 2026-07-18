@@ -20,7 +20,9 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod graphql;
+pub mod issues;
 pub mod jobs;
+pub mod label_schemas;
 pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
@@ -565,6 +567,16 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("removeDatasetFromExperiments", "POST") => {
             post(datasets::remove_evaluation_dataset_from_experiments)
         }
+        ("createIssue", "POST") => post(issues::create_issue),
+        ("updateIssue", "PATCH") => patch(issues::update_issue),
+        ("getIssue", "GET") => get(issues::get_issue),
+        ("searchIssues", "POST") => post(issues::search_issues),
+        ("createLabelSchema", "POST") => post(label_schemas::create_label_schema),
+        ("getLabelSchema", "GET") => get(label_schemas::get_label_schema),
+        ("getLabelSchemaByName", "GET") => get(label_schemas::get_label_schema_by_name),
+        ("listLabelSchemas", "GET") => get(label_schemas::list_label_schemas),
+        ("updateLabelSchema", "PATCH") => patch(label_schemas::update_label_schema),
+        ("deleteLabelSchema", "DELETE") => delete(label_schemas::delete_label_schema),
         ("createLoggedModel", "POST") => post(logged_models::create_logged_model),
         ("finalizeLoggedModel", "PATCH") => patch(logged_models::finalize_logged_model),
         ("getLoggedModel", "GET") => get(logged_models::get_logged_model),

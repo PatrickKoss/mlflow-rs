@@ -34,6 +34,8 @@ pub mod traces;
 /// Kept as a single source for startup checks and diagnostics.
 pub const TRACKING_TABLES: &[&str] = &[
     runs::EXPERIMENTS,
+    "issues",
+    "label_schemas",
     runs::EXPERIMENT_TAGS,
     runs::RUNS,
     runs::PARAMS,
@@ -65,7 +67,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        assert_eq!(TRACKING_TABLES.len(), 24);
+        assert_eq!(TRACKING_TABLES.len(), 26);
     }
 
     #[test]

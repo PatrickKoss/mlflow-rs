@@ -4,6 +4,7 @@ import math
 import os
 import pathlib
 import posixpath
+import sqlite3
 import subprocess
 import sys
 import time
@@ -68,6 +69,11 @@ from mlflow.environment_variables import (
     MLFLOW_TRACE_ARCHIVAL_CONFIG,
 )
 from mlflow.exceptions import MlflowException, RestException
+from mlflow.genai.label_schemas import (
+    InputNumeric,
+    InputPassFail,
+    LabelSchemaType,
+)
 from mlflow.models import Model
 from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
 from mlflow.server import handlers
@@ -5349,7 +5355,6 @@ def test_update_model_definition_provider(mlflow_client_with_secrets):
 
 
 def test_create_issue_with_all_fields(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
 
@@ -5388,7 +5393,6 @@ def test_create_issue_with_all_fields(mlflow_client, store_type):
 
 
 def test_create_issue_minimal_fields(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Minimal")
@@ -5412,7 +5416,6 @@ def test_create_issue_minimal_fields(mlflow_client, store_type):
 
 
 def test_create_issue_with_required_fields(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Required Fields")
@@ -5436,7 +5439,6 @@ def test_create_issue_with_required_fields(mlflow_client, store_type):
 
 
 def test_create_issue_invalid_experiment(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     response = requests.post(
@@ -5453,7 +5455,6 @@ def test_create_issue_invalid_experiment(mlflow_client, store_type):
 
 
 def test_get_issue(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Get")
@@ -5479,7 +5480,6 @@ def test_get_issue(mlflow_client, store_type):
 
 
 def test_get_issue_not_found(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     response = requests.get(f"{mlflow_client.tracking_uri}/api/3.0/mlflow/issues/nonexistent-issue")
@@ -5489,7 +5489,6 @@ def test_get_issue_not_found(mlflow_client, store_type):
 
 
 def test_update_issue(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Update")
@@ -5526,7 +5525,6 @@ def test_update_issue(mlflow_client, store_type):
 
 
 def test_search_issues_no_filters(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Search")
@@ -5553,7 +5551,6 @@ def test_search_issues_no_filters(mlflow_client, store_type):
 
 
 def test_search_issues_by_experiment(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     exp1 = mlflow_client.create_experiment("Issue Test Search Exp1")
@@ -5590,7 +5587,6 @@ def test_search_issues_by_experiment(mlflow_client, store_type):
 
 
 def test_search_issues_by_status(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Search Status")
@@ -5627,7 +5623,6 @@ def test_search_issues_by_status(mlflow_client, store_type):
 
 
 def test_search_issues_with_pagination(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Pagination")
@@ -5667,7 +5662,6 @@ def test_search_issues_with_pagination(mlflow_client, store_type):
 
 
 def test_search_issues_sorted_by_timestamp(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("issues API")
     if store_type == "file":
         pytest.skip("Issues are only supported in SqlAlchemyStore")
     experiment_id = mlflow_client.create_experiment("Issue Test Sort")
@@ -5696,3 +5690,150 @@ def test_search_issues_sorted_by_timestamp(mlflow_client, store_type):
     assert len(issues) == 3
     # Issues should be returned (default order is by created_timestamp descending)
     assert {issue["issue_id"] for issue in issues} == set(issue_ids)
+
+
+def test_label_schema_crud_round_trip(mlflow_client, store_type):
+    if store_type == "file":
+        pytest.skip("Label schemas are only supported in SqlAlchemyStore")
+
+    experiment_id = mlflow_client.create_experiment("Label Schema CRUD")
+    store = mlflow_client._tracking_client.store
+    created = store.create_label_schema(
+        experiment_id,
+        name="Correctness",
+        type=LabelSchemaType.FEEDBACK,
+        input=InputPassFail(positive_label="Yes", negative_label="No"),
+        instruction="Judge correctness",
+        enable_comment=True,
+    )
+
+    assert store.get_label_schema(created.schema_id) == created
+    assert store.get_label_schema_by_name(experiment_id, "Correctness") == created
+    schemas = store.list_label_schemas(experiment_id)
+    assert {schema.name for schema in schemas} == {"Correctness", "Feedback"}
+
+    updated = store.update_label_schema(
+        created.schema_id,
+        name="Updated correctness",
+        instruction="Updated instruction",
+        enable_comment=False,
+        input=InputPassFail(positive_label="Pass", negative_label="Fail"),
+    )
+    assert updated.type == LabelSchemaType.FEEDBACK
+    assert updated.name == "Updated correctness"
+    assert updated.instruction == "Updated instruction"
+    assert updated.enable_comment is False
+    assert updated.input == InputPassFail(positive_label="Pass", negative_label="Fail")
+
+    store.delete_label_schema(created.schema_id)
+    with pytest.raises(RestException, match="Label schema with id .* not found"):
+        store.get_label_schema(created.schema_id)
+
+
+def test_label_schema_name_is_unique_per_experiment(mlflow_client, store_type):
+    if store_type == "file":
+        pytest.skip("Label schemas are only supported in SqlAlchemyStore")
+
+    first_experiment_id = mlflow_client.create_experiment("Label Schema Unique One")
+    second_experiment_id = mlflow_client.create_experiment("Label Schema Unique Two")
+    store = mlflow_client._tracking_client.store
+    kwargs = {
+        "name": "Quality",
+        "type": LabelSchemaType.FEEDBACK,
+        "input": InputPassFail(positive_label="Pass", negative_label="Fail"),
+    }
+    store.create_label_schema(first_experiment_id, **kwargs)
+    with pytest.raises(
+        RestException,
+        match=(
+            f"Label schema with name 'Quality' already exists for experiment "
+            f"'{first_experiment_id}'"
+        ),
+    ):
+        store.create_label_schema(first_experiment_id, **kwargs)
+
+    same_name = store.create_label_schema(second_experiment_id, **kwargs)
+    assert same_name.experiment_id == second_experiment_id
+
+
+def test_label_schema_input_type_is_immutable(mlflow_client, store_type):
+    if store_type == "file":
+        pytest.skip("Label schemas are only supported in SqlAlchemyStore")
+
+    experiment_id = mlflow_client.create_experiment("Label Schema Immutable Type")
+    store = mlflow_client._tracking_client.store
+    created = store.create_label_schema(
+        experiment_id,
+        name="Correctness",
+        type=LabelSchemaType.FEEDBACK,
+        input=InputPassFail(positive_label="Pass", negative_label="Fail"),
+    )
+
+    with pytest.raises(
+        RestException,
+        match=(
+            "A label schema's input type cannot be changed after creation "
+            r"\(existing: InputPassFail, got: InputNumeric\)\."
+        ),
+    ):
+        store.update_label_schema(created.schema_id, input=InputNumeric(min_value=0, max_value=1))
+
+
+@pytest.mark.skipif(
+    not _RUN_AGAINST_RUST,
+    reason="Differential launches both server implementations only in the Rust parity job",
+)
+def test_search_issues_trace_count_python_rust_byte_differential(db_uri, tmp_path):
+    store = SqlAlchemyStore(db_uri, tmp_path.as_uri())
+    experiment_id = store.create_experiment("Issue Trace Count Differential")
+    first_issue = store.create_issue(
+        experiment_id=experiment_id,
+        name="First issue",
+        description="Has two distinct issue traces",
+        status=IssueStatus.PENDING,
+    )
+    store.create_issue(
+        experiment_id=experiment_id,
+        name="Second issue",
+        description="Has no issue traces",
+        status=IssueStatus.PENDING,
+    )
+    store.engine.dispose()
+
+    database_path = db_uri.removeprefix("sqlite:///")
+    with sqlite3.connect(database_path) as connection:
+        rows = [
+            ("assessment-one", "trace-one", first_issue.issue_id, "issue", "null", 1, 1),
+            ("assessment-two", "trace-one", first_issue.issue_id, "issue", "null", 2, 2),
+            ("assessment-three", "trace-two", first_issue.issue_id, "issue", "null", 3, 3),
+            ("assessment-four", "trace-three", first_issue.issue_id, "feedback", "true", 4, 4),
+        ]
+        connection.executemany(
+            """
+            INSERT INTO assessments (
+                assessment_id, trace_id, name, assessment_type, value,
+                created_timestamp, last_updated_timestamp, source_type, valid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'HUMAN', 1)
+            """,
+            rows,
+        )
+
+    def search_responses(server_type):
+        with _init_server(
+            backend_uri=db_uri,
+            root_artifact_uri=tmp_path.as_uri(),
+            server_type=server_type,
+        ) as url:
+            return [
+                requests.post(
+                    f"{url}/api/3.0/mlflow/issues/search",
+                    json={"experiment_id": experiment_id, **request_body},
+                ).content
+                for request_body in ({}, {"include_trace_count": True})
+            ]
+
+    python_responses = search_responses("fastapi")
+    rust_responses = search_responses("rust")
+    assert rust_responses == python_responses
+    assert json.loads(rust_responses[0])["issues"][0].get("trace_count") is None
+    assert json.loads(rust_responses[1])["issues"][0]["trace_count"] == 2

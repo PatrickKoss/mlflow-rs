@@ -187,6 +187,15 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         // AUTH GAP: datasets (D21) — all evaluation-dataset RPCs intentionally
         // have no before-request validator in Python. Authentication still runs
         // before this dispatch, so leaving them unmatched is exact parity.
+        // AUTH GAP: issues (D21) — all four issue RPCs likewise have no
+        // per-resource validator in Python and intentionally remain unmatched.
+        // ---- Label schemas (BEFORE_REQUEST_HANDLERS) ----
+        ("MlflowService", "createLabelSchema") => CreateLabelSchema,
+        ("MlflowService", "getLabelSchema") => ReadLabelSchema,
+        ("MlflowService", "getLabelSchemaByName") => ReadExperiment,
+        ("MlflowService", "listLabelSchemas") => ReadExperiment,
+        ("MlflowService", "updateLabelSchema") => ManageLabelSchema,
+        ("MlflowService", "deleteLabelSchema") => ManageLabelSchema,
         // ---- Logged models (LOGGED_MODEL_BEFORE_REQUEST_HANDLERS) ----
         ("MlflowService", "createLoggedModel") => UpdateExperiment,
         ("MlflowService", "getLoggedModel") => ReadLoggedModel,
