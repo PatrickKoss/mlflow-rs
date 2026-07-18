@@ -58,4 +58,5 @@ pub use store::{
     WorkspaceArtifactRoot, WorkspaceDeletionMode, WorkspaceNameValidator, WorkspaceStore,
     DEFAULT_WORKSPACE_NAME as WORKSPACE_DEFAULT_NAME, WORKSPACES,
 };
+pub use store::{Job, JobStatus, JobStore};
 pub use uri::{ParsedUri, UriError};

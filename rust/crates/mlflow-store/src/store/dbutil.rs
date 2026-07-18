@@ -23,6 +23,8 @@ pub(crate) enum Val {
     Int(i64),
     OptInt(Option<i64>),
     Float(f64),
+    OptFloat(Option<f64>),
+    OptJson(Option<serde_json::Value>),
     Bool(bool),
 }
 
@@ -36,6 +38,8 @@ macro_rules! bind_val {
             Val::Int(i) => $q.bind(*i),
             Val::OptInt(i) => $q.bind(*i),
             Val::Float(f) => $q.bind(*f),
+            Val::OptFloat(f) => $q.bind(*f),
+            Val::OptJson(value) => $q.bind(value.clone().map(sqlx::types::Json)),
             Val::Bool(b) => $q.bind(*b),
         }
     }};
@@ -227,6 +231,7 @@ pub(crate) trait RowLike {
     fn get_f64(&self, col: &str) -> Result<f64, sqlx::Error>;
     fn get_opt_f64(&self, col: &str) -> Result<Option<f64>, sqlx::Error>;
     fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error>;
+    fn get_opt_json(&self, col: &str) -> Result<Option<serde_json::Value>, sqlx::Error>;
 
     /// Read an SQLAlchemy `Integer` column (e.g. `experiment_id`), widening to
     /// `i64`. On Postgres this maps to `INT4`/`i32`; SQLite and MySQL store it
@@ -262,6 +267,10 @@ macro_rules! impl_rowlike_i64_int {
             fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error> {
                 self.try_get(col)
             }
+            fn get_opt_json(&self, col: &str) -> Result<Option<serde_json::Value>, sqlx::Error> {
+                self.try_get::<Option<sqlx::types::Json<serde_json::Value>>, _>(col)
+                    .map(|value| value.map(|value| value.0))
+            }
             fn get_int(&self, col: &str) -> Result<i64, sqlx::Error> {
                 self.try_get(col)
             }
@@ -295,6 +304,10 @@ impl RowLike for sqlx::postgres::PgRow {
     }
     fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error> {
         self.try_get(col)
+    }
+    fn get_opt_json(&self, col: &str) -> Result<Option<serde_json::Value>, sqlx::Error> {
+        self.try_get::<Option<sqlx::types::Json<serde_json::Value>>, _>(col)
+            .map(|value| value.map(|value| value.0))
     }
     fn get_int(&self, col: &str) -> Result<i64, sqlx::Error> {
         let v: i32 = self.try_get(col)?;

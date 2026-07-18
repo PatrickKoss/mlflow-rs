@@ -20,6 +20,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod graphql;
+pub mod jobs;
 pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
@@ -327,6 +328,31 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         get(server_info::server_info),
     );
     // ---- end server-info (T11.5) ----
+
+    // ---- generic jobs (T16.5, §12.2/§12.13) ----
+    // Python serves BOTH families. These `/mlflow/jobs` paths fall through the
+    // FastAPI wrapper into Flask (`handlers.py:get_job_endpoints`), where the
+    // basic-auth app's global `_before_request` authenticates them even though
+    // no resource-specific validator exists. The shorter `/jobs` paths are a
+    // separate native FastAPI router (`job_api.py`) explicitly matched by
+    // `_find_fastapi_validator`. Preserve both prefixes and their different
+    // response shapes.
+    // AUTH GAP: both families are authenticated-only; Python applies no
+    // per-job authorization validator to generic jobs.
+    router = router.route(
+        "/ajax-api/3.0/mlflow/jobs/{job_id}",
+        get(jobs::flask_get_job),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/jobs/cancel/{job_id}",
+        axum::routing::patch(jobs::flask_cancel_job),
+    );
+    router = router.route("/ajax-api/3.0/jobs/{job_id}", get(jobs::fastapi_get_job));
+    router = router.route(
+        "/ajax-api/3.0/jobs/cancel/{job_id}",
+        axum::routing::patch(jobs::fastapi_cancel_job),
+    );
+    // ---- end generic jobs ----
 
     register_role_and_auth_layers(router, state)
 }

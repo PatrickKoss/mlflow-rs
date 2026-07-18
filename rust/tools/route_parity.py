@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# ruff: noqa: T201
 """Route parity check: Python routes vs Rust proto and planned-route accounting.
 
 Two modes:
@@ -18,10 +18,11 @@ Contract (see ``RUST_TRACKING_SERVER_PLAN.md`` §2.1, §3, T1.2):
   * Implemented Python-only endpoints that are NOT backed by a
     ``databricks.rpc`` proto option (hand-crafted routes like ``/graphql`` and
     ``server-info``) are listed in ``route_parity_allowlist.txt``.
-  * Part II's not-yet-implemented routes are listed below with their owning
-    phase. This includes every section 12 route, including Flask/FastAPI routes
-    that ``get_endpoints()`` cannot discover. Proto metadata is accounting only:
-    it does not imply that the Rust server has registered a live route.
+  * Part II routes are classified below as implemented or planned with their
+    owning phase. This includes every section 12 route, including Flask/FastAPI
+    routes that ``get_endpoints()`` cannot discover. Proto metadata is
+    accounting only: it does not imply that the Rust server has registered a
+    live route.
   * A Rust route missing from Python is a HARD failure (never allowlisted).
 
 Run from anywhere; paths are resolved relative to this file / the repo root::
@@ -48,7 +49,7 @@ Route = tuple[str, str]
 
 
 @dataclass(frozen=True)
-class PlannedRoute:
+class RouteInfo:
     section: str
     phase: str
     source: str
@@ -102,8 +103,24 @@ PROTO_SECTIONS = {
 }
 
 
-def planned(section: str, phase: str, source: str, *routes: Route) -> dict[Route, PlannedRoute]:
-    return {route: PlannedRoute(section, phase, source) for route in routes}
+def route_info(section: str, phase: str, source: str, *routes: Route) -> dict[Route, RouteInfo]:
+    return {route: RouteInfo(section, phase, source) for route in routes}
+
+
+def planned(section: str, phase: str, source: str, *routes: Route) -> dict[Route, RouteInfo]:
+    return route_info(section, phase, source, *routes)
+
+
+# Live Rust hand routes which cannot appear in the generated proto route table.
+# They remain in route_parity_allowlist.txt for the Python-vs-proto diff, while
+# this classified inventory keeps §12 implemented/planned accounting accurate.
+IMPLEMENTED_GET_ENDPOINT_ROUTES = route_info(
+    "12.2",
+    "T16.5",
+    "get_endpoints",
+    ("GET", "/ajax-api/3.0/mlflow/jobs/<job_id>"),
+    ("PATCH", "/ajax-api/3.0/mlflow/jobs/cancel/<job_id>"),
+)
 
 
 # Non-proto routes returned by handlers.get_endpoints(). These are the 15
@@ -115,13 +132,6 @@ PLANNED_GET_ENDPOINT_ROUTES = {
         "T17.4",
         "get_endpoints",
         ("POST", "/ajax-api/3.0/mlflow/genai/evaluate/invoke"),
-    ),
-    **planned(
-        "12.2",
-        "T16.5",
-        "get_endpoints",
-        ("GET", "/ajax-api/3.0/mlflow/jobs/<job_id>"),
-        ("PATCH", "/ajax-api/3.0/mlflow/jobs/cancel/<job_id>"),
     ),
     **planned(
         "12.3",
@@ -230,8 +240,7 @@ def python_endpoints() -> set[tuple[str, str]]:
 
     out: set[tuple[str, str]] = set()
     for path, _handler, methods in get_endpoints():
-        for method in methods:
-            out.add((method, path))
+        out.update((method, path) for method in methods)
     return out
 
 
@@ -290,8 +299,10 @@ def proto_section_routes(routes: list[dict[str, str]]) -> dict[str, set[Route]]:
 
 
 def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
-    print("§12 route accounting (live Rust routes remain unregistered):")
-    all_non_proto = PLANNED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+    print("§12 route accounting (proto metadata plus classified hand routes):")
+    all_non_proto = (
+        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+    )
     for section, title in SECTION_TITLES.items():
         generated = len(proto_routes.get(section, set()))
         hand = [info for info in all_non_proto.values() if info.section == section]
@@ -300,8 +311,12 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
             phases[PROTO_SECTIONS[section][1]] += generated
         phase_text = ", ".join(f"{phase}={count}" for phase, count in sorted(phases.items()))
         suffix = f"; {phase_text}" if phase_text else ""
+        implemented = sum(
+            info.section == section for info in IMPLEMENTED_GET_ENDPOINT_ROUTES.values()
+        )
         print(
-            f"  §{section} {title}: implemented=0, planned={generated + len(hand)} "
+            f"  §{section} {title}: implemented={implemented}, "
+            f"planned={generated + len(hand) - implemented} "
             f"(proto metadata={generated}, hand-registered={len(hand)}{suffix})"
         )
     demo_count = sum(info.section == "demo" for info in PLANNED_GET_ENDPOINT_ROUTES.values())
@@ -309,7 +324,9 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
 
 
 def section_route_counts(proto_routes: dict[str, set[Route]]) -> dict[str, int]:
-    all_non_proto = PLANNED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+    all_non_proto = (
+        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+    )
     return {
         section: len(proto_routes.get(section, set()))
         + sum(info.section == section for info in all_non_proto.values())
@@ -351,7 +368,7 @@ def compare() -> int:
         for section, expected in EXPECTED_SECTION_ROUTE_COUNTS.items()
         if actual_section_counts[section] != expected
     ]
-    bad_planned_get_count = len(planned_get) != 15
+    bad_planned_get_count = len(planned_get) != 13
 
     ok = True
     if rust_only:
@@ -406,7 +423,7 @@ def compare() -> int:
     if bad_planned_get_count:
         ok = False
         print(
-            "FAILURE: expected exactly 15 phase-tagged non-proto get_endpoints routes, "
+            "FAILURE: expected exactly 13 phase-tagged non-proto get_endpoints routes, "
             f"found {len(planned_get)}"
         )
 
