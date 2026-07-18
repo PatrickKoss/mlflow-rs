@@ -3110,7 +3110,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       triaged: 42 deferred to T17.2 native kinds (discovery 12, evaluate
       7+5, optimize 18), 7 invoke routes to T17.4, rest covered by Rust
       equivalents. Post-merge gates all exit 0.
-- [ ] **T17.2 Native worker protocol** per §14.2: versioned request/result
+- [x] **T17.2 Native worker protocol** per §14.2: versioned request/result
       envelopes, closed six-kind dispatch enum, subject/workspace propagation,
       bounded output, process-group kill-on-timeout/cancel, crash/malformed-
       output mapping, and back-pressure.
@@ -3119,6 +3119,29 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       fail before execution.
       **VER:** integration matrix using the deterministic `mlflow-genai`
       fixture + production-image-style PATH isolation.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 549e55efa): six-kind
+      closed dispatch (invoke_scorer, run_online_trace_scorer,
+      run_online_session_scorer, optimize_prompts, invoke_issue_detection,
+      invoke_genai_evaluate) with deterministic fixtures behind
+      MLFLOW_GENAI_WORKER_FIXTURE=1 + `// Phase 19:` markers at every
+      real-logic site. Negatives BEFORE execution:
+      UNSUPPORTED_PROTOCOL_VERSION / UNKNOWN_JOB_KIND; unknown runner job
+      names fail before spawn. Supervision: one subprocess per job;
+      workspace/subject/tracking-URI/gateway-URI/internal-token
+      propagated; startup FAILS if worker binary missing (no Python
+      fallback); 4 MiB input + 4 MiB stdout/stderr caps with
+      drain-after-cap (no pipe deadlock) and `...[truncated]`; Unix new
+      process group + SIGKILL-on-drop kills grandchildren;
+      close_range/fcntl FD hygiene; failure mapping non_zero_exit/signal/
+      malformed_output/timeout persisted as status_details. Back-pressure
+      via T17.1 caps (judges 10, online 5, optimization 2; observed peak
+      = cap in test). VER: Python-free 6/6 matrix (no python/python3 on
+      PATH), 6/6 negatives, spike regression 2/2, Python oracle suites
+      51/51 items. 37 direct-Python-function tests + 5 HTTP cases stay
+      with T17.4/Phase 19 (documented). Merge union kept T17.2
+      status-details + finalize_with_retry hardening; both scheduler and
+      runner start in main.rs behind the shared gate. Post-merge gates
+      all exit 0.
 - [x] **T17.3 Periodic scheduler + online-scoring scheduler**: tokio-based
       cron with DB locking; port the scheduler logic (config scan, grouping,
       shuffle, sampler waterfall, checkpoint tags, per-job caps).
