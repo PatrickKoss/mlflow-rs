@@ -38,7 +38,10 @@ use super::entities::{
 use super::experiments::{internal, parse_experiment_id};
 use super::TrackingStore;
 use crate::dialect::Dialect;
-use crate::schema::traces::{SPANS, SPAN_METRICS, TRACE_INFO, TRACE_TAGS};
+use crate::schema::traces::{SPANS, SPAN_ATTRIBUTES, SPAN_METRICS, TRACE_INFO, TRACE_TAGS};
+
+const MAX_SPAN_ATTRIBUTE_KEY_CHARS: usize = 250;
+const MAX_SPAN_ATTRIBUTE_VALUE_CHARS: usize = 500;
 
 /// A prepared span row to upsert (the store-level shape; the OTLP→row
 /// translation is a Phase-3 concern). `duration_ns` is never set — it is a
@@ -156,6 +159,7 @@ impl TrackingStore {
         // Phase 3: bulk upsert spans + span metrics (batched, dialect upsert).
         for span in spans {
             upsert_span(&mut tx, dialect, span, exp_id).await?;
+            replace_span_attributes(&mut tx, dialect, span).await?;
         }
         for metric in span_metrics {
             upsert_span_metric(&mut tx, dialect, metric).await?;
@@ -339,6 +343,66 @@ async fn upsert_span(
     )
     .await
     .map_err(super::traces::map_db_err_pub)?;
+    Ok(())
+}
+
+/// Replace the extracted top-level attributes for one span. Delete-before-
+/// insert is required for re-logged spans whose new payload removed a key.
+async fn replace_span_attributes(
+    tx: &mut Tx<'_>,
+    dialect: Dialect,
+    span: &SpanInput,
+) -> Result<(), MlflowError> {
+    let trace_ph = dialect.placeholder(1);
+    let span_ph = dialect.placeholder(2);
+    tx.exec(
+        &format!(
+            "DELETE FROM {SPAN_ATTRIBUTES} WHERE trace_id = {trace_ph} AND span_id = {span_ph}"
+        ),
+        &[
+            Val::Text(span.trace_id.clone()),
+            Val::Text(span.span_id.clone()),
+        ],
+    )
+    .await
+    .map_err(super::traces::map_db_err_pub)?;
+
+    let attributes = serde_json::from_str::<serde_json::Value>(&span.content)
+        .ok()
+        .and_then(|content| content.get("attributes").cloned())
+        .and_then(|attributes| attributes.as_object().cloned())
+        .unwrap_or_default();
+
+    let spec = crate::dialect::UpsertSpec {
+        table: SPAN_ATTRIBUTES,
+        columns: &["trace_id", "span_id", "key", "value", "value_truncated"],
+        pk_columns: &["trace_id", "span_id", "key"],
+        update_columns: &["value", "value_truncated"],
+        ..Default::default()
+    };
+    let sql = dialect.upsert(&spec);
+    for (key, value) in attributes {
+        if key.chars().count() > MAX_SPAN_ATTRIBUTE_KEY_CHARS {
+            continue;
+        }
+        let Some(value) = value.as_str() else {
+            continue;
+        };
+        let value_truncated = value.chars().count() > MAX_SPAN_ATTRIBUTE_VALUE_CHARS;
+        let value = value.chars().take(MAX_SPAN_ATTRIBUTE_VALUE_CHARS).collect();
+        tx.exec(
+            &sql,
+            &[
+                Val::Text(span.trace_id.clone()),
+                Val::Text(span.span_id.clone()),
+                Val::Text(key),
+                Val::Text(value),
+                Val::Bool(value_truncated),
+            ],
+        )
+        .await
+        .map_err(super::traces::map_db_err_pub)?;
+    }
     Ok(())
 }
 

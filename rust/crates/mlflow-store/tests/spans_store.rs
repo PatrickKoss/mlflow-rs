@@ -10,7 +10,9 @@
 
 #![allow(clippy::too_many_arguments, clippy::cloned_ref_to_slice_refs)]
 
-use mlflow_store::{SpanInput, SpanMetricInput, StartTraceInput, TraceTimeRange, TrackingStore};
+use mlflow_store::{
+    Db, SpanInput, SpanMetricInput, StartTraceInput, TraceTimeRange, TrackingStore,
+};
 use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
@@ -18,6 +20,34 @@ const ART_ROOT: &str = "s3://bucket/mlruns";
 
 async fn store(temp: &TempDb) -> TrackingStore {
     TrackingStore::new(temp.connect().await, ART_ROOT)
+}
+
+async fn extracted_attributes(
+    store: &TrackingStore,
+    trace_id: &str,
+) -> Vec<(String, String, bool)> {
+    let sql = "SELECT key, value, value_truncated FROM span_attributes \
+               WHERE trace_id = ? ORDER BY key";
+    match store.db() {
+        Db::Sqlite(pool) => sqlx::query_as(sql)
+            .bind(trace_id)
+            .fetch_all(pool)
+            .await
+            .unwrap(),
+        Db::Postgres(pool) => sqlx::query_as(
+            "SELECT key, value, value_truncated FROM span_attributes \
+             WHERE trace_id = $1 ORDER BY key",
+        )
+        .bind(trace_id)
+        .fetch_all(pool)
+        .await
+        .unwrap(),
+        Db::MySql(pool) => sqlx::query_as(sql)
+            .bind(trace_id)
+            .fetch_all(pool)
+            .await
+            .unwrap(),
+    }
 }
 
 fn span(
@@ -203,6 +233,67 @@ async fn log_spans_idempotent_upsert() {
     assert_eq!(traces.len(), 1);
     assert_eq!(traces[0].spans.len(), 1);
     assert_eq!(traces[0].spans[0].content, "{\"v\":2}");
+}
+
+#[tokio::test]
+async fn log_spans_extracts_replaces_and_deletes_attributes() {
+    let tmp = TempDb::new("attributes").await;
+    let s = store(&tmp).await;
+    let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+    let range = range_from("tr", 1_000_000_000, Some(2_000_000_000), "OK");
+    let long = "x".repeat(600);
+    let first_content = serde_json::json!({
+        "attributes": {"model": "\"gpt-5\"", "removed": "\"old\"", "long": long}
+    })
+    .to_string();
+    s.log_spans(
+        WS,
+        &exp,
+        &[span(
+            "tr",
+            "1",
+            1_000_000_000,
+            Some(2_000_000_000),
+            "OK",
+            &first_content,
+        )],
+        &[],
+        &[range.clone()],
+    )
+    .await
+    .unwrap();
+
+    let rows = extracted_attributes(&s, "tr").await;
+    assert_eq!(rows[0], ("long".into(), "x".repeat(500), true));
+    assert_eq!(rows[1], ("model".into(), "\"gpt-5\"".into(), false));
+    assert_eq!(rows[2], ("removed".into(), "\"old\"".into(), false));
+
+    let second_content = serde_json::json!({"attributes": {"model": "\"claude-4\""}}).to_string();
+    s.log_spans(
+        WS,
+        &exp,
+        &[span(
+            "tr",
+            "1",
+            1_000_000_000,
+            Some(2_000_000_000),
+            "OK",
+            &second_content,
+        )],
+        &[],
+        &[range],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        extracted_attributes(&s, "tr").await,
+        vec![("model".into(), "\"claude-4\"".into(), false)]
+    );
+
+    s.delete_traces(WS, &exp, None, None, Some(&["tr".into()]))
+        .await
+        .unwrap();
+    assert!(extracted_attributes(&s, "tr").await.is_empty());
 }
 
 // ---------------------------------------------------------------------------

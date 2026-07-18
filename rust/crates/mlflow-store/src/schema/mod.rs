@@ -51,6 +51,7 @@ pub const TRACKING_TABLES: &[&str] = &[
     traces::TRACE_REQUEST_METADATA,
     traces::TRACE_METRICS,
     traces::SPANS,
+    traces::SPAN_ATTRIBUTES,
     traces::SPAN_METRICS,
     traces::ASSESSMENTS,
     runs::ENTITY_ASSOCIATIONS,
@@ -62,8 +63,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        // 22 tables per plan §5.1.
-        assert_eq!(TRACKING_TABLES.len(), 22);
+        assert_eq!(TRACKING_TABLES.len(), 23);
     }
 
     #[test]

@@ -262,13 +262,16 @@ async fn cascade_experiments(
          (SELECT experiment_id FROM experiments WHERE workspace = {})",
         dialect.placeholder(1)
     );
-    // span_metrics is keyed by (trace_id, span_id) -> spans; delete via spans.
+    // span_metrics/span_attributes are keyed by (trace_id, span_id) -> spans;
+    // delete via spans. This explicit cleanup also supports deployments where
+    // database-level FK enforcement is disabled.
     let spans_by_trace = format!("SELECT trace_id FROM spans WHERE trace_id IN ({traces_subq})");
-    let sm_sql =
-        format!("DELETE FROM span_metrics WHERE trace_id IN ({spans_by_trace})");
-    tx.exec(&sm_sql, &[Val::Text(workspace.to_string())])
-        .await
-        .map_err(internal)?;
+    for table in ["span_metrics", "span_attributes"] {
+        let sql = format!("DELETE FROM {table} WHERE trace_id IN ({spans_by_trace})");
+        tx.exec(&sql, &[Val::Text(workspace.to_string())])
+            .await
+            .map_err(internal)?;
+    }
     for (table, col) in [
         ("spans", "trace_id"),
         ("trace_tags", "request_id"),
