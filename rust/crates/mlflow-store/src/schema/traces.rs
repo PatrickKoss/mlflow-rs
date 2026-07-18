@@ -12,6 +12,7 @@ pub const TRACE_TAGS: &str = "trace_tags";
 pub const TRACE_REQUEST_METADATA: &str = "trace_request_metadata";
 pub const TRACE_METRICS: &str = "trace_metrics";
 pub const SPANS: &str = "spans";
+pub const SPAN_ATTRIBUTES: &str = "span_attributes";
 pub const SPAN_METRICS: &str = "span_metrics";
 pub const ASSESSMENTS: &str = "assessments";
 
@@ -79,6 +80,18 @@ pub struct Span {
     pub duration_ns: Option<i64>,
     pub content: String,
     pub dimension_attributes: Option<String>,
+}
+
+/// Bounded top-level attribute extracted from `spans.content`.
+/// PK `(trace_id, span_id, key)`; values longer than 500 characters retain
+/// their searchable prefix and set `value_truncated`.
+#[derive(Debug, Clone, PartialEq, FromRow)]
+pub struct SpanAttribute {
+    pub trace_id: String,
+    pub span_id: String,
+    pub key: String,
+    pub value: String,
+    pub value_truncated: bool,
 }
 
 /// Row of the `span_metrics` table (`SqlSpanMetrics`).

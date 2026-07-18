@@ -528,6 +528,74 @@ async fn span_multiple_predicates_match_same_span() {
     );
 }
 
+#[tokio::test]
+async fn span_attribute_like_uses_extracted_values() {
+    let tmp = TempDb::new("span_attribute_filter").await;
+    let s = store(&tmp).await;
+    let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+    let cases = [
+        ("exact", "gpt-4", "snowman ☃"),
+        ("substring", "gpt-4-turbo", "quoted \\\"value\\\""),
+        ("other", "claude-4", "unrelated"),
+        // Python's serialized-content LIKE starts at the requested key and can
+        // match a value belonging to a later attribute. Keep this quirk.
+        ("suffix-quirk", "not-a-match", "gpt-4 in the next attribute"),
+    ];
+    for (trace_id, model, hostile) in cases {
+        create_trace(&s, trace_id, &exp, 1, Some(1), "OK", &[], &[]).await;
+        let mut input = span(trace_id, "1", "llm", "LLM");
+        input.content = serde_json::json!({
+            "attributes": {"model": format!("\"{model}\""), "hostile": hostile}
+        })
+        .to_string()
+        .replace("\":", "\": ");
+        s.log_spans(WS, &exp, &[input], &[], &[range(trace_id)])
+            .await
+            .unwrap();
+    }
+
+    assert_eq!(
+        search_ids(
+            &s,
+            &[exp.clone()],
+            Some("span.attributes.model LIKE \"%gpt-4%\""),
+            &[],
+        )
+        .await,
+        vec!["exact", "substring", "suffix-quirk"]
+    );
+    assert_eq!(
+        search_ids(
+            &s,
+            &[exp.clone()],
+            Some("span.attributes.hostile LIKE \"%snowman%\""),
+            &[],
+        )
+        .await,
+        vec!["exact"]
+    );
+    assert_eq!(
+        search_ids(
+            &s,
+            &[exp.clone()],
+            Some("span.attributes.hostile LIKE \"%value%\""),
+            &[],
+        )
+        .await,
+        vec!["substring"]
+    );
+    assert_eq!(
+        search_ids(
+            &s,
+            &[exp],
+            Some("span.attributes.model RLIKE \"^gpt\""),
+            &[],
+        )
+        .await,
+        vec!["exact", "substring"]
+    );
+}
+
 // ---------------------------------------------------------------------------
 // pagination
 // ---------------------------------------------------------------------------
