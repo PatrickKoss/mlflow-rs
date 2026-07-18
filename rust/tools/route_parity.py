@@ -206,10 +206,7 @@ IMPLEMENTED_EXTERNAL_ROUTES = {
         ("POST", "/gateway/{endpoint_name}/mlflow/invocations"),
         ("POST", "/gateway/mlflow/v1/chat/completions"),
     ),
-}
-
-PLANNED_EXTERNAL_ROUTES = {
-    **planned(
+    **route_info(
         "12.9",
         "T18.4",
         "gateway_api.py",
@@ -222,6 +219,9 @@ PLANNED_EXTERNAL_ROUTES = {
         ("POST", "/gateway/gemini/v1beta/models/{endpoint_name}:streamGenerateContent"),
         ("POST", "/gateway/proxy/{endpoint_name}/{path:path}"),
     ),
+}
+
+PLANNED_EXTERNAL_ROUTES = {
     **planned(
         "12.10",
         "T20.1",

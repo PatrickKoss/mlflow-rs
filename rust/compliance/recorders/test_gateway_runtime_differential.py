@@ -388,6 +388,92 @@ def test_python_rust_gateway_runtime_mock_differential(tmp_path: Path, monkeypat
                         == _selected_headers(rs_response).keys()
                     )
 
+                passthrough_cases = (
+                    (
+                        "/gateway/openai/v1/chat/completions",
+                        {
+                            "model": "openai-differential-endpoint",
+                            "messages": [{"role": "user", "content": "hello"}],
+                        },
+                    ),
+                    (
+                        "/gateway/openai/v1/chat/completions",
+                        {
+                            "model": "openai-differential-endpoint",
+                            "messages": [{"role": "user", "content": "hello"}],
+                            "stream": True,
+                        },
+                    ),
+                    (
+                        "/gateway/openai/v1/embeddings",
+                        {"model": "openai-differential-endpoint", "input": "hello"},
+                    ),
+                    (
+                        "/gateway/openai/v1/responses",
+                        {"model": "openai-differential-endpoint", "input": "hello"},
+                    ),
+                    (
+                        "/gateway/openai/v1/responses/compact",
+                        {
+                            "model": "openai-differential-endpoint",
+                            "previous_response_id": "obvious-fake-response-id",
+                        },
+                    ),
+                    (
+                        "/gateway/anthropic/v1/messages",
+                        {
+                            "model": "anthropic-differential-endpoint",
+                            "messages": [{"role": "user", "content": "hello"}],
+                            "max_tokens": 8,
+                        },
+                    ),
+                    (
+                        "/gateway/anthropic/v1/messages",
+                        {
+                            "model": "anthropic-differential-endpoint",
+                            "messages": [{"role": "user", "content": "hello"}],
+                            "max_tokens": 8,
+                            "stream": True,
+                        },
+                    ),
+                    (
+                        "/gateway/gemini/v1beta/models/"
+                        "gemini-differential-endpoint:generateContent",
+                        {"contents": [{"role": "user", "parts": [{"text": "hello"}]}]},
+                    ),
+                    (
+                        "/gateway/gemini/v1beta/models/"
+                        "gemini-differential-endpoint:streamGenerateContent",
+                        {"contents": [{"role": "user", "parts": [{"text": "hello"}]}]},
+                    ),
+                    (
+                        "/gateway/proxy/openai-differential-endpoint/v1/chat/completions"
+                        "?obvious=fake",
+                        {
+                            "model": "caller-selected-model",
+                            "messages": [{"role": "user", "content": "hello"}],
+                        },
+                    ),
+                    (
+                        "/gateway/openai/v1/chat/completions",
+                        {
+                            "model": "openai-differential-endpoint",
+                            "messages": [{"role": "user", "content": "error-429"}],
+                        },
+                    ),
+                )
+                for path, body in passthrough_cases:
+                    py_response = python.post(f"{python_base}{path}", json=body, timeout=10)
+                    rs_response = rust.post(f"{rust_base}{path}", json=body, timeout=10)
+                    assert py_response.status_code == rs_response.status_code, (path, body)
+                    assert py_response.content == rs_response.content, (
+                        f"{path} {body}\nPY={py_response.content!r}\nRS={rs_response.content!r}"
+                    )
+                    py_headers = _selected_headers(py_response)
+                    rs_headers = _selected_headers(rs_response)
+                    assert py_headers.keys() == rs_headers.keys(), (path, body)
+                    assert py_headers["content-type"] == rs_headers["content-type"]
+
                 endpoint_path = "/gateway/openai-differential-endpoint/mlflow/invocations"
                 validation_cases = (
                     (endpoint_path, {}),

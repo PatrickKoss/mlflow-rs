@@ -18,8 +18,9 @@
 //! `(service, method)` — exactly as Python keys `BEFORE_REQUEST_HANDLERS` on the
 //! proto request class — plus the hand-registered auth/artifact/trace routes.
 //! Only routes actually served by this Rust server are wired. Gateway discovery
-//! and `gateway-proxy` need no resource validator (Python authenticates them
-//! globally, with `validate_gateway_proxy` returning `True` for the bridge).
+//! and the legacy Flask `gateway-proxy` bridge need no resource validator;
+//! native `/gateway/` routes resolve an endpoint name and require USE exactly
+//! like Python's FastAPI permission middleware.
 //! Prompt optimization and review queues are live and carry the same validators as Python
 //! (experiment-inherited for prompt optimization; the full owner/member/
 //! manager rule set for review queues).
@@ -387,19 +388,6 @@ fn build_dispatch() -> Dispatch {
         }
     }
 
-    // Native gateway invocation routes use endpoint USE permission. The
-    // unified route resolves the endpoint name from the request body's model.
-    d.exact.push(Route {
-        matcher: TemplateMatcher::compile("/gateway/<endpoint_name>/mlflow/invocations"),
-        method: "POST",
-        validator: Validator::UseGatewayEndpoint,
-    });
-    d.exact.push(Route {
-        matcher: TemplateMatcher::compile("/gateway/mlflow/v1/chat/completions"),
-        method: "POST",
-        validator: Validator::UseGatewayEndpoint,
-    });
-
     // Hand-registered RBAC routes (`BEFORE_REQUEST_VALIDATORS.update`,
     // `auth/__init__.py:2669-2720`). Super admins bypass these upstream; the
     // validators below implement workspace-admin, self, and resource-MANAGE
@@ -514,8 +502,75 @@ pub enum Dispatched {
     Deny,
 }
 
+/// `_get_gateway_validator` / `_extract_gateway_endpoint_name`: every native
+/// `/gateway/` request is permission-gated. Endpoint-addressed invocations,
+/// Gemini, and raw proxy routes carry the endpoint in the path; the typed
+/// OpenAI/Anthropic routes carry it in the JSON `model` field. The latter need
+/// no synthetic path parameter because `UseGatewayEndpoint` already falls back
+/// to the body field through `RequestCtx::get_param`.
+fn dispatch_gateway_request(path: &str) -> Option<Dispatched> {
+    let invocation_prefix = "/gateway/";
+    let invocation_suffix = "/mlflow/invocations";
+    if let Some(endpoint_name) = path
+        .strip_prefix(invocation_prefix)
+        .and_then(|tail| tail.strip_suffix(invocation_suffix))
+        .filter(|name| !name.is_empty() && !name.contains('/'))
+    {
+        return Some(Dispatched::Validator(
+            Validator::UseGatewayEndpoint,
+            vec![("endpoint_name".to_string(), endpoint_name.to_string())],
+        ));
+    }
+
+    const BODY_ENDPOINT_ROUTES: [&str; 5] = [
+        "/gateway/mlflow/v1/chat/completions",
+        "/gateway/openai/v1/chat/completions",
+        "/gateway/openai/v1/embeddings",
+        "/gateway/openai/v1/responses",
+        "/gateway/anthropic/v1/messages",
+    ];
+    if BODY_ENDPOINT_ROUTES.contains(&path) {
+        return Some(Dispatched::Validator(
+            Validator::UseGatewayEndpoint,
+            Vec::new(),
+        ));
+    }
+
+    const GEMINI_PREFIX: &str = "/gateway/gemini/v1beta/models/";
+    for suffix in [":generateContent", ":streamGenerateContent"] {
+        if let Some(endpoint_name) = path
+            .strip_prefix(GEMINI_PREFIX)
+            .and_then(|tail| tail.strip_suffix(suffix))
+            .filter(|name| !name.is_empty() && !name.contains(['/', ':']))
+        {
+            return Some(Dispatched::Validator(
+                Validator::UseGatewayEndpoint,
+                vec![("endpoint_name".to_string(), endpoint_name.to_string())],
+            ));
+        }
+    }
+
+    if let Some(tail) = path.strip_prefix("/gateway/proxy/") {
+        if let Some((endpoint_name, proxy_path)) = tail.split_once('/') {
+            if !endpoint_name.is_empty() && !proxy_path.is_empty() {
+                return Some(Dispatched::Validator(
+                    Validator::UseGatewayEndpoint,
+                    vec![("endpoint_name".to_string(), endpoint_name.to_string())],
+                ));
+            }
+        }
+    }
+
+    path.starts_with("/gateway/")
+        .then(|| Dispatched::Validator(Validator::MissingGatewayEndpointName, Vec::new()))
+}
+
 /// Mirror `_find_validator` + the proxy-artifact fallback in `_before_request`.
 pub fn dispatch_request(path: &str, method: &str) -> Dispatched {
+    if let Some(dispatched) = dispatch_gateway_request(path) {
+        return dispatched;
+    }
+
     let d = dispatch();
 
     // 1. Logged-model routes (checked first, before the exact map).
@@ -880,6 +935,48 @@ mod tests {
                 "POST"
             )),
             Validator::UseGatewayEndpoint
+        );
+        for path in [
+            "/gateway/openai/v1/chat/completions",
+            "/gateway/openai/v1/embeddings",
+            "/gateway/openai/v1/responses",
+            "/gateway/anthropic/v1/messages",
+        ] {
+            assert_eq!(
+                validator_of(dispatch_request(path, "POST")),
+                Validator::UseGatewayEndpoint
+            );
+        }
+
+        for (path, endpoint_name) in [
+            (
+                "/gateway/gemini/v1beta/models/gemini-endpoint:generateContent",
+                "gemini-endpoint",
+            ),
+            (
+                "/gateway/gemini/v1beta/models/gemini-stream:streamGenerateContent",
+                "gemini-stream",
+            ),
+            (
+                "/gateway/proxy/proxy-endpoint/v1/chat/completions",
+                "proxy-endpoint",
+            ),
+        ] {
+            match dispatch_request(path, "POST") {
+                Dispatched::Validator(Validator::UseGatewayEndpoint, params) => assert_eq!(
+                    params,
+                    vec![("endpoint_name".to_string(), endpoint_name.to_string())]
+                ),
+                _ => panic!("expected gateway endpoint USE validator for {path}"),
+            }
+        }
+
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/gateway/openai/v1/responses/compact",
+                "POST"
+            )),
+            Validator::MissingGatewayEndpointName
         );
     }
 
