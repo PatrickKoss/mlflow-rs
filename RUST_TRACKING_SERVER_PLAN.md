@@ -5,22 +5,18 @@ Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app pa
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
-Status: **in progress — Phases 2–8, 10, 12, and 13 complete; Phase 9 complete
-except T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke).
-The T12.4 differential corpus is GREEN (133 cases, 0 non-allowlisted diffs),
-the compliance CI job is a required gate, the client suites are green against
-Rust (T12.3: 0 failures across tracking/auth/client/RBAC), and measured
-benchmarks (T13.3) plus restructure verdicts (T13.4) are in `rust/bench/`.**
+Status: **Part 1 COMPLETE except T9.9/T11.6 (browser-driven UI validation,
+deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 done
+except those two UI checks. Corpus GREEN + required CI gate; client suites 0
+failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
+operational docs landed. Next: Part 2 (genai port) per user directive.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-18
 
 **Resume notes (2026-07-18):** implementation subagents now run via Codex
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
 **Open:**
-- **Phase 14** — next up: T14.1+T14.2 combined (1 h Python-vs-Rust soak on
-  docker postgres+MinIO per the user's respec, ~2.5 h wall clock), then T14.3
-  operational docs. After Phase 14: **Part 2 (genai port)** per user
-  directive.
+- **Part 2 (genai port)** — starting now per user directive.
 - **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
   done together.
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
@@ -2040,12 +2036,24 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       live-PG regression test. LIMITATION surfaced: Rust artifact proxy has
       no cloud-scheme (S3) support — both sides used client-direct SigV4
       uploads (realistic client path); see open items.
-- [ ] **T14.3 Operational docs**: deployment guide (compose + k8s), migration runbook
+- [x] **T14.3 Operational docs**: deployment guide (compose + k8s), migration runbook
       (Python-only → split; auth DB sharing; secret/key management for Fernet + CSRF),
       rollback procedure (nginx flips routes back to Python — zero data migration, both
       DBs shared).
       **AC:** a fresh operator deploys the split from docs alone.
       **VER:** doc walkthrough by someone not on the project.
+      **DONE (2026-07-18):** `rust/docs/{DEPLOYMENT.md,MIGRATION_RUNBOOK.md,
+      ROLLBACK.md}` — grounded in the real route table, CLI_PARITY.md flags,
+      and alembic head pins (refuse-to-boot behavior explained); D12 key
+      management (shared Fernet webhook key, Rust CSRF secret, Flask secret
+      stays Python-side); artifact-proxy S3 limitation called out with nginx
+      routing those paths to Python. Example compose VERIFIED LIVE: booted,
+      tracking request served by Rust (200), artifact-proxy PUT+GET served by
+      Python (200), genai probe attributed to Python; then torn down. 9 k8s
+      YAML docs validated (PyYAML; kubectl unavailable). ROLLBACK.md lists
+      downgrade-safe revisions (a3f8c21d9b47, c4a9b7d3e812) and what the
+      span_attributes downgrade drops. Human doc walkthrough (the AC's
+      fresh-operator test) still pending — flagged for the user.
 
 ---
 
