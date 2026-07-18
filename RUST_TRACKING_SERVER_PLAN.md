@@ -1937,7 +1937,7 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       index_span_attributes_key_value; cargo fmt/clippy/test-workspace and
       T12.4 replay corpus exit 0 pre- AND post-merge. 50M-span/<1s postgres AC
       deferred to T13.3's full-scale bench run (not measurable locally).
-- [ ] **T13.3 Benchmark suite + seeded dataset generator** (`rust/bench/`): ~100 GB-scale
+- [x] **T13.3 Benchmark suite + seeded dataset generator** (`rust/bench/`): ~100 GB-scale
       synthetic DB (millions of runs, dense metrics, 10M+ traces with spans, 100k+ model
       versions); scenarios: runs/search with metric filters + ordering, deep pagination,
       bulk-interval history, traces/search with span filters, OTLP ingest throughput,
@@ -1945,6 +1945,22 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       **AC:** documented p50/p95 Python vs Rust; targets: p95 run-search < 500 ms,
       deep-page O(1), OTLP ingest ≥ 5x Python.
       **VER:** `rust/bench/RESULTS.md` with hardware notes.
+      **DONE (2026-07-18):** suite landed (`rust/bench/{seed.py,bench.py,
+      README.md,RESULTS.md}`), scale is a CLI parameter; measured locally at
+      2.4 GB sqlite (20k runs / 8M metric rows / 50k traces / 200k spans / 1M
+      span attrs / 5k MVs), release binary, byte-identical DB copies, 30
+      iterations + warmup. p95 Rust vs Python: run-search 36.0 vs 162.3 ms
+      (4.5x, <500 ms AC MET); deep pagination 8.5 vs 36.9 ms, both O(1) over
+      25 pages (AC MET); bulk-interval history 3.2 vs 9.6 ms (3.0x); span-attr
+      trace search 154.6 vs 265.6 ms (1.72x — weakest read win); OTLP ingest
+      2,826 vs 676 spans/s (4.18x — 5x AC NOT MET at this scale, sequential
+      batches, honestly reported); prompt anti-join 86.3 vs 86.2 ms (tie —
+      only non-win, feeds T13.4). Full-scale postgres instructions in README.
+      En route fixed quoted dotted span-attribute search, and the WIP branch
+      carried a real soundness fix (thread-local order-by-join registry
+      unsound across .await → OrderCols threaded explicitly). Verified:
+      ruff/fmt/clippy/test-workspace and T12.4 replay corpus exit 0 pre- and
+      post-merge. WSL2/sqlite caveats documented in RESULTS.md.
 - [ ] **T13.4 Deeper restructures** informed by T13.3 (metric partitioning, narrower
       metrics PK with dedup hash, trace hot/cold split, auth grant semi-join
       materialization). Out of scope until benchmarks prove need.
