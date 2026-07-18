@@ -42,11 +42,11 @@ fn main() {
     let vendor_dir = manifest_dir.join("vendor");
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
-    // Files we compile. `service.proto` transitively pulls in assessments,
-    // databricks, datasets, issues, label_schemas, prompt_optimization,
-    // review_queues, jobs, scalapb, and the OTLP trace proto; the registry /
-    // artifacts / webhooks protos come along explicitly. We list the top-level
-    // targets and let protox resolve imports from the include paths.
+    // Files we compile. Keep the Part II entity protos explicit even though
+    // `service.proto` imports them: they are public `mlflow-proto` inputs in
+    // their own right, and listing them makes Cargo rebuild when any one changes.
+    // Imports such as jobs, scalapb, and the OTLP trace proto are still resolved
+    // transitively; the registry / artifacts / webhooks protos come explicitly.
     let proto_files: Vec<PathBuf> = [
         "service.proto",
         "model_registry.proto",
@@ -54,6 +54,11 @@ fn main() {
         "assessments.proto",
         "databricks.proto",
         "mlflow_artifacts.proto",
+        "datasets.proto",
+        "issues.proto",
+        "label_schemas.proto",
+        "review_queues.proto",
+        "prompt_optimization.proto",
     ]
     .iter()
     .map(|f| protos_dir.join(f))
