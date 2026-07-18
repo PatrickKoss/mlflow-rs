@@ -55,6 +55,7 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 md5 = { workspace = true }
 subtle = { workspace = true }
+rand = { workspace = true }
 
 # GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the
 # no-batching/query-safety guard and hand-written resolution against the fixed,
