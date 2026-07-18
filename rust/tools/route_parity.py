@@ -136,30 +136,36 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
         ("PUT", "/ajax-api/3.0/mlflow/scorers/online-config"),
     )
 )
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
+        "12.2",
+        "T17.4",
+        "get_endpoints",
+        ("POST", "/ajax-api/3.0/mlflow/genai/evaluate/invoke"),
+    )
+)
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
+        "12.3",
+        "T17.4",
+        "get_endpoints",
+        ("POST", "/ajax-api/3.0/mlflow/scorer/invoke"),
+    )
+)
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
+        "12.4",
+        "T17.4",
+        "get_endpoints",
+        ("POST", "/ajax-api/3.0/mlflow/issues/invoke"),
+    )
+)
 
 
 # Non-proto routes returned by handlers.get_endpoints(). These are the 15
 # entries that T15.2 moves out of the old "genai, out of scope" allowlist.
 # Two demo-data routes are adjacent GenAI UI surface but are not listed in §12.
 PLANNED_GET_ENDPOINT_ROUTES = {
-    **planned(
-        "12.2",
-        "T17.4",
-        "get_endpoints",
-        ("POST", "/ajax-api/3.0/mlflow/genai/evaluate/invoke"),
-    ),
-    **planned(
-        "12.3",
-        "T17.4",
-        "get_endpoints",
-        ("POST", "/ajax-api/3.0/mlflow/scorer/invoke"),
-    ),
-    **planned(
-        "12.4",
-        "T17.4",
-        "get_endpoints",
-        ("POST", "/ajax-api/3.0/mlflow/issues/invoke"),
-    ),
     **planned(
         "12.8",
         "T18.2",
@@ -376,7 +382,7 @@ def compare() -> int:
         for section, expected in EXPECTED_SECTION_ROUTE_COUNTS.items()
         if actual_section_counts[section] != expected
     ]
-    bad_planned_get_count = len(planned_get) != 9
+    bad_planned_get_count = len(planned_get) != 6
 
     ok = True
     if rust_only:
@@ -431,7 +437,7 @@ def compare() -> int:
     if bad_planned_get_count:
         ok = False
         print(
-            "FAILURE: expected exactly 9 phase-tagged non-proto get_endpoints routes, "
+            "FAILURE: expected exactly 6 phase-tagged non-proto get_endpoints routes, "
             f"found {len(planned_get)}"
         )
 

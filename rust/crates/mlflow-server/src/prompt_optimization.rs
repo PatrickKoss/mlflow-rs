@@ -3,7 +3,8 @@
 //! Python has no prompt-optimization table. The public proto is rebuilt from
 //! the generic `jobs` row, while its MLflow run stores the submitted config as
 //! params and the evaluation scores as metrics. Submission only creates those
-//! two records here; native execution belongs to Phase 19.
+//! two records here; the Phase 17 runner claims the generic job row and sends
+//! it through the native worker protocol.
 
 use std::collections::HashMap;
 
@@ -180,9 +181,9 @@ pub async fn create_prompt_optimization_job(
             None,
         )
         .await?;
-    // Phase 19: the native prompt optimizer will claim and execute this D20
-    // queue row. Until that runner lands, submission intentionally leaves it
-    // in PENDING and creates no Huey side queue.
+    // The D20 database row is the only queue. The Phase 17 runner claims it and
+    // dispatches `optimize_prompts` through the native worker; no Huey side
+    // queue exists in the Rust server.
 
     let response_job = pb::PromptOptimizationJob {
         job_id: Some(job.job_id),
