@@ -54,6 +54,7 @@ pub mod parse {
     pub use crate::domains::experiments::{
         parse_order_by as experiments_order_by, parse_search_filter as experiments_filter,
     };
+    pub use crate::domains::issues::parse_search_filter as issues_filter;
     pub use crate::domains::logged_models::{
         parse_filter_string_sqlalchemy as logged_models_filter_sqlalchemy,
         parse_order_by as logged_models_order_by, parse_search_filter as logged_models_filter,

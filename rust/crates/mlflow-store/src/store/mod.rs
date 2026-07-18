@@ -32,7 +32,9 @@ mod dbutil;
 mod entities;
 mod evaluation_datasets;
 mod experiments;
+mod issues;
 mod jobs;
+mod label_schemas;
 mod logged_models;
 mod metrics;
 mod metrics_bulk;
@@ -67,7 +69,12 @@ pub use evaluation_datasets::{
     EvaluationRecordsPage, UpsertEvaluationRecordsResult,
 };
 pub use experiments::{ViewType, WorkspaceArtifactRoot};
+pub use issues::{Issue, IssueUpdate, IssuesPage};
 pub use jobs::{Job, JobStatus, JobStore};
+pub use label_schemas::{
+    LabelSchema, LabelSchemaInput, LabelSchemaType, LabelSchemaUpdate, LabelSchemasPage,
+    DEFAULT_LABEL_SCHEMA_INSTRUCTION, DEFAULT_LABEL_SCHEMA_NAME,
+};
 pub use logged_models::{
     logged_models_page_token, logged_models_token_offset, DatasetFilter, LoggedModel,
     LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
