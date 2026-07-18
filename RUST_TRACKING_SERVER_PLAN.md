@@ -3226,9 +3226,27 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       non-allowlisted diffs. Route parity: §12.8 implemented=72, planned=6
       (T18.2 discovery). 404 sentinel moved to `gateway/supported-models`
       (moves again at T18.2). Gates fmt/clippy/test/parity/replay all 0.
-- [ ] **T18.2 Discovery + bridge routes**: 4 ajax discovery routes +
+- [x] **T18.2 Discovery + bridge routes**: 4 ajax discovery routes +
       `gateway-proxy` with its validation quirks and empty-target behavior.
       **AC/VER:** corpus section; UI provider-picker renders from Rust.
+      **DONE (2026-07-18, codex agent, merge 950076edb):** 4 discovery
+      routes (supported-providers, supported-models, provider-config,
+      secrets/config) with provider sort/filter/aliases, Vertex
+      consolidation, model flatten/dedup, fine-tune exclusion, pricing
+      conversion, passphrase env truthiness; UI payloads asserted against
+      Python-derived byte lengths + SHA-256 (UI render itself stays on the
+      deferred browser-validation backlog with T9.9/T11.6). gateway-proxy
+      GET/POST with Python quirks: empty/unset MLFLOW_DEPLOYMENTS_TARGET
+      short-circuits to `{"endpoints":[]}\n` before all validation; GET
+      only `api/2.0/endpoints`, POST only `gateway/<name>/invocations`;
+      HTML 415/400/500 Flask-layer errors; headers not forwarded either
+      direction; only upstream 200 succeeds, else INTERNAL_ERROR 500;
+      Flask-sorted JSON re-serialization. Stub-server forwarding tests.
+      §12.8 now implemented=78, planned=0. Corpus +13 (8 discovery/empty-
+      target in gateway.yaml, 5 proxy-validation in new
+      gateway_proxy_validation.yaml) → 188 total, zero non-allowlisted
+      diffs. Sentinel moved to `/ajax-api/3.0/mlflow/assistant/config`
+      (§12.10, moves at T20.1). Gates fmt/clippy/test/parity/replay all 0.
 - [ ] **T18.3 Runtime core**: unified invocations + `mlflow/v1/chat/
       completions`, provider trait, native adapters for openai/azure,
       anthropic, gemini; SSE plumbing with the §12.9 exactness list; timing
