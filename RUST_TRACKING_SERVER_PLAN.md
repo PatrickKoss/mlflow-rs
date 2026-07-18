@@ -2885,7 +2885,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       fixtures all round-trip; wrong AAD/KEK, truncation, and corruption all
       fail closed on a constant error. 14 spike tests + workspace gates
       exit 0.
-- [ ] **T15.4 Native engine + worker spike**: add skeleton `mlflow-genai` and
+- [x] **T15.4 Native engine + worker spike**: add skeleton `mlflow-genai` and
       `mlflow-genai-worker`; parse a real builtin-scorer payload and execute
       one deterministic scorer plus one instructions judge through the mock
       gateway inside a spawned Rust worker (params/result envelopes,
@@ -2893,6 +2893,23 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **AC:** job lifecycle is observable in the `jobs` table, outputs match
       the Python fixtures, and the test environment has no Python executable.
       **VER:** spike tests + production-image-style PATH isolation green.
+      **DONE (2026-07-18):** crates `mlflow-genai` (SerializedScorer,
+      ScorerExecutor, protocol envelopes, process-group-aware WorkerLauncher)
+      + `mlflow-genai-worker` (bounded stdin/stdout JSON worker) are
+      workspace members. Persisted-scorer format pinned (metadata + exactly
+      one representation field; genuine ResponseLength fixture with
+      builtin_scorer_class/pydantic_data; instructions_judge_pydantic_data;
+      unknown additive fields retained). §14.2 protocol: versioned request
+      envelope, closed 6-value job_kind enum, succeeded/failed result tags;
+      unknown version fails before params parse. Spike proves: ResponseLength
+      + InstructionsJudge (via in-process mock gateway) match Python oracles
+      (generate_oracles.py, real Python InstructionsJudge mocked at the
+      provider boundary); scratch-sqlite jobs rows PENDING→RUNNING→SUCCEEDED;
+      non_zero_exit / signal / malformed_output / timeout each propagate
+      distinctly; process-group kill takes worker-spawned children; PATH is
+      an empty temp dir (python/python3 NotFound) and both flows still pass.
+      Scratch jobs adapter marked T15.4-only pending T16.5's real store.
+      cargo + replay gates exit 0 pre- and post-merge.
 - [ ] **T15.5 Reachability, test, and corpus inventory**: enumerate every
       `mlflow/genai` module/function/test plus §12 gateway/jobs/assistant/
       archival suites; classify server reachability, record the native owner
