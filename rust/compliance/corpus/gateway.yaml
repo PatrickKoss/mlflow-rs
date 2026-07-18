@@ -1,0 +1,172 @@
+# Plan §12.8 - AI Gateway CRUD. Secret read responses contain only Python's
+# masked value shape; encrypted/plaintext bytes are never recorded.
+cases:
+  - name: gateway_create_secret_masked
+    method: POST
+    path: /api/3.0/mlflow/gateway/secrets/create
+    body:
+      secret_name: corpus-obvious-fake-secret
+      secret_value: {api_key: obvious-fake-corpus-value-1234}
+      provider: openai
+      auth_config: {auth_mode: api_key}
+      created_by: corpus-user
+    bind:
+      - {bind: gateway_secret_id, from: "$.secret.secret_id"}
+    expect_status: 200
+
+  - name: gateway_get_secret_masked
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/secrets/get
+    query: {secret_id: "${gateway_secret_id}"}
+    expect_status: 200
+
+  - name: gateway_list_secrets_masked
+    method: GET
+    path: /api/3.0/mlflow/gateway/secrets/list
+    query: {provider: openai}
+    expect_status: 200
+
+  - name: gateway_update_secret_masked
+    method: POST
+    path: /ajax-api/3.0/mlflow/gateway/secrets/update
+    body:
+      secret_id: "${gateway_secret_id}"
+      secret_value: {api_key: rotated-obvious-fake-value-5678}
+      updated_by: corpus-user
+    expect_status: 200
+
+  - name: gateway_create_model_definition
+    method: POST
+    path: /api/3.0/mlflow/gateway/model-definitions/create
+    body:
+      name: corpus-fake-model-definition
+      secret_id: "${gateway_secret_id}"
+      provider: openai
+      model_name: corpus-fake-model
+      created_by: corpus-user
+    bind:
+      - {bind: gateway_model_definition_id, from: "$.model_definition.model_definition_id"}
+    expect_status: 200
+
+  - name: gateway_get_model_definition
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/model-definitions/get
+    query: {model_definition_id: "${gateway_model_definition_id}"}
+    expect_status: 200
+
+  - name: gateway_list_model_definitions
+    method: GET
+    path: /api/3.0/mlflow/gateway/model-definitions/list
+    query: {provider: openai, secret_id: "${gateway_secret_id}"}
+    expect_status: 200
+
+  - name: gateway_update_model_definition
+    method: POST
+    path: /ajax-api/3.0/mlflow/gateway/model-definitions/update
+    body:
+      model_definition_id: "${gateway_model_definition_id}"
+      model_name: corpus-fake-model-updated
+      updated_by: corpus-user
+    expect_status: 200
+
+  - name: gateway_create_endpoint
+    method: POST
+    path: /api/3.0/mlflow/gateway/endpoints/create
+    body:
+      name: corpus-fake-endpoint
+      model_configs:
+        - model_definition_id: "${gateway_model_definition_id}"
+          linkage_type: PRIMARY
+          weight: 1.0
+      routing_strategy: REQUEST_BASED_TRAFFIC_SPLIT
+      usage_tracking: false
+      created_by: corpus-user
+    bind:
+      - {bind: gateway_endpoint_id, from: "$.endpoint.endpoint_id"}
+    expect_status: 200
+
+  - name: gateway_get_endpoint
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/get
+    query: {endpoint_id: "${gateway_endpoint_id}"}
+    expect_status: 200
+
+  - name: gateway_set_endpoint_tag
+    method: POST
+    path: /api/3.0/mlflow/gateway/endpoints/set-tag
+    body: {endpoint_id: "${gateway_endpoint_id}", key: corpus, value: parity}
+    expect_status: 200
+
+  - name: gateway_list_endpoints
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/list
+    query: {provider: openai}
+    expect_status: 200
+
+  - name: gateway_delete_endpoint
+    method: DELETE
+    path: /api/3.0/mlflow/gateway/endpoints/delete
+    body: {endpoint_id: "${gateway_endpoint_id}"}
+    expect_status: 200
+
+  - name: gateway_delete_model_definition
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/gateway/model-definitions/delete
+    body: {model_definition_id: "${gateway_model_definition_id}"}
+    expect_status: 200
+
+  - name: gateway_delete_secret
+    method: DELETE
+    path: /api/3.0/mlflow/gateway/secrets/delete
+    body: {secret_id: "${gateway_secret_id}"}
+    expect_status: 200
+
+  - name: gateway_create_budget_policy
+    method: POST
+    path: /api/3.0/mlflow/gateway/budgets/create
+    body:
+      budget_unit: USD
+      budget_amount: 25.5
+      duration: {unit: DAYS, value: 1}
+      target_scope: WORKSPACE
+      budget_action: ALERT
+      created_by: corpus-user
+    bind:
+      - {bind: gateway_budget_policy_id, from: "$.budget_policy.budget_policy_id"}
+    expect_status: 200
+
+  - name: gateway_get_budget_policy
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/budgets/get
+    query: {budget_policy_id: "${gateway_budget_policy_id}"}
+    expect_status: 200
+
+  - name: gateway_update_budget_policy
+    method: POST
+    path: /api/3.0/mlflow/gateway/budgets/update
+    body:
+      budget_policy_id: "${gateway_budget_policy_id}"
+      budget_amount: 30.0
+      duration: {unit: HOURS, value: 12}
+      budget_action: REJECT
+      updated_by: corpus-user
+    expect_status: 200
+
+  - name: gateway_list_budget_policies
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/budgets/list
+    query: {max_results: 10}
+    expect_status: 200
+
+  - name: gateway_list_budget_windows
+    method: GET
+    path: /api/3.0/mlflow/gateway/budgets/windows
+    normalize:
+      extra_timestamp_fields: [window_start_ms, window_end_ms]
+    expect_status: 200
+
+  - name: gateway_delete_budget_policy
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/gateway/budgets/delete
+    body: {budget_policy_id: "${gateway_budget_policy_id}"}
+    expect_status: 200

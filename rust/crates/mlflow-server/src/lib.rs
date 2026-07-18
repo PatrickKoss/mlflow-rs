@@ -19,6 +19,7 @@ pub mod auth_middleware;
 pub mod config;
 pub mod datasets;
 pub mod experiments;
+pub mod gateway;
 pub mod graphql;
 pub mod invoke;
 pub mod issues;
@@ -601,6 +602,46 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         return None;
     }
     Some(match (method, http_method) {
+        ("createGatewaySecret", "POST") => post(gateway::create_secret),
+        ("getGatewaySecretInfo", "GET") => get(gateway::get_secret),
+        ("updateGatewaySecret", "POST") => post(gateway::update_secret),
+        ("deleteGatewaySecret", "DELETE") => delete(gateway::delete_secret),
+        ("listGatewaySecretInfos", "GET") => get(gateway::list_secrets),
+        ("createGatewayEndpoint", "POST") => post(gateway::create_endpoint),
+        ("getGatewayEndpoint", "GET") => get(gateway::get_endpoint),
+        ("updateGatewayEndpoint", "POST") => post(gateway::update_endpoint),
+        ("deleteGatewayEndpoint", "DELETE") => delete(gateway::delete_endpoint),
+        ("listGatewayEndpoints", "GET") => get(gateway::list_endpoints),
+        ("createGatewayModelDefinition", "POST") => post(gateway::create_model_definition),
+        ("getGatewayModelDefinition", "GET") => get(gateway::get_model_definition),
+        ("listGatewayModelDefinitions", "GET") => get(gateway::list_model_definitions),
+        ("updateGatewayModelDefinition", "POST") => post(gateway::update_model_definition),
+        ("deleteGatewayModelDefinition", "DELETE") => delete(gateway::delete_model_definition),
+        ("attachModelToEndpoint", "POST") => post(gateway::attach_model),
+        ("detachModelFromEndpoint", "DELETE") => delete(gateway::detach_model),
+        ("createEndpointBinding", "POST") => post(gateway::create_binding),
+        ("deleteEndpointBinding", "DELETE") => delete(gateway::delete_binding),
+        ("listEndpointBindings", "GET") => get(gateway::list_bindings),
+        ("setGatewayEndpointTag", "POST") => post(gateway::set_tag),
+        ("deleteGatewayEndpointTag", "DELETE") => delete(gateway::delete_tag),
+        ("createBudgetPolicy", "POST") => post(gateway::create_budget_policy),
+        ("getBudgetPolicy", "GET") => get(gateway::get_budget_policy),
+        ("updateBudgetPolicy", "POST") => post(gateway::update_budget_policy),
+        ("deleteBudgetPolicy", "DELETE") => delete(gateway::delete_budget_policy),
+        ("listBudgetPolicies", "GET") => get(gateway::list_budget_policies),
+        ("listBudgetWindows", "GET") => get(gateway::list_budget_windows),
+        ("createGatewayGuardrail", "POST") => post(gateway::create_guardrail),
+        ("getGatewayGuardrail", "GET") => get(gateway::get_guardrail),
+        ("deleteGatewayGuardrail", "DELETE") => delete(gateway::delete_guardrail),
+        ("listGatewayGuardrails", "GET") => get(gateway::list_guardrails),
+        ("addGuardrailToEndpoint", "POST") => post(gateway::add_guardrail_to_endpoint),
+        ("removeGuardrailFromEndpoint", "DELETE") => {
+            delete(gateway::remove_guardrail_from_endpoint)
+        }
+        ("listEndpointGuardrailConfigs", "GET") => get(gateway::list_endpoint_guardrail_configs),
+        ("updateEndpointGuardrailConfig", "PATCH") => {
+            patch(gateway::update_endpoint_guardrail_config)
+        }
         ("listLoggedModelArtifacts", "GET") => get(artifacts::list_logged_model_artifacts),
         ("createExperiment", "POST") => post(experiments::create_experiment),
         ("getExperiment", "GET") => get(experiments::get_experiment),

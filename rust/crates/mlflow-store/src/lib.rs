@@ -30,31 +30,39 @@ pub mod db;
 pub mod dialect;
 pub mod pool;
 pub mod schema;
+pub mod secrets;
 pub mod store;
 pub mod uri;
 
 pub use db::{Db, SchemaError, StoreError, EXPECTED_ALEMBIC_HEAD};
 pub use dialect::{Dialect, UpsertSpec};
 pub use pool::PoolConfig;
+pub use secrets::{
+    create_aad, decrypt_secret, encrypt_secret, mask_json_value, mask_secret_value,
+    mask_string_value, EncryptedSecret, Kek, SecretCache,
+};
 pub use store::{
     logged_models_page_token, logged_models_token_offset, python_json_dumps, Assessment,
-    AssessmentError, AssessmentSource, AssessmentUpdate, AssessmentValue, Dataset, DatasetFilter,
-    DatasetInput, DatasetInputSpec, DatasetSummary, EvaluationDataset, EvaluationDatasetsPage,
+    AssessmentError, AssessmentSource, AssessmentUpdate, AssessmentValue, BudgetPoliciesPage,
+    BudgetPolicy, BudgetPolicyUpdate, BudgetWindow, Dataset, DatasetFilter, DatasetInput,
+    DatasetInputSpec, DatasetSummary, Endpoint, EndpointBinding, EndpointModelConfig,
+    EndpointModelMapping, EndpointUpdate, EvaluationDataset, EvaluationDatasetsPage,
     EvaluationRecord, EvaluationRecordsPage, Experiment, ExperimentTag, ExperimentsPage,
-    FeedbackUpdate, InputTag, Issue, IssueUpdate, IssuesPage, LabelSchema, LabelSchemaInput,
-    LabelSchemaType, LabelSchemaUpdate, LabelSchemasPage, LoggedModel, LoggedModelInput,
-    LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
-    LoggedModelOutput, LoggedModelStatus, LoggedModelsPage, Metric, MetricAggregation,
-    MetricDataPoint, MetricInput, MetricViewType, MetricWithRunId, NewAssessment, OnlineScorer,
-    OnlineScoringConfig, Param, ReviewItemType, ReviewQueue, ReviewQueueItem, ReviewQueueItemsPage,
-    ReviewQueueType, ReviewQueueUpdate, ReviewQueuesPage, ReviewStatus, Run, RunData, RunInfo,
-    RunInputs, RunOutputs, RunStatus, RunTag, RunsPage, ScorerVersion, SpanInput, SpanMetricInput,
-    StartTraceInput, StoredSpan, TraceAssessment, TraceFilterCorrelationResult, TraceInfo,
-    TraceState, TraceTimeRange, TraceWithSpans, TracesPage, TrackingStore,
-    UpsertEvaluationRecordsResult, ViewType, GET_METRIC_HISTORY_MAX_RESULTS,
-    MAX_DATASET_SUMMARIES_RESULTS, MAX_RESULTS_PER_RUN, MAX_RESULTS_QUERY_TRACE_METRICS,
-    MAX_RUNS_GET_METRIC_HISTORY_BULK, MAX_TRACE_LINKS_PER_REQUEST, MLFLOW_ARTIFACT_LOCATION,
-    SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_DEFAULT,
+    FallbackConfig, FeedbackUpdate, GatewayGuardrail, GatewayGuardrailConfig,
+    GatewayModelDefinition, GatewaySecretInfo, GuardrailsPage, InputTag, Issue, IssueUpdate,
+    IssuesPage, LabelSchema, LabelSchemaInput, LabelSchemaType, LabelSchemaUpdate,
+    LabelSchemasPage, LoggedModel, LoggedModelInput, LoggedModelKv, LoggedModelMetric,
+    LoggedModelMetricInput, LoggedModelOrderByInput, LoggedModelOutput, LoggedModelStatus,
+    LoggedModelsPage, Metric, MetricAggregation, MetricDataPoint, MetricInput, MetricViewType,
+    MetricWithRunId, NewAssessment, OnlineScorer, OnlineScoringConfig, Param, ReviewItemType,
+    ReviewQueue, ReviewQueueItem, ReviewQueueItemsPage, ReviewQueueType, ReviewQueueUpdate,
+    ReviewQueuesPage, ReviewStatus, Run, RunData, RunInfo, RunInputs, RunOutputs, RunStatus,
+    RunTag, RunsPage, ScorerVersion, SpanInput, SpanMetricInput, StartTraceInput, StoredSpan,
+    TraceAssessment, TraceFilterCorrelationResult, TraceInfo, TraceState, TraceTimeRange,
+    TraceWithSpans, TracesPage, TrackingStore, UpsertEvaluationRecordsResult, ViewType,
+    GET_METRIC_HISTORY_MAX_RESULTS, MAX_DATASET_SUMMARIES_RESULTS, MAX_RESULTS_PER_RUN,
+    MAX_RESULTS_QUERY_TRACE_METRICS, MAX_RUNS_GET_METRIC_HISTORY_BULK, MAX_TRACE_LINKS_PER_REQUEST,
+    MLFLOW_ARTIFACT_LOCATION, SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_DEFAULT,
     SEARCH_MAX_RESULTS_THRESHOLD, SEARCH_TRACES_DEFAULT_MAX_RESULTS, SPANS_LOCATION_ARCHIVE_REPO,
     SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
 };

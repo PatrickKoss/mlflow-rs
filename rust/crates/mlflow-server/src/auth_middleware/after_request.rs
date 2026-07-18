@@ -80,12 +80,18 @@ pub enum AfterRequestHandler {
     CreatorGrantRegisteredModel,
     /// `set_can_manage_scorer_permission`.
     CreatorGrantScorer,
+    CreatorGrantGatewaySecret,
+    CreatorGrantGatewayEndpoint,
+    CreatorGrantGatewayModelDefinition,
     /// `delete_can_manage_registered_model_permission` — sweep grants on delete.
     DeleteGrantsRegisteredModel,
     /// `rename_registered_model_permission` — rewrite grants on rename.
     RenameGrantsRegisteredModel,
     /// `delete_scorer_permissions_cascade`.
     DeleteGrantsScorer,
+    DeleteGrantsGatewaySecret,
+    DeleteGrantsGatewayEndpoint,
+    DeleteGrantsGatewayModelDefinition,
     /// `filter_search_experiments`.
     FilterSearchExperiments,
     /// `filter_search_registered_models`.
@@ -121,6 +127,9 @@ impl AfterRequestHandler {
             AfterRequestHandler::DeleteGrantsRegisteredModel
                 | AfterRequestHandler::RenameGrantsRegisteredModel
                 | AfterRequestHandler::DeleteGrantsScorer
+                | AfterRequestHandler::DeleteGrantsGatewaySecret
+                | AfterRequestHandler::DeleteGrantsGatewayEndpoint
+                | AfterRequestHandler::DeleteGrantsGatewayModelDefinition
                 // `_cleanup_workspace_permissions` reads `request.view_args`;
                 // DeleteWorkspace returns 204 with no body.
                 | AfterRequestHandler::CleanupWorkspacePermissions
@@ -144,6 +153,12 @@ pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
         ("MlflowService", "listScorers") => FilterListScorers,
         ("MlflowService", "listReviewQueues") => FilterListReviewQueues,
         ("MlflowService", "deleteScorer") => DeleteGrantsScorer,
+        ("MlflowService", "createGatewaySecret") => CreatorGrantGatewaySecret,
+        ("MlflowService", "deleteGatewaySecret") => DeleteGrantsGatewaySecret,
+        ("MlflowService", "createGatewayEndpoint") => CreatorGrantGatewayEndpoint,
+        ("MlflowService", "deleteGatewayEndpoint") => DeleteGrantsGatewayEndpoint,
+        ("MlflowService", "createGatewayModelDefinition") => CreatorGrantGatewayModelDefinition,
+        ("MlflowService", "deleteGatewayModelDefinition") => DeleteGrantsGatewayModelDefinition,
         ("ModelRegistryService", "createRegisteredModel") => CreatorGrantRegisteredModel,
         ("ModelRegistryService", "deleteRegisteredModel") => DeleteGrantsRegisteredModel,
         ("ModelRegistryService", "renameRegisteredModel") => RenameGrantsRegisteredModel,
@@ -255,6 +270,39 @@ async fn run_inner(
             grant_creator_scorer(ctx, body_json(resp_body)?).await?;
             Ok(None)
         }
+        CreatorGrantGatewaySecret => {
+            grant_creator_gateway(
+                ctx,
+                body_json(resp_body)?,
+                "secret",
+                "secret_id",
+                "gateway_secret",
+            )
+            .await?;
+            Ok(None)
+        }
+        CreatorGrantGatewayEndpoint => {
+            grant_creator_gateway(
+                ctx,
+                body_json(resp_body)?,
+                "endpoint",
+                "endpoint_id",
+                "gateway_endpoint",
+            )
+            .await?;
+            Ok(None)
+        }
+        CreatorGrantGatewayModelDefinition => {
+            grant_creator_gateway(
+                ctx,
+                body_json(resp_body)?,
+                "model_definition",
+                "model_definition_id",
+                "gateway_model_definition",
+            )
+            .await?;
+            Ok(None)
+        }
         DeleteGrantsRegisteredModel => {
             delete_grants_registered_model(ctx).await?;
             Ok(None)
@@ -265,6 +313,18 @@ async fn run_inner(
         }
         DeleteGrantsScorer => {
             delete_grants_scorer(ctx).await?;
+            Ok(None)
+        }
+        DeleteGrantsGatewaySecret => {
+            delete_grants_gateway(ctx, "secret_id", "gateway_secret").await?;
+            Ok(None)
+        }
+        DeleteGrantsGatewayEndpoint => {
+            delete_grants_gateway(ctx, "endpoint_id", "gateway_endpoint").await?;
+            Ok(None)
+        }
+        DeleteGrantsGatewayModelDefinition => {
+            delete_grants_gateway(ctx, "model_definition_id", "gateway_model_definition").await?;
             Ok(None)
         }
         FilterSearchExperiments => filter_search_experiments(ctx, body_json(resp_body)?).await,
@@ -359,6 +419,25 @@ async fn grant_creator_scorer(
         .await
 }
 
+async fn grant_creator_gateway(
+    ctx: &AfterCtx<'_>,
+    response: serde_json::Value,
+    entity: &str,
+    id_field: &str,
+    resource_type: &str,
+) -> Result<(), MlflowError> {
+    let id = response
+        .get(entity)
+        .and_then(|value| value.get(id_field))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .grant_user_permission(ctx.username, resource_type, id, "MANAGE", ctx.workspace)
+        .await
+}
+
 // ---------------------------------------------------------------------------
 // Grant cascade on delete / rename
 // ---------------------------------------------------------------------------
@@ -413,6 +492,21 @@ async fn delete_grants_scorer(ctx: &AfterCtx<'_>) -> Result<(), MlflowError> {
         .auth_store()
         .expect("auth enabled")
         .delete_grants_for_resource("scorer", &pattern, None)
+        .await
+}
+
+async fn delete_grants_gateway(
+    ctx: &AfterCtx<'_>,
+    id_field: &str,
+    resource_type: &str,
+) -> Result<(), MlflowError> {
+    let Some(id) = request_str(ctx, id_field) else {
+        return Ok(());
+    };
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .delete_grants_for_resource(resource_type, &id, None)
         .await
 }
 

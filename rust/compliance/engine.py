@@ -101,6 +101,8 @@ TIMESTAMP_FIELDS = frozenset({
     "updated_time",
     "create_time",
     "update_time",
+    "created_at",
+    "last_updated_at",
 })
 
 ID_FIELDS = frozenset({
@@ -117,6 +119,12 @@ ID_FIELDS = frozenset({
     "id",
     "delivery_id",
     "eval_id",
+    "secret_id",
+    "model_definition_id",
+    "mapping_id",
+    "endpoint_id",
+    "budget_policy_id",
+    "guardrail_id",
     "dataset_id",
     "job_id",
 })
