@@ -6,6 +6,7 @@
 //! differ in valid identifiers, alias maps, comparator validation timing, and
 //! value typing — so each is its own module.
 
+pub mod evaluation_datasets;
 pub mod experiments;
 pub mod logged_models;
 pub mod model_versions;

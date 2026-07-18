@@ -47,6 +47,10 @@ pub use domains::logged_models::{
 /// Filter/order-by parsers, one module per search domain. Each mirrors the
 /// corresponding `Search*Utils` class.
 pub mod parse {
+    pub use crate::domains::evaluation_datasets::{
+        parse_order_by as evaluation_datasets_order_by,
+        parse_search_filter as evaluation_datasets_filter,
+    };
     pub use crate::domains::experiments::{
         parse_order_by as experiments_order_by, parse_search_filter as experiments_filter,
     };

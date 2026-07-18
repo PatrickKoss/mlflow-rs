@@ -30,6 +30,7 @@ mod assessments;
 mod datasets;
 mod dbutil;
 mod entities;
+mod evaluation_datasets;
 mod experiments;
 mod logged_models;
 mod metrics;
@@ -59,6 +60,10 @@ pub use entities::{
     RunOutputs, RunStatus, RunTag, StoredSpan, TraceAssessment, TraceInfo, TraceState,
     TraceWithSpans, MLFLOW_ARTIFACT_LOCATION, SPANS_LOCATION_ARCHIVE_REPO,
     SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
+};
+pub use evaluation_datasets::{
+    python_json_dumps, EvaluationDataset, EvaluationDatasetsPage, EvaluationRecord,
+    EvaluationRecordsPage, UpsertEvaluationRecordsResult,
 };
 pub use experiments::{ViewType, WorkspaceArtifactRoot};
 pub use logged_models::{
