@@ -1,0 +1,2493 @@
+{
+  "builtin_scorers": [
+    {
+      "execution": "llm",
+      "name": "Completeness",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'completeness'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the assistant fully addresses all user questions in a single turn.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "completeness",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2973"
+    },
+    {
+      "execution": "llm",
+      "name": "ConversationCompleteness",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'conversation_completeness'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the assistant fully addresses all user requests by the end of the conversation.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "conversation_completeness",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2337"
+    },
+    {
+      "execution": "llm",
+      "name": "ConversationalGuidelines",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'conversational_guidelines'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate whether the assistant's responses throughout a conversation comply with the provided guidelines.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "guidelines",
+          "required": true,
+          "type": "str | list[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "conversational_guidelines",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2652"
+    },
+    {
+      "execution": "llm",
+      "name": "ConversationalRoleAdherence",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'conversational_role_adherence'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether an AI assistant maintains its assigned role throughout a conversation, checking for persona consistency and boundary violations.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "conversational_role_adherence",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2575"
+    },
+    {
+      "execution": "llm",
+      "name": "ConversationalSafety",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'conversational_safety'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate whether the assistant's responses in a conversation are safe, checking for harmful content and safety guideline failures.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "conversational_safety",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2416"
+    },
+    {
+      "execution": "llm",
+      "name": "ConversationalToolCallEfficiency",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'conversational_tool_call_efficiency'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether tool usage across a multi-turn conversation session was efficient, checking for redundant calls, unnecessary calls, and poor tool selection.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "conversational_tool_call_efficiency",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2497"
+    },
+    {
+      "execution": "llm",
+      "name": "Correctness",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'correctness'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Check whether the expected facts (from expected_response or expected_facts) are supported by the model's response.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "correctness",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1698"
+    },
+    {
+      "execution": "llm",
+      "name": "Equivalence",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'equivalence'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Compare outputs against expected outputs for semantic equivalence.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "equivalence",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1977"
+    },
+    {
+      "execution": "llm",
+      "name": "ExpectationsGuidelines",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'expectations_guidelines'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate whether the agent's response follows specific constraints or instructions provided for each row in the input dataset.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "expectations_guidelines",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1311"
+    },
+    {
+      "execution": "llm",
+      "name": "Fluency",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'fluency'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate grammatical correctness, natural flow, and linguistic quality of text.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "fluency",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1894"
+    },
+    {
+      "execution": "llm",
+      "name": "Guidelines",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'guidelines'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate whether the agent's response follows specific constraints or instructions provided in the guidelines.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "guidelines",
+          "required": true,
+          "type": "str | list[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "guidelines",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1155"
+    },
+    {
+      "execution": "llm",
+      "name": "KnowledgeRetention",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'knowledge_retention'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the AI correctly retains information provided by users in earlier conversation turns without forgetting, contradicting, or distorting it.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "<factory>",
+          "kind": "KEYWORD_ONLY",
+          "name": "last_turn_scorer",
+          "required": false,
+          "type": "<class 'mlflow.genai.scorers.base.Scorer'>"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "knowledge_retention",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2787"
+    },
+    {
+      "execution": "deterministic",
+      "name": "PIIDetection",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'pii_detection'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Detect common PII (email, phone, SSN, credit card, IP) in the output.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "pii_types",
+          "required": false,
+          "type": "list[typing.Literal['email', 'phone', 'ssn', 'credit_card', 'ip_address']] | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "pii_detection",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:3337"
+    },
+    {
+      "execution": "deterministic",
+      "name": "RegexMatch",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'regex_match'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Check whether output matches a regular expression pattern.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": null,
+          "kind": "KEYWORD_ONLY",
+          "name": "pattern",
+          "required": true,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "'search'",
+          "kind": "KEYWORD_ONLY",
+          "name": "match_type",
+          "required": false,
+          "type": "typing.Literal['search', 'fullmatch']"
+        },
+        {
+          "default": "False",
+          "kind": "KEYWORD_ONLY",
+          "name": "case_insensitive",
+          "required": false,
+          "type": "<class 'bool'>"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "regex_match",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:3228"
+    },
+    {
+      "execution": "llm",
+      "name": "RelevanceToQuery",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'relevance_to_query'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Ensure that the agent's response directly addresses the user's input without deviating into unrelated topics.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "relevance_to_query",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1474"
+    },
+    {
+      "execution": "deterministic",
+      "name": "ResponseLength",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'response_length'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Check whether the output length is within specified bounds.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "min_length",
+          "required": false,
+          "type": "int | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "max_length",
+          "required": false,
+          "type": "int | None"
+        },
+        {
+          "default": "'chars'",
+          "kind": "KEYWORD_ONLY",
+          "name": "unit",
+          "required": false,
+          "type": "typing.Literal['chars', 'words']"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "response_length",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:3446"
+    },
+    {
+      "execution": "llm",
+      "name": "RetrievalGroundedness",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'retrieval_groundedness'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Assess whether the facts in the response are implied by the information in the last retrieval step, i.e., hallucinations do not occur.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'trace'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "retrieval_groundedness",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:686"
+    },
+    {
+      "execution": "llm",
+      "name": "RetrievalRelevance",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'retrieval_relevance'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether each retrieved context chunk is relevant to the input request.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'trace'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "retrieval_relevance",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:392"
+    },
+    {
+      "execution": "llm",
+      "name": "RetrievalSufficiency",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'retrieval_sufficiency'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the information in the last retrieval is sufficient to generate the facts in expected_response or expected_facts.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'trace'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "retrieval_sufficiency",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:550"
+    },
+    {
+      "execution": "llm",
+      "name": "Safety",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'safety'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Ensure that the agent's responses do not contain harmful, offensive, or toxic content.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "safety",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:1592"
+    },
+    {
+      "execution": "llm",
+      "name": "Summarization",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'summarization'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the summarization output is factually correct based on the input and does not make any assumptions not in the input, with a focus on faithfulness, coverage, and conciseness.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'inputs', 'outputs'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "summarization",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:3082"
+    },
+    {
+      "execution": "hybrid",
+      "name": "ToolCallCorrectness",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'tool_call_correctness'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "'Evaluate whether the tools called and the arguments they are called with are reasonable given the user request.'",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'trace'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "False",
+          "kind": "KEYWORD_ONLY",
+          "name": "should_exact_match",
+          "required": false,
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "kind": "KEYWORD_ONLY",
+          "name": "should_consider_ordering",
+          "required": false,
+          "type": "<class 'bool'>"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "tool_call_correctness",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:873"
+    },
+    {
+      "execution": "llm",
+      "name": "ToolCallEfficiency",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'tool_call_efficiency'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate the agent's trajectory for redundancy in tool usage, such as tool calls with the same or similar arguments.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "{'trace'}",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "tool_call_efficiency",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:792"
+    },
+    {
+      "execution": "llm",
+      "name": "UserFrustration",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": "'user_frustration'",
+          "kind": "KEYWORD_ONLY",
+          "name": "name",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        },
+        {
+          "default": "\"Evaluate the user's frustration state throughout the conversation.\"",
+          "kind": "KEYWORD_ONLY",
+          "name": "description",
+          "required": false,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "set()",
+          "kind": "KEYWORD_ONLY",
+          "name": "required_columns",
+          "required": false,
+          "type": "set[str]"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "serialized_name_default": "user_frustration",
+      "source": "mlflow/genai/scorers/builtin_scorers.py:2258"
+    }
+  ],
+  "reference": {
+    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "package_pins": {
+      "arize-phoenix-evals": "2.13.0",
+      "deepeval": "4.0.7",
+      "dspy": "3.2.1",
+      "gepa": "0.0.27",
+      "litellm": "1.91.2",
+      "ragas": "0.4.3",
+      "trulens": "2.8.1",
+      "trulens-providers-litellm": "2.8.1"
+    }
+  },
+  "rejected_payloads": [
+    {
+      "condition": "call_source is not null on OSS",
+      "kind": "decorator_scorer",
+      "owner_task": "T19.1",
+      "source": "mlflow/genai/scorers/base.py:567"
+    }
+  ],
+  "schema_version": 1,
+  "serialized_judges": [
+    {
+      "execution": "llm",
+      "name": "InstructionsJudge",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "name",
+          "required": true,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "instructions",
+          "required": true,
+          "type": "<class 'str'>"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "model",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "description",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "<class 'str'>",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "feedback_value_type",
+          "required": false,
+          "type": "typing.Any"
+        },
+        {
+          "default": "False",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "generate_rationale_first",
+          "required": false,
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "False",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "include_tool_calls_in_conversation",
+          "required": false,
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "inference_params",
+          "required": false,
+          "type": "dict[str, typing.Any] | None"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "base_url",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "extra_headers",
+          "required": false,
+          "type": "dict[str, str] | None"
+        },
+        {
+          "default": "False",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "include_timing_in_conversation",
+          "required": false,
+          "type": "<class 'bool'>"
+        },
+        {
+          "default": "None",
+          "kind": "KEYWORD_ONLY",
+          "name": "aggregations",
+          "required": false,
+          "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "source": "mlflow/genai/judges/instructions_judge/__init__.py:61"
+    },
+    {
+      "execution": "llm+embeddings",
+      "name": "MemoryAugmentedJudge",
+      "owner_task": "T19.1",
+      "params_schema": [
+        {
+          "default": null,
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "base_judge",
+          "required": true,
+          "type": "<class 'mlflow.genai.judges.base.Judge'>"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "reflection_lm",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "5",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "retrieval_k",
+          "required": false,
+          "type": "<class 'int'>"
+        },
+        {
+          "default": "None",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "embedding_model",
+          "required": false,
+          "type": "str | None"
+        },
+        {
+          "default": "512",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "name": "embedding_dim",
+          "required": false,
+          "type": "<class 'int'>"
+        },
+        {
+          "default": "False",
+          "kind": "KEYWORD_ONLY",
+          "name": "_defer_init",
+          "required": false,
+          "type": "<class 'bool'>"
+        }
+      ],
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15; dspy==3.2.1",
+      "source": "mlflow/genai/judges/optimizers/memalign/optimizer.py:138"
+    }
+  ],
+  "third_party_metrics": [
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ArgumentCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Bias",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualPrecision",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualRecall",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ConversationCompleteness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ConversationalDAG",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DAG",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "deterministic",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExactMatch",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Faithfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "GoalAccuracy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Hallucination",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageCoherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageEditing",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageHelpfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageReference",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "JsonCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "KnowledgeRetention",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MCPTaskCompletion",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MCPUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Misuse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiTurnMCPUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NonAdvice",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PIILeakage",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "deterministic",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PatternMatch",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanQuality",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PromptAlignment",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RoleAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RoleViolation",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "StepEfficiency",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TaskCompletion",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TextToImage",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TopicAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Toxicity",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualPrecision",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualRecall",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnFaithfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracyWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracyWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerCorrectness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerRelevancy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "BleuScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "CHRFScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextEntityRecall",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecision",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecisionWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecisionWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRecall",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRelevance",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextUtilization",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DataCompyScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DomainSpecificRubrics",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExactMatch",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "FactualCorrectness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Faithfulness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "InstanceSpecificRubrics",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiModalFaithfulness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiModalRelevance",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NoiseSensitivity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NonLLMStringSimilarity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QuotedSpansAlignment",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ResponseGroundedness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RougeScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RubricsScoreWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RubricsScoreWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SQLSemanticEquivalence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SemanticSimilarity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "StringPresence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SummaryScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCallAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCallF1",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TopicAdherence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Coherence",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Comprehensiveness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Conciseness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRelevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Controversiality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Correctness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Criminality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExecutionEfficiency",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Groundedness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Harmfulness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Helpfulness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Insensitivity",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "LogicalConsistency",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Maliciousness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Misogyny",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanAdherence",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanQuality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QsRelevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Relevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Sentiment",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Stereotypes",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCalling",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolQuality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolSelection",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Hallucination",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QA",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Relevance",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SQL",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Toxicity",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    }
+  ]
+}
