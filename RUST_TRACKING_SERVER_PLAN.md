@@ -3086,12 +3086,30 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 17 — Job runner + worker
 
-- [ ] **T17.1 Runner core** per §14.1: DB-claimed queue, state machine,
+- [x] **T17.1 Runner core** per §14.1: DB-claimed queue, state machine,
       transient-retry with backoff, timeout kill, exclusive-lock CANCELED
       semantics, per-function max_workers, startup recovery, enable-gate.
       **AC:** job-lifecycle suite parity incl. the CANCELED-when-locked and
       TIMEOUT paths; no queue files on disk.
       **VER:** `rust/tests/job_runner.rs` + Python jobs suites via launcher.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge after f5e935bb9, clean):
+      `rust/crates/mlflow-server/src/job_runner.rs` (631 lines) + 518-line
+      lifecycle test. States PENDING(0)→RUNNING(1)→SUCCEEDED(2)|FAILED(3)|
+      TIMEOUT(4)|CANCELED(5), finals immutable. Retry: at cap→FAILED
+      without increment, else increment→PENDING with backoff
+      min(base·2^(n−1), max), defaults 3/15s/60s per Python. Cancel
+      checked before timeout; exclusive-lock collision→competing job
+      CANCELED; cancel-while-locked→drop execution, row stays CANCELED,
+      then release. Startup recovery requeues PENDING + resets pre-start
+      RUNNING→PENDING across workspaces. Gate
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION (default true; invalid values
+      fail config). Execution seam = `JobExecutor` trait for T17.2.
+      Store claims extended to exclude locally-delayed retries. DB is the
+      only queue (no-Huey-files test). VER: runner lifecycle 7/7, store
+      6/6, Python jobs API switch 4/4; ledger's 80 runner/submit cases
+      triaged: 42 deferred to T17.2 native kinds (discovery 12, evaluate
+      7+5, optimize 18), 7 invoke routes to T17.4, rest covered by Rust
+      equivalents. Post-merge gates all exit 0.
 - [ ] **T17.2 Native worker protocol** per §14.2: versioned request/result
       envelopes, closed six-kind dispatch enum, subject/workspace propagation,
       bounded output, process-group kill-on-timeout/cancel, crash/malformed-
