@@ -23,6 +23,7 @@
 //! entities carry it as a *string*; the store converts at the entity boundary.
 //! Here it is `i64` to match the physical column.
 
+pub mod jobs;
 pub mod logged_models;
 pub mod metrics;
 pub mod runs;
@@ -46,6 +47,7 @@ pub const TRACKING_TABLES: &[&str] = &[
     logged_models::LOGGED_MODEL_PARAMS,
     logged_models::LOGGED_MODEL_TAGS,
     logged_models::LOGGED_MODEL_METRICS,
+    jobs::JOBS,
     traces::TRACE_INFO,
     traces::TRACE_TAGS,
     traces::TRACE_REQUEST_METADATA,
@@ -63,7 +65,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        assert_eq!(TRACKING_TABLES.len(), 23);
+        assert_eq!(TRACKING_TABLES.len(), 24);
     }
 
     #[test]

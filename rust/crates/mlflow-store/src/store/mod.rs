@@ -31,6 +31,7 @@ mod datasets;
 mod dbutil;
 mod entities;
 mod experiments;
+mod jobs;
 mod logged_models;
 mod metrics;
 mod metrics_bulk;
@@ -61,6 +62,7 @@ pub use entities::{
     SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
 };
 pub use experiments::{ViewType, WorkspaceArtifactRoot};
+pub use jobs::{Job, JobStatus, JobStore};
 pub use logged_models::{
     logged_models_page_token, logged_models_token_offset, DatasetFilter, LoggedModel,
     LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
