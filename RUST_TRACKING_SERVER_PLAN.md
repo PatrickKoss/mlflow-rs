@@ -2962,12 +2962,30 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       references, user-queue schema resolution, full auth validator set +
       integrity hook.
       **AC/VER:** review-queue suites + multi-user auth differential.
-- [ ] **T16.5 Jobs store + API**: `jobs` table store (states, retries,
+- [x] **T16.5 Jobs store + API**: `jobs` table store (states, retries,
       finalized-immutability) + GET/cancel endpoints; resolve and document
       the `/mlflow/jobs` vs `/jobs` auth-prefix question (§12.13).
       **AC:** job rows created by Python readable/cancellable via Rust and
       vice versa.
       **VER:** cross-server job-store test.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 132935daa): NO new
+      migration — `jobs` table pre-existed at head `c4a9b7d3e812`.
+      Store: `rust/crates/mlflow-store/src/store/jobs.rs` (790 lines) —
+      workspace-aware lifecycle, retries, status-detail merge, finalized-
+      transition rejection, D20 queue claims (SQLite conditional
+      UPDATE…RETURNING; PG CTE `FOR UPDATE SKIP LOCKED`+RETURNING; MySQL
+      transactional `FOR UPDATE SKIP LOCKED`). §12.13 RESOLVED: Flask
+      serves `/ajax-api/3.0/mlflow/jobs/...` (global auth hook, no
+      per-job validator), FastAPI serves `/ajax-api/3.0/jobs/...`
+      (auth-prefix matcher) — both authenticated-only, distinct wire
+      formats preserved; `// AUTH GAP:` at mlflow-server/src/lib.rs:329.
+      T15.4 scratch jobs adapter deleted; worker spike asserts on real
+      JobStore. 2 hand-registered Flask routes added to route_parity
+      allowlist (same category as server-info). VER: cross-server 1/1,
+      Python-vs-Rust 4/4, store lifecycle+32-way claim race 5/5, HTTP
+      wire/auth 5/5, worker 2/2; post-merge gates fmt/clippy/test/
+      route_parity/replay all exit 0. Ledger's submit/search/runner
+      tests deferred to Phase 17 (runner surfaces).
 - [ ] **T16.6 Prompt-optimization CRUD**: 5 RPCs over the jobs store + runs
       (entity rebuild from job + run params, optimized-prompt URI from
       result); submission enqueues per Phase 17 (execution rides Phase 19).
