@@ -198,6 +198,13 @@ pub enum Validator {
     CanListUsers,
     CanCreateUser,
     UpdateUserPassword,
+    // ---- RBAC role / per-user grant management ----
+    ManageRoles,
+    ViewRoles,
+    ListRoles,
+    ViewUserRoles,
+    ManageResource,
+    GetUserPermission,
     // ---- Webhooks (admin-only) ----
     SenderIsAdmin,
     // ---- Workspaces (T10.4) ----
@@ -254,7 +261,7 @@ impl Validator {
             SearchTracesV3 => validate_search_traces_v3(ctx).await,
             BatchGetTraces => validate_batch_get_traces(ctx).await,
             DeleteTraces => Ok(experiment_perm_from_id_param(ctx).await?.can_delete),
-            LinkTracesToRun => Ok(experiment_perm_from_run(ctx).await?.can_update),
+            LinkTracesToRun => validate_link_traces_to_run(ctx).await,
             ReadTracesByExperimentIds => validate_read_traces_by_experiment_ids(ctx).await,
             ReadTraceArtifact => Ok(trace_perm_from_query(ctx).await?.can_read),
             // Artifact plane (inherit experiment via run / model version).
@@ -265,8 +272,8 @@ impl Validator {
             UpdateExperimentArtifactProxy => Ok(artifact_proxy_perm(ctx).await?.can_update),
             DeleteExperimentArtifactProxy => Ok(artifact_proxy_perm(ctx).await?.can_manage),
             // Metrics / datasets (read the experiment/run).
-            ReadMetricHistoryBulk => validate_metric_history_bulk(ctx).await,
-            ReadMetricHistoryBulkInterval => Ok(experiment_perm_from_run(ctx).await?.can_read),
+            ReadMetricHistoryBulk => validate_metric_history_bulk(ctx, "run_id").await,
+            ReadMetricHistoryBulkInterval => validate_metric_history_bulk(ctx, "run_ids").await,
             SearchDatasets => validate_search_datasets(ctx).await,
             // OTLP: experiment UPDATE from the X-Mlflow-Experiment-Id header.
             OtlpExperimentUpdate => validate_otlp(ctx).await,
@@ -274,6 +281,12 @@ impl Validator {
             ReadUser => username_is_sender(ctx),
             CanCreateUser => validate_can_create_user(ctx).await,
             UpdateUserPassword => username_is_sender(ctx),
+            ManageRoles => validate_can_manage_roles(ctx).await,
+            ViewRoles => validate_can_view_roles(ctx).await,
+            ListRoles => validate_can_list_roles(ctx).await,
+            ViewUserRoles => validate_can_view_user_roles(ctx).await,
+            ManageResource => validate_can_manage_resource(ctx).await,
+            GetUserPermission => validate_can_get_user_permission(ctx).await,
         }
     }
 }
@@ -336,7 +349,7 @@ fn user_inherits_default_workspace_grant(auth_store: &AuthStore, workspace: &str
 /// * no grant, workspaces **disabled** → `default_permission` (single-tenant).
 /// * no grant, workspaces **enabled** → `NO_PERMISSIONS` boundary deny, unless
 ///   the default-workspace auto-grant applies (→ `default_permission`).
-async fn resolve_role_permission(
+pub(crate) async fn resolve_role_permission(
     auth_store: &AuthStore,
     username: &str,
     workspace: &str,
@@ -357,6 +370,201 @@ async fn resolve_role_permission(
         None => Some(&NO_PERMISSIONS),
     };
     Ok(fold_default(auth_store, inner))
+}
+
+// ---- RBAC role / per-user permission APIs ----
+
+async fn role_workspace_from_request(ctx: &RequestCtx<'_>) -> Result<Option<String>, MlflowError> {
+    if let Some(raw) = ctx.get_param("role_id") {
+        let Ok(role_id) = raw.parse::<i64>() else {
+            return Err(MlflowError::invalid_parameter_value(format!(
+                "Invalid value {raw:?} for parameter 'role_id'."
+            )));
+        };
+        return match ctx.auth_store.get_role(role_id).await {
+            Ok(role) => Ok(Some(role.workspace)),
+            Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => Ok(None),
+            Err(e) => Err(e),
+        };
+    }
+    if let Some(raw) = ctx.get_param("role_permission_id") {
+        let Ok(permission_id) = raw.parse::<i64>() else {
+            return Err(MlflowError::invalid_parameter_value(format!(
+                "Invalid value {raw:?} for parameter 'role_permission_id'."
+            )));
+        };
+        let permission = match ctx.auth_store.get_role_permission(permission_id).await {
+            Ok(permission) => permission,
+            Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        return match ctx.auth_store.get_role(permission.role_id).await {
+            Ok(role) => Ok(Some(role.workspace)),
+            Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => Ok(None),
+            Err(e) => Err(e),
+        };
+    }
+    if let Some(workspace) = ctx.get_param("workspace") {
+        if workspace.trim().is_empty() {
+            return Err(MlflowError::invalid_parameter_value(
+                "Parameter 'workspace' must be a non-empty string.",
+            ));
+        }
+        return Ok(Some(workspace));
+    }
+    Err(MlflowError::invalid_parameter_value(
+        "Request must include one of: role_id, role_permission_id, workspace.",
+    ))
+}
+
+async fn validate_can_manage_roles(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let Some(workspace) = role_workspace_from_request(ctx).await? else {
+        return Ok(false);
+    };
+    let user = ctx.auth_store.get_user(ctx.username).await?;
+    ctx.auth_store.is_workspace_admin(user.id, &workspace).await
+}
+
+async fn validate_can_view_roles(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let Some(workspace) = role_workspace_from_request(ctx).await? else {
+        return Ok(false);
+    };
+    let user = ctx.auth_store.get_user(ctx.username).await?;
+    Ok(!ctx
+        .auth_store
+        .list_user_roles_for_workspace(user.id, &workspace)
+        .await?
+        .is_empty())
+}
+
+async fn validate_can_list_roles(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let requested: std::collections::HashSet<String> = ctx
+        .query_multi("workspace")
+        .into_iter()
+        .filter_map(|workspace| {
+            let trimmed = workspace.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .collect();
+    if requested.is_empty() {
+        return Ok(false);
+    }
+    let user = ctx.auth_store.get_user(ctx.username).await?;
+    for workspace in requested {
+        if ctx
+            .auth_store
+            .list_user_roles_for_workspace(user.id, &workspace)
+            .await?
+            .is_empty()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+async fn validate_can_view_user_roles(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let target_username = require_param(ctx, "username")?;
+    if target_username == ctx.username {
+        return Ok(true);
+    }
+    let requester = ctx.auth_store.get_user(ctx.username).await?;
+    let target = match ctx.auth_store.get_user(&target_username).await {
+        Ok(target) => target,
+        Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let admin_workspaces = ctx
+        .auth_store
+        .list_workspace_admin_workspaces(requester.id)
+        .await?;
+    if admin_workspaces.is_empty() {
+        return Ok(false);
+    }
+    let target_roles = ctx.auth_store.list_user_roles(target.id).await?;
+    Ok(target_roles
+        .iter()
+        .any(|role| admin_workspaces.contains(&role.workspace)))
+}
+
+fn reject_workspace_resource_type(resource_type: &str) -> Result<(), MlflowError> {
+    if resource_type == "workspace" {
+        return Err(MlflowError::invalid_parameter_value(
+            "resource_type 'workspace' is not supported by the per-user permission convenience \
+             APIs. Use set_workspace_permission / delete_workspace_permission for workspace-wide \
+             grants.",
+        ));
+    }
+    Ok(())
+}
+
+async fn validate_can_manage_resource(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let resource_type = require_param(ctx, "resource_type")?;
+    let resource_id = require_param(ctx, "resource_id")?;
+    reject_workspace_resource_type(&resource_type)?;
+    mlflow_auth::permissions::validate_resource_type(&resource_type)?;
+    if resource_type == "scorer" && !resource_id.contains('/') {
+        return Err(MlflowError::invalid_parameter_value(
+            "Invalid scorer resource_id. Expected '<experiment_id>/<scorer_name>'.",
+        ));
+    }
+    Ok(resolve_role_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        &resource_type,
+        &resource_id,
+    )
+    .await?
+    .can_manage)
+}
+
+async fn validate_can_get_user_permission(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let resource_type = require_param(ctx, "resource_type")?;
+    reject_workspace_resource_type(&resource_type)?;
+    let target_username = require_param(ctx, "username")?;
+    if target_username == ctx.username {
+        return Ok(true);
+    }
+    if let Err(e) = ctx.auth_store.get_user(&target_username).await {
+        return if e.error_code == ErrorCode::ResourceDoesNotExist {
+            Ok(false)
+        } else {
+            Err(e)
+        };
+    }
+    let resource_id = require_param(ctx, "resource_id")?;
+    let workspace = match resource_type.as_str() {
+        "experiment" => match ctx
+            .tracking_store
+            .get_experiment(ctx.workspace, &resource_id)
+            .await
+        {
+            Ok(_) => ctx.workspace,
+            // `_workspace_for_resource(..., silent=True)` is fail-closed for
+            // every lookup failure, including malformed experiment ids.
+            Err(_) => return Ok(false),
+        },
+        "scorer" => {
+            let Some((experiment_id, _)) = resource_id.split_once('/') else {
+                return Ok(false);
+            };
+            match ctx
+                .tracking_store
+                .get_experiment(ctx.workspace, experiment_id)
+                .await
+            {
+                Ok(_) => ctx.workspace,
+                Err(_) => return Ok(false),
+            }
+        }
+        _ => return Ok(false),
+    };
+    let requester = ctx.auth_store.get_user(ctx.username).await?;
+    ctx.auth_store
+        .is_workspace_admin(requester.id, workspace)
+        .await
 }
 
 /// `_get_experiment_permission(experiment_id, username)` (`__init__.py:750`): the
@@ -622,6 +830,53 @@ async fn validate_batch_get_traces(ctx: &RequestCtx<'_>) -> Result<bool, MlflowE
     all_can_read_experiments(ctx, &experiment_ids).await
 }
 
+/// `validate_can_link_traces_to_run` (`__init__.py:2064`): UPDATE on the
+/// destination run's experiment and READ on every source trace's experiment.
+/// A missing run/trace or an empty trace list is a deny, matching Python's
+/// fail-closed validator.
+async fn validate_link_traces_to_run(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let run_id = require_param(ctx, "run_id")?;
+    let run = match ctx.tracking_store.get_run(ctx.workspace, &run_id).await {
+        Ok(run) => run,
+        Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    if !experiment_permission(ctx, &run.info.experiment_id)
+        .await?
+        .can_update
+    {
+        return Ok(false);
+    }
+
+    let trace_ids = ctx
+        .json_body
+        .and_then(|b| b.get("trace_ids"))
+        .and_then(Value::as_array)
+        .map(|ids| ids.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_default();
+    if trace_ids.is_empty() {
+        return Ok(false);
+    }
+    for trace_id in trace_ids {
+        let trace = match ctx
+            .tracking_store
+            .get_trace_info(ctx.workspace, trace_id)
+            .await
+        {
+            Ok(trace) => trace,
+            Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => return Ok(false),
+            Err(e) => return Err(e),
+        };
+        if !experiment_permission(ctx, &trace.experiment_id)
+            .await?
+            .can_read
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// `validate_can_read_traces_by_experiment_ids` (`__init__.py:2043`):
 /// `experiment_ids` from the body; non-empty and READ on all.
 async fn validate_read_traces_by_experiment_ids(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
@@ -658,11 +913,17 @@ async fn validate_start_trace_v3(ctx: &RequestCtx<'_>) -> Result<bool, MlflowErr
 }
 
 /// `validate_can_read_metric_history_bulk` (`__init__.py:2090`): READ on every
-/// `run_ids` entry's experiment; non-empty required.
-async fn validate_metric_history_bulk(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
-    let run_ids = ctx.query_multi("run_ids");
+/// requested run's experiment; non-empty required. The older bulk route uses
+/// repeated `run_id`, while bulk-interval uses repeated `run_ids`.
+async fn validate_metric_history_bulk(
+    ctx: &RequestCtx<'_>,
+    query_param: &str,
+) -> Result<bool, MlflowError> {
+    let run_ids = ctx.query_multi(query_param);
     if run_ids.is_empty() {
-        return Ok(false);
+        return Err(MlflowError::invalid_parameter_value(
+            "GetMetricHistoryBulk request must specify at least one run_id.",
+        ));
     }
     for run_id in &run_ids {
         let run = ctx.tracking_store.get_run(ctx.workspace, run_id).await?;

@@ -425,14 +425,19 @@ pub async fn create_model_version(
         )
         .await?;
 
-    // NB (deviation, documented): Python additionally calls
-    // `tracking_store.set_model_versions_tags(name, version, model_id=...)` when
-    // a non-prompt `model_id` is supplied (`handlers.py:2975-2981`) to back-link
-    // the logged model. The Rust registry store's `create_model_version` does
-    // not accept `model_id`, and that cross-store back-link is a caller
-    // responsibility deferred with the logged-model-id source resolution (see
-    // `mlflow-registry` `store/model_versions.rs` module docs). The model
-    // version is created identically; only the back-reference tag is not set.
+    // When a non-prompt `model_id` is supplied, back-link the source logged
+    // model by appending `{name, version}` to its `mlflow.modelVersions` tag,
+    // mirroring `tracking_store.set_model_versions_tags(...)`
+    // (`handlers.py:2975-2981`). This is a cross-store write (registry create ->
+    // tracking-store tag), done here in the handler exactly as Python does it.
+    if !is_prompt {
+        if let Some(model_id) = model_id {
+            state
+                .tracking_store()
+                .set_model_versions_tags(workspace.name(), model_id, name, &version.version)
+                .await?;
+        }
+    }
 
     // Python fires MODEL_VERSION/CREATED (or PROMPT_VERSION/CREATED when the
     // request carries `mlflow.prompt.is_prompt`) here (`handlers.py:2984-3017`).

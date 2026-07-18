@@ -281,7 +281,7 @@ async fn direct_sourced_version_downloads() {
     assert_eq!(res.text(), "flavors: {}");
     assert_eq!(
         res.content_disposition.as_deref(),
-        Some("attachment; filename=\"MLmodel\"")
+        Some("attachment; filename=MLmodel")
     );
 }
 
