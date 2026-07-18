@@ -5,24 +5,24 @@ Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app pa
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
-Status: **in progress — Phases 2–8, 10, and 12 complete; Phase 9 complete
-except T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
-Phase 13 started (T13.1 done; T13.2/T13.3 in flight). The T12.4 differential
-corpus is GREEN (133 cases, 0 non-allowlisted diffs), the compliance CI job is
-a required gate, and the client suites are green against Rust (T12.3: 0
-failures across tracking/auth/client/RBAC).** · Branch:
-`feature/rust-tracking-server` · Last updated: 2026-07-18
+Status: **in progress — Phases 2–8, 10, 12, and 13 complete; Phase 9 complete
+except T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke).
+The T12.4 differential corpus is GREEN (133 cases, 0 non-allowlisted diffs),
+the compliance CI job is a required gate, the client suites are green against
+Rust (T12.3: 0 failures across tracking/auth/client/RBAC), and measured
+benchmarks (T13.3) plus restructure verdicts (T13.4) are in `rust/bench/`.**
+· Branch: `feature/rust-tracking-server` · Last updated: 2026-07-18
 
 **Resume notes (2026-07-18):** implementation subagents now run via Codex
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
 **Open:**
-- **T13.2 (span_attributes table)** and **T13.3 (benchmark suite)** — in
-  flight (Codex worktrees).
-- **T13.4** — design doc, after T13.3's measurements.
+- **Phase 14** — next up: T14.1+T14.2 combined (1 h Python-vs-Rust soak on
+  docker postgres+MinIO per the user's respec, ~2.5 h wall clock), then T14.3
+  operational docs. After Phase 14: **Part 2 (genai port)** per user
+  directive.
 - **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
   done together.
-- **Phase 14** (memory baseline, soak, operational docs).
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
   tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
   tests.
@@ -1961,11 +1961,25 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       unsound across .await → OrderCols threaded explicitly). Verified:
       ruff/fmt/clippy/test-workspace and T12.4 replay corpus exit 0 pre- and
       post-merge. WSL2/sqlite caveats documented in RESULTS.md.
-- [ ] **T13.4 Deeper restructures** informed by T13.3 (metric partitioning, narrower
+- [x] **T13.4 Deeper restructures** informed by T13.3 (metric partitioning, narrower
       metrics PK with dedup hash, trace hot/cold split, auth grant semi-join
       materialization). Out of scope until benchmarks prove need.
       **AC:** written proposal per change with migration + rollback story.
       **VER:** design doc reviewed.
+      **DONE (2026-07-18):** `rust/bench/RESTRUCTURES.md` (544 lines) — full
+      problem/design/migration/rollback story per candidate, each argued from
+      T13.3's measured numbers. Verdicts: metric partitioning DEFER (3.2 ms
+      history p95 at 8M rows shows no need); narrow metrics PK + dedup hash
+      DEFER (no measured index-size/write-amp problem); trace hot/cold split
+      DEFER (154.6 ms span-search p95 warrants watching, but full-scale
+      postgres evidence is missing and the added writes could worsen the OTLP
+      path); auth grant semi-join DEFER (no sparse-grant benchmark exists;
+      persistent cross-database materialization rejected as unsafe). Fifth
+      section covers what the data actually surfaced: the prompt anti-join
+      tie (Rust per-model hydration is the suspect) and the OTLP 4.18x gap
+      (statement batching is the first profiling target). Each DEFER names
+      the full-scale measurement (T13.3 postgres run / T14.2 soak) that would
+      trigger revisiting.
 
 ### Phase 14 — Memory & production validation
 
