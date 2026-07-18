@@ -32,6 +32,7 @@ pub mod registry;
 pub mod routes;
 pub mod runs;
 pub mod schema_validation;
+pub mod scorers;
 pub mod security;
 pub mod server_info;
 pub mod state;
@@ -356,6 +357,19 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
     );
     // ---- end generic jobs ----
 
+    // AUTH GAP: online configs (D21) are authenticated-only in Python; no
+    // experiment/scorer-specific validator is applied.
+    for prefix in ["/api/3.0", "/ajax-api/3.0"] {
+        router = router.route(
+            &format!("{prefix}/mlflow/scorers/online-configs"),
+            get(scorers::get_online_scoring_configs),
+        );
+        router = router.route(
+            &format!("{prefix}/mlflow/scorers/online-config"),
+            axum::routing::put(scorers::upsert_online_scoring_config),
+        );
+    }
+
     register_role_and_auth_layers(router, state)
 }
 
@@ -577,6 +591,11 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("listLabelSchemas", "GET") => get(label_schemas::list_label_schemas),
         ("updateLabelSchema", "PATCH") => patch(label_schemas::update_label_schema),
         ("deleteLabelSchema", "DELETE") => delete(label_schemas::delete_label_schema),
+        ("registerScorer", "POST") => post(scorers::register_scorer),
+        ("listScorers", "GET") => get(scorers::list_scorers),
+        ("listScorerVersions", "GET") => get(scorers::list_scorer_versions),
+        ("getScorer", "GET") => get(scorers::get_scorer),
+        ("deleteScorer", "DELETE") => delete(scorers::delete_scorer),
         ("createLoggedModel", "POST") => post(logged_models::create_logged_model),
         ("finalizeLoggedModel", "PATCH") => patch(logged_models::finalize_logged_model),
         ("getLoggedModel", "GET") => get(logged_models::get_logged_model),

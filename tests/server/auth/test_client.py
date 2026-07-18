@@ -212,10 +212,6 @@ def _register_scorer(tracking_uri: str, experiment_id: str, name: str, auth) -> 
     resp.raise_for_status()
 
 
-@pytest.mark.skipif(
-    os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust",
-    reason="Rust server does not implement the scorer API yet",
-)
 def test_list_scorers_cross_experiment(client, monkeypatch):
     # ``ListScorers`` with no ``experiment_id`` returns scorers across every
     # experiment in the active workspace, populates ``experiment_name`` per
@@ -255,10 +251,6 @@ def test_list_scorers_cross_experiment(client, monkeypatch):
     assert tuples == sorted(tuples)
 
 
-@pytest.mark.skipif(
-    os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust",
-    reason="Rust server does not implement the scorer API yet",
-)
 def test_list_scorers_cross_experiment_pattern_round_trip(client, monkeypatch):
     # A scorer literally named ``*`` is the encoding edge case: Python's
     # ``quote(safe='')`` encodes it as ``%2A`` while JS ``encodeURIComponent``

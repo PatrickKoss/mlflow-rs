@@ -28,6 +28,7 @@ mlflow-auth = { workspace = true }
 mlflow-search = { workspace = true }
 mlflow-artifacts = { workspace = true }
 mlflow-webhooks = { workspace = true }
+mlflow-genai = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 

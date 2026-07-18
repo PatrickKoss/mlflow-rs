@@ -153,6 +153,10 @@ pub enum Validator {
     ReadExperimentByName,
     UpdateExperiment,
     DeleteExperiment,
+    // ---- Scorers ----
+    ReadScorerList,
+    ReadScorer,
+    DeleteScorer,
     // ---- Runs (inherit experiment) ----
     ReadRun,
     UpdateRun,
@@ -242,6 +246,9 @@ impl Validator {
             ReadExperimentByName => Ok(experiment_perm_from_name(ctx).await?.can_read),
             UpdateExperiment => Ok(experiment_perm_from_id_param(ctx).await?.can_update),
             DeleteExperiment => Ok(experiment_perm_from_id_param(ctx).await?.can_delete),
+            ReadScorerList => validate_can_read_scorer_list(ctx).await,
+            ReadScorer => Ok(scorer_permission(ctx).await?.can_read),
+            DeleteScorer => Ok(scorer_permission(ctx).await?.can_delete),
             // Runs inherit experiment.
             ReadRun => Ok(experiment_perm_from_run(ctx).await?.can_read),
             UpdateRun => Ok(experiment_perm_from_run(ctx).await?.can_update),
@@ -296,6 +303,39 @@ impl Validator {
             GetUserPermission => validate_can_get_user_permission(ctx).await,
         }
     }
+}
+
+async fn validate_can_read_scorer_list(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let Some(experiment_id) = ctx.get_param("experiment_id") else {
+        return Ok(true);
+    };
+    if experiment_id.is_empty() {
+        return Ok(true);
+    }
+    Ok(resolve_experiment_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        &experiment_id,
+    )
+    .await?
+    .can_read)
+}
+
+async fn scorer_permission(ctx: &RequestCtx<'_>) -> Result<&'static Permission, MlflowError> {
+    let experiment_id = require_param(ctx, "experiment_id")?;
+    let name = require_param(ctx, "name")?;
+    let pattern = AuthStore::scorer_pattern(&experiment_id, &name);
+    resolve_role_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        "scorer",
+        &pattern,
+    )
+    .await
 }
 
 // ---- Permission resolution ----

@@ -38,3 +38,26 @@ fn rejects_multiple_representations() {
     let error = SerializedScorer::from_json(&payload.to_string()).unwrap_err();
     assert!(error.to_string().contains("exactly one"));
 }
+
+#[test]
+fn rejects_phoenix_metric_for_elastic_2_license() {
+    let payload = serde_json::json!({
+        "name": "Hallucination",
+        "mlflow_version": "3.0.0",
+        "serialization_version": 1,
+        "third_party_scorer_data": {
+            "class": "Hallucination",
+            "metric_name": "Hallucination",
+            "model": "openai:/gpt-4"
+        }
+    });
+    let error = SerializedScorer::from_json(&payload.to_string()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Phoenix scorer metric 'Hallucination' is unavailable in the Rust server: \
+         arize-phoenix-evals is licensed under Elastic-2.0, which is incompatible with \
+         reimplementation in Apache-2.0 MLflow. Use the MLflow builtins Faithfulness \
+         (Hallucination), RelevanceToQuery (Relevance), Correctness (QA), or Safety (Toxicity); \
+         for Summarization and SQL, use a custom instructions judge."
+    );
+}

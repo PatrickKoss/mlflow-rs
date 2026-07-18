@@ -65,10 +65,6 @@ _skip_if_rust_custom_auth = pytest.mark.skipif(
     _RUN_AGAINST_RUST,
     reason="Rust runs in a separate process and cannot load a Python authorization_function",
 )
-_skip_if_rust_scorers_unimplemented = pytest.mark.skipif(
-    _RUN_AGAINST_RUST,
-    reason="Rust server does not implement the scorer API yet",
-)
 _skip_if_rust_gateway_unimplemented = pytest.mark.skipif(
     _RUN_AGAINST_RUST,
     reason="Rust server does not implement the gateway API yet",
@@ -1263,7 +1259,6 @@ def test_log_outputs_authorization(client: MlflowClient, monkeypatch: pytest.Mon
         client.log_outputs(run_id, model_outputs)
 
 
-@_skip_if_rust_scorers_unimplemented
 def test_reregister_scorer_does_not_raise(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
 
@@ -1304,7 +1299,6 @@ def test_reregister_scorer_does_not_raise(client, monkeypatch):
     assert response.json()["version"] == 2
 
 
-@_skip_if_rust_scorers_unimplemented
 def test_scorer_permission_denial(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
     username2, password2 = create_user(client.tracking_uri)
@@ -1354,7 +1348,6 @@ def test_scorer_permission_denial(client, monkeypatch):
             response.raise_for_status()
 
 
-@_skip_if_rust_scorers_unimplemented
 def test_scorer_read_permission(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
     username2, password2 = create_user(client.tracking_uri)
@@ -3235,7 +3228,6 @@ def test_assistant_unauthenticated_access_denied(fastapi_client, monkeypatch):
     assert response.status_code == 401
 
 
-@_skip_if_rust_scorers_unimplemented
 def test_get_online_scoring_configs_with_auth(client, monkeypatch):
     username, password = create_user(client.tracking_uri)
 
