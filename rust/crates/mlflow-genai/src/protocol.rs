@@ -22,6 +22,22 @@ impl std::fmt::Display for JobKind {
     }
 }
 
+impl std::str::FromStr for JobKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "invoke_scorer" => Ok(Self::InvokeScorer),
+            "run_online_trace_scorer" => Ok(Self::RunOnlineTraceScorer),
+            "run_online_session_scorer" => Ok(Self::RunOnlineSessionScorer),
+            "optimize_prompts" => Ok(Self::OptimizePrompts),
+            "invoke_issue_detection" => Ok(Self::InvokeIssueDetection),
+            "invoke_genai_evaluate" => Ok(Self::InvokeGenaiEvaluate),
+            _ => Err(value.to_string()),
+        }
+    }
+}
+
 /// Versioned stdin request from the Rust job runner to a per-job worker.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkerRequest {
@@ -29,8 +45,67 @@ pub struct WorkerRequest {
     pub job_id: String,
     pub job_kind: JobKind,
     pub params: Value,
-    pub workspace: String,
+    pub workspace: Option<String>,
     pub subject: Value,
+}
+
+/// Decode in the security-sensitive order required by the worker protocol.
+/// Version and kind are validated before `params` can reach a dispatcher.
+pub fn decode_worker_request(bytes: &[u8]) -> Result<WorkerRequest, WorkerResponse> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        WorkerResponse::failed(
+            "<unknown>".to_string(),
+            "INVALID_REQUEST_ENVELOPE",
+            error.to_string(),
+        )
+    })?;
+    let job_id = value
+        .get("job_id")
+        .and_then(Value::as_str)
+        .unwrap_or("<unknown>")
+        .to_string();
+    let protocol_version = value
+        .get("protocol_version")
+        .and_then(Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok())
+        .ok_or_else(|| {
+            WorkerResponse::failed(
+                job_id.clone(),
+                "INVALID_REQUEST_ENVELOPE",
+                "protocol_version must be an unsigned 32-bit integer",
+            )
+        })?;
+    if protocol_version != NATIVE_WORKER_PROTOCOL_VERSION {
+        return Err(WorkerResponse::failed(
+            job_id,
+            "UNSUPPORTED_PROTOCOL_VERSION",
+            format!(
+                "unsupported native worker protocol version {protocol_version}; expected {NATIVE_WORKER_PROTOCOL_VERSION}"
+            ),
+        ));
+    }
+
+    let job_kind = value
+        .get("job_kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            WorkerResponse::failed(
+                job_id.clone(),
+                "INVALID_REQUEST_ENVELOPE",
+                "job_kind must be a string",
+            )
+        })?;
+    job_kind.parse::<JobKind>().map_err(|unknown| {
+        WorkerResponse::failed(
+            job_id.clone(),
+            "UNKNOWN_JOB_KIND",
+            format!("unknown native worker job kind {unknown:?}"),
+        )
+    })?;
+
+    serde_json::from_value(value).map_err(|error| {
+        WorkerResponse::failed(job_id, "INVALID_REQUEST_ENVELOPE", error.to_string())
+    })
 }
 
 /// T15.4 subset of Python's `invoke_scorer_job` parameters.

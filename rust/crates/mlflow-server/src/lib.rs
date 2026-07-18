@@ -27,6 +27,7 @@ pub mod label_schemas;
 pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
+pub mod native_worker;
 pub mod online_scoring_scheduler;
 pub mod otlp;
 pub mod prompt_optimization;

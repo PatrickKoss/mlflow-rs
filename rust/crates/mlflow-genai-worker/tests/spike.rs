@@ -254,7 +254,7 @@ fn invoke_request(
             "expectations": null,
             "gateway_url": gateway_url
         }),
-        workspace: "spike-workspace".to_string(),
+        workspace: Some("spike-workspace".to_string()),
         subject: json!({"username": "spike-user"}),
     }
 }

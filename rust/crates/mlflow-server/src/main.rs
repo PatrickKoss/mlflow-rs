@@ -10,9 +10,14 @@ use mlflow_auth::{
     create_admin_user, warn_if_default_admin_password, AuthConfig, AuthDb, AuthStore,
 };
 use mlflow_registry::RegistryStore;
+use mlflow_server::job_runner::{JobRunner, JobRunnerConfig};
+use mlflow_server::native_worker::{
+    native_job_functions, resolve_worker_program, NativeWorkerExecutor,
+};
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -46,11 +51,14 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
+    let local_addr = listener.local_addr()?;
+
     // Serve the tracking API when a backend store is configured; otherwise run
     // the ops-only app (health/version/metrics). The store is verified against
     // the expected Alembic head at connect time.
     let mut online_scoring_scheduler = None;
-    let app = match &config.backend_store_uri {
+    let (app, job_runner) = match &config.backend_store_uri {
         Some(uri) => {
             let db = Db::connect_and_verify_with(uri, PoolConfig::from_env()).await?;
             let artifact_root = config
@@ -105,12 +113,20 @@ async fn main() -> anyhow::Result<()> {
             // workspace store shares the tracking DB pool; `--workspace-store-uri`
             // (unset → tracking URI) only names the `mlflow gc` hint. When off,
             // the endpoints return a 503.
+            let mut runner_workspaces =
+                vec![mlflow_server::workspace::DEFAULT_WORKSPACE_NAME.to_string()];
             if config.enable_workspaces {
                 let workspace_uri = config
                     .workspace_store_uri
                     .clone()
                     .unwrap_or_else(|| uri.clone());
                 let workspace_store = WorkspaceStore::new(db.clone(), workspace_uri);
+                runner_workspaces = workspace_store
+                    .list_workspaces()
+                    .await?
+                    .into_iter()
+                    .map(|workspace| workspace.name)
+                    .collect();
                 app_state = app_state.with_workspace_store(workspace_store);
             } else {
                 // Single-tenant startup guard (T10.3): if a previous
@@ -137,13 +153,38 @@ async fn main() -> anyhow::Result<()> {
                     ),
                 );
             }
-            build_app_with_state(&config, app_state)
+            let job_runner = if config.job_execution_enabled {
+                let worker = resolve_worker_program().map_err(|error| {
+                    anyhow::anyhow!(
+                        "native job execution is enabled but mlflow-genai-worker is unavailable: {error}"
+                    )
+                })?;
+                let server_uri = worker_server_uri(local_addr);
+                let gateway_uri =
+                    std::env::var("MLFLOW_GATEWAY_URI").unwrap_or_else(|_| server_uri.clone());
+                let internal_token = std::env::var("_MLFLOW_INTERNAL_GATEWAY_AUTH_TOKEN")
+                    .unwrap_or_else(|_| uuid::Uuid::new_v4().simple().to_string());
+                let executor = NativeWorkerExecutor::new(worker)
+                    .tracking_uri(server_uri)
+                    .gateway_uri(gateway_uri)
+                    .internal_gateway_token(internal_token);
+                JobRunner::new(
+                    app_state.job_store(),
+                    Arc::new(executor),
+                    native_job_functions()?,
+                    runner_workspaces,
+                    JobRunnerConfig::from_server_config(&config)?,
+                )
+                .start()
+                .await?
+            } else {
+                None
+            };
+            (build_app_with_state(&config, app_state), job_runner)
         }
-        None => build_app(&config),
+        None => (build_app(&config), None),
     };
 
-    let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
-    let local_addr = listener.local_addr()?;
     tracing::info!(address = %local_addr, static_prefix = ?config.static_prefix, "mlflow-server listening");
 
     let scheduler_task =
@@ -154,10 +195,28 @@ async fn main() -> anyhow::Result<()> {
     if let Some(task) = scheduler_task {
         task.abort();
     }
+    if let Some(runner) = job_runner {
+        runner.shutdown().await;
+    }
     serve_result?;
 
     tracing::info!("mlflow-server shut down");
     Ok(())
+}
+
+fn worker_server_uri(address: std::net::SocketAddr) -> String {
+    let host = if address.ip().is_unspecified() {
+        if address.is_ipv4() {
+            "127.0.0.1".to_string()
+        } else {
+            "[::1]".to_string()
+        }
+    } else if address.is_ipv6() {
+        format!("[{}]", address.ip())
+    } else {
+        address.ip().to_string()
+    };
+    format!("http://{host}:{}", address.port())
 }
 
 /// Build the auth store when the basic-auth app is enabled, else `None`.

@@ -22,7 +22,7 @@ async fn unknown_protocol_version_fails_before_params_are_parsed() {
         job_id: "job-new-version".to_string(),
         job_kind: JobKind::InvokeScorer,
         params: serde_json::Value::String("deliberately not invoke_scorer params".to_string()),
-        workspace: "default".to_string(),
+        workspace: Some("default".to_string()),
         subject: serde_json::json!({"username": "alice"}),
     };
     let response = execute_worker_request(&request).await;
