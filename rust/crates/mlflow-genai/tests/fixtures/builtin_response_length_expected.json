@@ -1,0 +1,5 @@
+{
+  "name": "response_length",
+  "value": "yes",
+  "rationale": "Output length (4 words) is within bounds"
+}
