@@ -244,6 +244,20 @@ pub async fn authorize(
     // both admins and non-admins.
     let after_handler = dispatch_after_request(&path, &method);
 
+    // Python's admin bypass skips permission validators but still runs the
+    // review-queue username-shadowing integrity hook for create/update.
+    let review_queue_integrity_update = if is_admin && method == "POST" {
+        if path.ends_with("/mlflow/review-queues/create") {
+            Some(false)
+        } else if path.ends_with("/mlflow/review-queues/update") {
+            Some(true)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // 4. Before-request validator dispatch (skipped entirely for admins).
     let validator = if is_admin {
         None
@@ -256,7 +270,7 @@ pub async fn authorize(
     };
 
     // Fast path: no validator and no after-request hook — forward untouched.
-    if validator.is_none() && after_handler.is_none() {
+    if validator.is_none() && after_handler.is_none() && review_queue_integrity_update.is_none() {
         return next.run(req).await;
     }
 
@@ -269,6 +283,24 @@ pub async fn authorize(
         Err(_) => Bytes::new(),
     };
     let json_body: Option<Value> = serde_json::from_slice(&body_bytes).ok();
+
+    if let Some(update) = review_queue_integrity_update {
+        let ctx = RequestCtx {
+            username: &username,
+            method: &method,
+            workspace: workspace.name(),
+            workspaces_enabled,
+            path_params: &[],
+            query: &query,
+            json_body: json_body.as_ref(),
+            experiment_id_header: experiment_id_header.as_deref(),
+            auth_store,
+            tracking_store: state.tracking_store(),
+        };
+        if let Err(error) = validators::enforce_review_queue_name_integrity(&ctx, update).await {
+            return error_response(&error);
+        }
+    }
 
     if let Some((validator, path_params)) = validator {
         let ctx = RequestCtx {

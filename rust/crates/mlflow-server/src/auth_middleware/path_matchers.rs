@@ -18,10 +18,11 @@
 //! `(service, method)` — exactly as Python keys `BEFORE_REQUEST_HANDLERS` on the
 //! proto request class — plus the hand-registered auth/artifact/trace routes.
 //! Only routes actually served by this Rust server are wired; unimplemented
-//! Python-only surfaces (gateway, review queues, workspaces) are intentionally
-//! absent (they never route here, so their validators would be dead code).
-//! Prompt optimization is live and carries the same experiment-inherited
-//! validators as Python.
+//! Python-only surfaces (gateway) are intentionally absent (they never
+//! route here, so their validators would be dead code). Prompt optimization
+//! and review queues are live and carry the same validators as Python
+//! (experiment-inherited for prompt optimization; the full owner/member/
+//! manager rule set for review queues).
 
 use std::sync::OnceLock;
 
@@ -209,6 +210,18 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         ("MlflowService", "listLabelSchemas") => ReadExperiment,
         ("MlflowService", "updateLabelSchema") => ManageLabelSchema,
         ("MlflowService", "deleteLabelSchema") => ManageLabelSchema,
+        // ---- Review queues (BEFORE_REQUEST_HANDLERS) ----
+        ("MlflowService", "createReviewQueue") => CreateReviewQueue,
+        ("MlflowService", "getOrCreateUserQueue") => GetOrCreateUserQueue,
+        ("MlflowService", "getReviewQueue") => ViewReviewQueue,
+        ("MlflowService", "getReviewQueueByName") => ViewReviewQueueByName,
+        ("MlflowService", "listReviewQueues") => ReadExperiment,
+        ("MlflowService", "updateReviewQueue") => UpdateReviewQueue,
+        ("MlflowService", "deleteReviewQueue") => DeleteOrPruneReviewQueue,
+        ("MlflowService", "addItemsToReviewQueue") => AddItemsToReviewQueue,
+        ("MlflowService", "removeItemsFromReviewQueue") => DeleteOrPruneReviewQueue,
+        ("MlflowService", "listReviewQueueItems") => ViewReviewQueue,
+        ("MlflowService", "setReviewQueueItemStatus") => ReviewQueueItem,
         // ---- Logged models (LOGGED_MODEL_BEFORE_REQUEST_HANDLERS) ----
         ("MlflowService", "createLoggedModel") => UpdateExperiment,
         ("MlflowService", "getLoggedModel") => ReadLoggedModel,

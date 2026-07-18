@@ -129,6 +129,11 @@ impl RequestCtx<'_> {
         }
     }
 
+    fn body_value(&self, snake_case: &str, camel_case: &str) -> Option<&Value> {
+        let body = self.json_body?.as_object()?;
+        body.get(snake_case).or_else(|| body.get(camel_case))
+    }
+
     /// All query values for a repeated key (`request.args.to_dict(flat=False)`).
     fn query_multi(&self, param: &str) -> Vec<String> {
         self.query
@@ -203,6 +208,15 @@ pub enum Validator {
     CreateLabelSchema,
     ReadLabelSchema,
     ManageLabelSchema,
+    // ---- Review queues (inherit experiment + queue ownership/membership) ----
+    CreateReviewQueue,
+    UpdateReviewQueue,
+    DeleteOrPruneReviewQueue,
+    AddItemsToReviewQueue,
+    GetOrCreateUserQueue,
+    ViewReviewQueue,
+    ViewReviewQueueByName,
+    ReviewQueueItem,
     // ---- OTLP ----
     OtlpExperimentUpdate,
     // ---- Users ----
@@ -302,6 +316,14 @@ impl Validator {
             CreateLabelSchema => Ok(experiment_perm_from_id_param(ctx).await?.can_manage),
             ReadLabelSchema => Ok(experiment_perm_from_label_schema(ctx).await?.can_read),
             ManageLabelSchema => Ok(experiment_perm_from_label_schema(ctx).await?.can_manage),
+            CreateReviewQueue => validate_can_create_review_queue(ctx).await,
+            UpdateReviewQueue => validate_can_update_review_queue(ctx).await,
+            DeleteOrPruneReviewQueue => validate_can_delete_or_prune_review_queue(ctx).await,
+            AddItemsToReviewQueue => Ok(review_queue_permission(ctx).await?.can_update),
+            GetOrCreateUserQueue => Ok(experiment_perm_from_id_param(ctx).await?.can_update),
+            ViewReviewQueue => validate_can_view_review_queue(ctx).await,
+            ViewReviewQueueByName => validate_can_view_review_queue_by_name(ctx).await,
+            ReviewQueueItem => validate_can_review_queue_item(ctx).await,
             // OTLP: experiment UPDATE from the X-Mlflow-Experiment-Id header.
             OtlpExperimentUpdate => validate_otlp(ctx).await,
             // Users.
@@ -315,6 +337,200 @@ impl Validator {
             ManageResource => validate_can_manage_resource(ctx).await,
             GetUserPermission => validate_can_get_user_permission(ctx).await,
         }
+    }
+}
+
+async fn review_queue(ctx: &RequestCtx<'_>) -> Result<mlflow_store::ReviewQueue, MlflowError> {
+    let queue_id = require_param(ctx, "queue_id")?;
+    ctx.tracking_store
+        .get_review_queue(ctx.workspace, &queue_id)
+        .await
+}
+
+async fn review_queue_permission(ctx: &RequestCtx<'_>) -> Result<&'static Permission, MlflowError> {
+    let queue = review_queue(ctx).await?;
+    experiment_permission(ctx, &queue.experiment_id).await
+}
+
+fn review_queue_has_member(queue: &mlflow_store::ReviewQueue, username: &str) -> bool {
+    let username = username.trim().to_lowercase();
+    queue.users.contains(&username)
+}
+
+fn is_review_queue_owner(queue: &mlflow_store::ReviewQueue, username: &str) -> bool {
+    let owner = queue
+        .created_by
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    !owner.is_empty() && owner == username.trim().to_lowercase()
+}
+
+async fn can_own_or_manage_review_queue(
+    ctx: &RequestCtx<'_>,
+    queue: &mlflow_store::ReviewQueue,
+) -> Result<bool, MlflowError> {
+    let permission = experiment_permission(ctx, &queue.experiment_id).await?;
+    Ok(permission.can_manage
+        || (permission.can_update && is_review_queue_owner(queue, ctx.username)))
+}
+
+async fn can_delete_or_prune_review_queue(
+    ctx: &RequestCtx<'_>,
+    queue: &mlflow_store::ReviewQueue,
+) -> Result<bool, MlflowError> {
+    let permission = experiment_permission(ctx, &queue.experiment_id).await?;
+    Ok(permission.can_manage
+        || (permission.can_update
+            && is_review_queue_owner(queue, ctx.username)
+            && queue.queue_type == mlflow_store::ReviewQueueType::Custom))
+}
+
+async fn validate_can_create_review_queue(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let permission = experiment_perm_from_id_param(ctx).await?.can_update;
+    if permission {
+        reject_create_review_queue_shadowing_user(ctx).await?;
+    }
+    Ok(permission)
+}
+
+async fn validate_can_update_review_queue(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let queue = review_queue(ctx).await?;
+    let request_json = ctx
+        .json_body
+        .map(Value::to_string)
+        .unwrap_or_else(|| "{}".to_string());
+    let request: mlflow_proto::mlflow::review_queues::UpdateReviewQueue =
+        mlflow_proto::from_mlflow_json(&request_json, "mlflow.review_queues.UpdateReviewQueue")
+            .map_err(crate::proto_http::codec_err)?;
+    let reassigns_owner = request.new_owner.is_some();
+    let permission = if reassigns_owner {
+        experiment_permission(ctx, &queue.experiment_id)
+            .await?
+            .can_manage
+    } else {
+        can_own_or_manage_review_queue(ctx, &queue).await?
+    };
+    if permission {
+        reject_rename_review_queue_shadowing_user(ctx, &queue).await?;
+    }
+    Ok(permission)
+}
+
+async fn validate_can_delete_or_prune_review_queue(
+    ctx: &RequestCtx<'_>,
+) -> Result<bool, MlflowError> {
+    let queue = review_queue(ctx).await?;
+    can_delete_or_prune_review_queue(ctx, &queue).await
+}
+
+async fn validate_can_view_review_queue(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let queue = review_queue(ctx).await?;
+    let permission = experiment_permission(ctx, &queue.experiment_id).await?;
+    if !permission.can_read {
+        return Ok(false);
+    }
+    Ok(permission.can_manage
+        || review_queue_has_member(&queue, ctx.username)
+        || (permission.can_update && is_review_queue_owner(&queue, ctx.username)))
+}
+
+async fn validate_can_view_review_queue_by_name(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let experiment_id = require_param(ctx, "experiment_id")?;
+    let permission = experiment_permission(ctx, &experiment_id).await?;
+    if !permission.can_read {
+        return Ok(false);
+    }
+    if permission.can_manage {
+        return Ok(true);
+    }
+    let name = require_param(ctx, "name")?;
+    let queue = ctx
+        .tracking_store
+        .get_review_queue_by_name(ctx.workspace, &experiment_id, &name)
+        .await?;
+    Ok(review_queue_has_member(&queue, ctx.username)
+        || (permission.can_update && is_review_queue_owner(&queue, ctx.username)))
+}
+
+async fn validate_can_review_queue_item(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let queue = review_queue(ctx).await?;
+    let permission = experiment_permission(ctx, &queue.experiment_id).await?;
+    Ok(permission.can_update && review_queue_has_member(&queue, ctx.username))
+}
+
+async fn registered_username_match(
+    ctx: &RequestCtx<'_>,
+    name: Option<&Value>,
+) -> Result<Option<String>, MlflowError> {
+    let Some(name) = name.and_then(Value::as_str).map(str::trim) else {
+        return Ok(None);
+    };
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let target = name.to_lowercase();
+    Ok(ctx
+        .auth_store
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|user| user.username.trim().to_lowercase() == target)
+        .map(|user| user.username))
+}
+
+fn body_queue_type_is_custom(ctx: &RequestCtx<'_>) -> bool {
+    match ctx.body_value("queue_type", "queueType") {
+        Some(Value::String(value)) => value == "CUSTOM",
+        Some(Value::Number(value)) => value.as_i64() == Some(2),
+        _ => false,
+    }
+}
+
+async fn reject_create_review_queue_shadowing_user(
+    ctx: &RequestCtx<'_>,
+) -> Result<(), MlflowError> {
+    if !body_queue_type_is_custom(ctx) {
+        return Ok(());
+    }
+    if let Some(username) = registered_username_match(ctx, ctx.body_value("name", "name")).await? {
+        return Err(MlflowError::invalid_parameter_value(format!(
+            "'{username}' is a registered user. A custom review queue cannot use a username as \
+             its name; assign that user to a queue instead."
+        )));
+    }
+    Ok(())
+}
+
+async fn reject_rename_review_queue_shadowing_user(
+    ctx: &RequestCtx<'_>,
+    queue: &mlflow_store::ReviewQueue,
+) -> Result<(), MlflowError> {
+    if queue.queue_type != mlflow_store::ReviewQueueType::Custom {
+        return Ok(());
+    }
+    let name = ctx.body_value("name", "name");
+    if let Some(username) = registered_username_match(ctx, name).await? {
+        return Err(MlflowError::invalid_parameter_value(format!(
+            "'{username}' is a registered user. A custom review queue cannot be renamed to a \
+             username; assign that user to a queue instead."
+        )));
+    }
+    Ok(())
+}
+
+/// Admin-bypass integrity hook: admins skip permission validators, but custom
+/// queue names still may not shadow a registered username.
+pub(crate) async fn enforce_review_queue_name_integrity(
+    ctx: &RequestCtx<'_>,
+    update: bool,
+) -> Result<(), MlflowError> {
+    if update {
+        let queue = review_queue(ctx).await?;
+        reject_rename_review_queue_shadowing_user(ctx, &queue).await
+    } else {
+        reject_create_review_queue_shadowing_user(ctx).await
     }
 }
 

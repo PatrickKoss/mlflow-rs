@@ -758,7 +758,8 @@ impl TrackingStore {
     /// on FK cascade) and explicitly clears `review_queue_items`; it leaves
     /// `entity_associations` orphaned (that table has no FK to `trace_info`). We
     /// match Python exactly — associations are NOT removed here. Review-queue
-    /// items are a genai-only table (Phase 12) not owned by this store.
+    /// items are soft references (no FK), so they are explicitly removed before
+    /// the trace rows in the same transaction.
     ///
     /// Archive-backed traces (`SPANS_LOCATION == ARCHIVE_REPO`) require object
     /// -store payload cleanup and are handled in Phase 4; this DB-backed path
@@ -824,15 +825,25 @@ impl TrackingStore {
             return Ok(0);
         }
 
-        // Delete the trace_info rows; FK cascades handle the child tables
-        // (tags, metadata, metrics, spans, span_metrics, assessments). Matches
-        // Python: entity_associations are intentionally left orphaned.
+        // Review-queue items are soft references to traces, so explicitly prune
+        // them. Then delete trace_info; FK cascades handle tags, metadata,
+        // metrics, spans, span_metrics, and assessments. Entity associations are
+        // intentionally left orphaned, matching Python.
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        let queue_placeholders = (0..selected.len())
+            .map(|offset| dialect.placeholder(offset + 2))
+            .collect::<Vec<_>>();
+        let queue_sql = format!(
+            "DELETE FROM review_queue_items WHERE item_type = {} AND item_id IN ({})",
+            dialect.placeholder(1),
+            queue_placeholders.join(", ")
+        );
+        let mut queue_binds = vec![Val::Text("trace".to_string())];
+        queue_binds.extend(selected.iter().cloned().map(Val::Text));
+        tx.exec(&queue_sql, &queue_binds).await.map_err(internal)?;
         let (del_sql, del_binds) = in_delete(dialect, TRACE_INFO, "request_id", &selected);
-        let deleted = self
-            .db()
-            .exec(&del_sql, &del_binds)
-            .await
-            .map_err(internal)?;
+        let deleted = tx.exec(&del_sql, &del_binds).await.map_err(internal)?;
+        tx.commit().await.map_err(internal)?;
         Ok(deleted)
     }
 
