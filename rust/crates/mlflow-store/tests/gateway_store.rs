@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use mlflow_store::{
-    BudgetPolicyUpdate, EndpointModelConfig, EndpointUpdate, TrackingStore, WORKSPACE_DEFAULT_NAME,
+    BudgetPolicyUpdate, EndpointModelConfig, EndpointUpdate, SpanInput, SpanMetricInput,
+    StartTraceInput, TraceTimeRange, TrackingStore, WORKSPACE_DEFAULT_NAME,
 };
 use mlflow_test_support::TempDb;
 use serde_json::json;
@@ -15,6 +16,137 @@ async fn store(tag: &str) -> (TempDb, TrackingStore) {
 
 fn fake_secret(value: &str) -> HashMap<String, String> {
     HashMap::from([("api_key".to_string(), value.to_string())])
+}
+
+async fn seed_gateway_cost(
+    store: &TrackingStore,
+    workspace: &str,
+    experiment_id: &str,
+    trace_id: &str,
+    timestamp_ms: i64,
+    cost: f64,
+    gateway_tagged: bool,
+) {
+    store
+        .start_trace(
+            workspace,
+            &StartTraceInput {
+                trace_id: trace_id.to_string(),
+                experiment_id: experiment_id.to_string(),
+                request_time: timestamp_ms,
+                execution_duration: Some(1),
+                state: "OK".to_string(),
+                client_request_id: None,
+                request_preview: None,
+                response_preview: None,
+                tags: Vec::new(),
+                trace_metadata: if gateway_tagged {
+                    vec![(
+                        "mlflow.gateway.endpointId".to_string(),
+                        "ep-fixture".to_string(),
+                    )]
+                } else {
+                    Vec::new()
+                },
+                trace_metrics: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+    store
+        .log_spans(
+            workspace,
+            experiment_id,
+            &[SpanInput {
+                trace_id: trace_id.to_string(),
+                span_id: "0123456789abcdef".to_string(),
+                parent_span_id: None,
+                name: Some("provider/openai/gpt-4".to_string()),
+                span_type: Some("LLM".to_string()),
+                status: "OK".to_string(),
+                start_time_unix_nano: timestamp_ms * 1_000_000,
+                end_time_unix_nano: Some(timestamp_ms * 1_000_000 + 1),
+                content: "{}".to_string(),
+                dimension_attributes: None,
+            }],
+            &[SpanMetricInput {
+                trace_id: trace_id.to_string(),
+                span_id: "0123456789abcdef".to_string(),
+                key: "total_cost".to_string(),
+                value: cost,
+            }],
+            &[TraceTimeRange {
+                trace_id: trace_id.to_string(),
+                min_start_ms: timestamp_ms,
+                max_end_ms: Some(timestamp_ms + 1),
+                root_span_status: Some("OK".to_string()),
+            }],
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn gateway_cost_sum_uses_total_cost_tag_time_bounds_and_workspace() {
+    let (_temp, store) = store("gateway_cost_sum").await;
+    let exp_default = store
+        .create_experiment(WORKSPACE_DEFAULT_NAME, "gateway-cost-default", None, &[])
+        .await
+        .unwrap();
+    let exp_other = store
+        .create_experiment("other", "gateway-cost-other", None, &[])
+        .await
+        .unwrap();
+    seed_gateway_cost(
+        &store,
+        WORKSPACE_DEFAULT_NAME,
+        &exp_default,
+        "tr-default",
+        1_000,
+        1.25,
+        true,
+    )
+    .await;
+    seed_gateway_cost(&store, "other", &exp_other, "tr-other", 1_500, 2.5, true).await;
+    seed_gateway_cost(
+        &store,
+        WORKSPACE_DEFAULT_NAME,
+        &exp_default,
+        "tr-not-gateway",
+        1_500,
+        100.0,
+        false,
+    )
+    .await;
+
+    assert_eq!(
+        store
+            .sum_gateway_trace_cost(1_000, 2_000, None)
+            .await
+            .unwrap(),
+        3.75
+    );
+    assert_eq!(
+        store
+            .sum_gateway_trace_cost(1_000, 2_000, Some(WORKSPACE_DEFAULT_NAME))
+            .await
+            .unwrap(),
+        1.25
+    );
+    assert_eq!(
+        store
+            .sum_gateway_trace_cost(1_001, 1_500, None)
+            .await
+            .unwrap(),
+        0.0
+    );
+    assert_eq!(
+        store
+            .sum_gateway_trace_cost(1_500, 1_501, None)
+            .await
+            .unwrap(),
+        2.5
+    );
 }
 
 #[tokio::test]

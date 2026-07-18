@@ -15,9 +15,14 @@ use axum::Router;
 use futures::{stream, StreamExt};
 use http_body_util::BodyExt;
 use metrics_exporter_prometheus::PrometheusBuilder;
+use mlflow_server::gateway_provider_matrix::token_cost;
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
 use mlflow_store::{
     Db, EndpointModelConfig, FallbackConfig, PoolConfig, TrackingStore, WORKSPACE_DEFAULT_NAME,
+};
+use mlflow_webhooks::http_send::SendConfig;
+use mlflow_webhooks::{
+    WebhookAction, WebhookDispatcher, WebhookEntity, WebhookEvent, WebhookStatus, WebhookStore,
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -59,6 +64,11 @@ fn python_routing_oracle() -> &'static Value {
 struct Fixture {
     _directory: tempfile::TempDir,
     app: Router,
+    store: TrackingStore,
+    trace_experiment_id: String,
+    webhook_store: WebhookStore,
+    webhook_base: String,
+    webhook_deliveries: Arc<Mutex<Vec<Value>>>,
     mock_base: String,
     attempts: Arc<Mutex<Vec<String>>>,
 }
@@ -70,6 +80,11 @@ struct MockState {
 
 impl Fixture {
     async fn new() -> Self {
+        static WEBHOOK_ENV: std::sync::Once = std::sync::Once::new();
+        WEBHOOK_ENV.call_once(|| {
+            std::env::set_var("MLFLOW_WEBHOOK_ALLOWED_SCHEMES", "http,https");
+            std::env::set_var("MLFLOW_WEBHOOK_ALLOW_PRIVATE_IPS", "true");
+        });
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mock_base = format!("http://{}", listener.local_addr().unwrap());
         let attempts = Arc::new(Mutex::new(Vec::new()));
@@ -87,6 +102,21 @@ impl Fixture {
             .unwrap();
         });
 
+        let webhook_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let webhook_base = format!("http://{}", webhook_listener.local_addr().unwrap());
+        let webhook_deliveries = Arc::new(Mutex::new(Vec::new()));
+        let webhook_sink = webhook_deliveries.clone();
+        tokio::spawn(async move {
+            axum::serve(
+                webhook_listener,
+                Router::new()
+                    .fallback(post(record_webhook))
+                    .with_state(webhook_sink),
+            )
+            .await
+            .unwrap();
+        });
+
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("gateway-runtime.db");
         std::fs::copy(fixture_path(), &path).unwrap();
@@ -96,8 +126,11 @@ impl Fixture {
         )
         .await
         .unwrap();
-        let store =
-            TrackingStore::new(db, directory.path().join("artifacts").display().to_string());
+        let store = TrackingStore::new(
+            db.clone(),
+            directory.path().join("artifacts").display().to_string(),
+        );
+        let webhook_store = WebhookStore::new(db).unwrap();
         let mut secret_ids = HashMap::new();
         for provider in ["openai", "azure", "anthropic", "gemini"] {
             secret_ids.insert(
@@ -106,18 +139,71 @@ impl Fixture {
             );
         }
         seed_routing_endpoints(&store, &secret_ids).await;
+        let trace_experiment_id = store
+            .create_experiment(WORKSPACE_DEFAULT_NAME, "gateway-runtime-traces", None, &[])
+            .await
+            .unwrap();
+        let traced_model = store
+            .create_gateway_model_definition(
+                WORKSPACE_DEFAULT_NAME,
+                "traced-openai-definition",
+                &secret_ids["openai"],
+                "openai",
+                "gpt-4",
+                Some("runtime-tracing-test"),
+            )
+            .await
+            .unwrap();
+        store
+            .create_gateway_endpoint(
+                WORKSPACE_DEFAULT_NAME,
+                "traced-openai-endpoint",
+                &[EndpointModelConfig {
+                    model_definition_id: traced_model.model_definition_id,
+                    linkage_type: "PRIMARY".to_string(),
+                    weight: 1.0,
+                    fallback_order: None,
+                }],
+                Some("runtime-tracing-test"),
+                None,
+                None,
+                Some(&trace_experiment_id),
+                true,
+            )
+            .await
+            .unwrap();
         let recorder = PrometheusBuilder::new().build_recorder().handle();
+        let dispatcher = WebhookDispatcher::with_config(
+            webhook_store.clone(),
+            WORKSPACE_DEFAULT_NAME,
+            Arc::new(mlflow_webhooks::SystemResolver),
+            SendConfig {
+                timeout: std::time::Duration::from_secs(5),
+                max_retries: 0,
+                backoff_factor: 0.0,
+                backoff_max: std::time::Duration::ZERO,
+                backoff_jitter: 0.0,
+                allow_private_ips: true,
+            },
+        );
         let app = build_app_with_recorder(
             &ServerConfig {
                 disable_security_middleware: true,
                 ..Default::default()
             },
             recorder,
-            Some(AppState::new(store)),
+            Some(
+                AppState::new(store.clone()).with_webhook_store(webhook_store.clone(), dispatcher),
+            ),
         );
         Self {
             _directory: directory,
             app,
+            store,
+            trace_experiment_id,
+            webhook_store,
+            webhook_base,
+            webhook_deliveries,
             mock_base,
             attempts,
         }
@@ -460,6 +546,20 @@ async fn mock_provider(State(state): State<MockState>, request: Request) -> Resp
     }
 }
 
+async fn record_webhook(
+    State(deliveries): State<Arc<Mutex<Vec<Value>>>>,
+    body: Bytes,
+) -> Response<Body> {
+    deliveries
+        .lock()
+        .unwrap()
+        .push(serde_json::from_slice(&body).unwrap());
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from("ok"))
+        .unwrap()
+}
+
 fn find_text(body: &Value) -> &str {
     body.pointer("/messages/0/content")
         .or_else(|| body.pointer("/contents/0/parts/0/text"))
@@ -512,6 +612,282 @@ fn stream_provider_response(
 
 fn chat(content: &str, stream: bool) -> Value {
     json!({"messages":[{"role":"user","content":content}],"stream":stream})
+}
+
+#[tokio::test]
+async fn usage_tracked_invocations_persist_gateway_and_cost_spans() {
+    let fixture = Fixture::new().await;
+    let response = fixture
+        .post("traced-openai-endpoint", chat("trace me", false))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.into_body().collect().await.unwrap();
+
+    let page = fixture
+        .store
+        .search_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&fixture.trace_experiment_id),
+            None,
+            10,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.trace_infos.len(), 1);
+    let trace = fixture
+        .store
+        .batch_get_traces(
+            WORKSPACE_DEFAULT_NAME,
+            &[page.trace_infos[0].trace_id.clone()],
+        )
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(trace.spans.len(), 2);
+    assert_eq!(
+        trace.spans[0].name.as_deref(),
+        Some("gateway/traced-openai-endpoint")
+    );
+    assert_eq!(
+        trace.spans[1].name.as_deref(),
+        Some("provider/openai/gpt-4")
+    );
+    let child: Value = serde_json::from_str(&trace.spans[1].content).unwrap();
+    assert_eq!(
+        child["attributes"]["mlflow.chat.tokenUsage"],
+        Value::String(
+            "{\"input_tokens\": 2, \"output_tokens\": 3, \"total_tokens\": 5}".to_string()
+        )
+    );
+    let cost: Value =
+        serde_json::from_str(child["attributes"]["mlflow.llm.cost"].as_str().unwrap()).unwrap();
+    assert!(cost["total_cost"].as_f64().unwrap() > 0.0);
+    assert_eq!(
+        fixture
+            .store
+            .sum_gateway_trace_cost(0, i64::MAX, None)
+            .await
+            .unwrap(),
+        cost["total_cost"].as_f64().unwrap()
+    );
+
+    let response = fixture
+        .post("traced-openai-endpoint", chat("stream trace", true))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let stream = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(stream.windows(7).any(|window| window == b"fixture"));
+    let page = fixture
+        .store
+        .search_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&fixture.trace_experiment_id),
+            None,
+            10,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.trace_infos.len(), 2);
+    assert_eq!(
+        fixture
+            .store
+            .sum_gateway_trace_cost(0, i64::MAX, None)
+            .await
+            .unwrap(),
+        2.0 * cost["total_cost"].as_f64().unwrap()
+    );
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/openai/v1/chat/completions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "model": "traced-openai-endpoint",
+                        "messages": [{"role": "user", "content": "passthrough trace"}],
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.into_body().collect().await.unwrap();
+    let page = fixture
+        .store
+        .search_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&fixture.trace_experiment_id),
+            None,
+            10,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.trace_infos.len(), 3);
+    assert!(page.trace_infos.iter().any(|trace| {
+        trace.metadata("mlflow.gateway.requestType") == Some("passthrough/model/openai-chat")
+    }));
+    assert_eq!(
+        fixture
+            .store
+            .sum_gateway_trace_cost(0, i64::MAX, None)
+            .await
+            .unwrap(),
+        3.0 * cost["total_cost"].as_f64().unwrap()
+    );
+}
+
+#[tokio::test]
+async fn reject_policy_matches_python_boundary_and_429_body() {
+    let fixture = Fixture::new().await;
+    let invocation_cost = token_cost("openai", "gpt-4", 2, 3).unwrap();
+    fixture
+        .store
+        .create_budget_policy(
+            WORKSPACE_DEFAULT_NAME,
+            "USD",
+            invocation_cost,
+            "DAYS",
+            1,
+            "GLOBAL",
+            "REJECT",
+            Some("budget-test"),
+        )
+        .await
+        .unwrap();
+
+    // Python admits the request that reaches the boundary; the following
+    // request observes cumulative_spend >= budget_amount and is rejected.
+    let first = fixture
+        .post("traced-openai-endpoint", chat("at boundary", false))
+        .await;
+    assert_eq!(first.status(), StatusCode::OK);
+    let second = fixture
+        .post("traced-openai-endpoint", chat("must reject", false))
+        .await;
+    assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    let window = fixture
+        .store
+        .list_budget_windows(WORKSPACE_DEFAULT_NAME)
+        .await
+        .unwrap()
+        .remove(0);
+    let reset = chrono::DateTime::from_timestamp_millis(window.window_end_ms).unwrap();
+    let detail = format!(
+        "Budget limit exceeded. Limit: ${invocation_cost:.2} USD per 1 day. Budget resets at {}. Request rejected.",
+        reset.format("%Y-%m-%dT%H:%M:%SZ")
+    );
+    let bytes = second.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        bytes.as_ref(),
+        serde_json::to_vec(&json!({"detail":detail}))
+            .unwrap()
+            .as_slice()
+    );
+    let traces = fixture
+        .store
+        .search_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&fixture.trace_experiment_id),
+            None,
+            10,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    let rejected = traces
+        .trace_infos
+        .iter()
+        .find(|trace| trace.state == "ERROR")
+        .expect("Python-compatible budget rejection trace");
+    let rejected = fixture
+        .store
+        .batch_get_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&rejected.trace_id),
+        )
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(rejected.spans.len(), 1);
+    assert_eq!(rejected.spans[0].span_type.as_deref(), Some("LLM"));
+    assert_eq!(rejected.spans[0].status, "ERROR");
+}
+
+#[tokio::test]
+async fn alert_policy_dispatches_python_shaped_budget_webhook_once() {
+    let fixture = Fixture::new().await;
+    fixture
+        .webhook_store
+        .create_webhook(
+            WORKSPACE_DEFAULT_NAME,
+            "budget-alert-recorder",
+            &format!("{}/budget", fixture.webhook_base),
+            &[WebhookEvent::new(
+                WebhookEntity::BudgetPolicy,
+                WebhookAction::Exceeded,
+            )],
+            None,
+            None,
+            Some(WebhookStatus::Active),
+        )
+        .await
+        .unwrap();
+    let invocation_cost = token_cost("openai", "gpt-4", 2, 3).unwrap();
+    let policy = fixture
+        .store
+        .create_budget_policy(
+            WORKSPACE_DEFAULT_NAME,
+            "USD",
+            invocation_cost,
+            "DAYS",
+            1,
+            "GLOBAL",
+            "ALERT",
+            Some("budget-test"),
+        )
+        .await
+        .unwrap();
+
+    let response = fixture
+        .post("traced-openai-endpoint", chat("alert", false))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    for _ in 0..100 {
+        if !fixture.webhook_deliveries.lock().unwrap().is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let deliveries = fixture.webhook_deliveries.lock().unwrap();
+    assert_eq!(deliveries.len(), 1);
+    let envelope = &deliveries[0];
+    assert_eq!(envelope["entity"], "budget_policy");
+    assert_eq!(envelope["action"], "exceeded");
+    assert_eq!(
+        envelope["data"]["budget_policy_id"],
+        policy.budget_policy_id
+    );
+    assert_eq!(envelope["data"]["budget_unit"], "USD");
+    assert_eq!(envelope["data"]["budget_amount"], invocation_cost);
+    assert_eq!(envelope["data"]["current_spend"], invocation_cost);
+    assert_eq!(envelope["data"]["duration_unit"], "DAYS");
+    assert_eq!(envelope["data"]["duration_value"], 1);
+    assert_eq!(envelope["data"]["target_scope"], "GLOBAL");
+    assert_eq!(envelope["data"]["workspace"], WORKSPACE_DEFAULT_NAME);
+    assert!(envelope["data"]["window_start"].is_i64());
 }
 
 #[tokio::test]

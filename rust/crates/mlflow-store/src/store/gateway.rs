@@ -2182,7 +2182,10 @@ impl TrackingStore {
         Ok(windows)
     }
 
-    async fn sum_gateway_trace_cost(
+    /// Sum span-level `total_cost` for gateway-tagged traces in the half-open
+    /// time window, optionally restricted to an experiment workspace. Shared
+    /// by budget-window CRUD and the runtime tracker refresh path.
+    pub async fn sum_gateway_trace_cost(
         &self,
         start_time_ms: i64,
         end_time_ms: i64,

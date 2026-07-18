@@ -31,6 +31,7 @@ use mlflow_store::{JobStore, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
 use crate::auth_api::signup::CsrfSecret;
+use crate::budget::BudgetTracker;
 
 /// A resolved artifact repository plus the repo-relative path to operate on —
 /// the output of resolving a run's / logged model's artifact URI against the
@@ -49,6 +50,9 @@ pub struct AppState {
 
 struct AppStateInner {
     tracking_store: TrackingStore,
+    /// Process-local policy cache / spend tracker, or the Redis-backed shared
+    /// tracker selected at startup by `MLFLOW_GATEWAY_BUDGET_REDIS_URL`.
+    budget_tracker: BudgetTracker,
     /// The model-registry store, sharing the same backing `Db` pool as
     /// `tracking_store` (both stores are thin query layers over the same
     /// Alembic-migrated database). `None` in the ops-only / no-backend-store
@@ -116,6 +120,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store: inner.tracking_store.clone(),
+                budget_tracker: inner.budget_tracker.clone(),
                 registry_store: inner.registry_store.clone(),
                 webhook_store: Some(webhook_store),
                 webhook_dispatcher: Some(webhook_dispatcher),
@@ -142,6 +147,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store: inner.tracking_store.clone(),
+                budget_tracker: inner.budget_tracker.clone(),
                 registry_store: inner.registry_store.clone(),
                 webhook_store: inner.webhook_store.clone(),
                 webhook_dispatcher: inner.webhook_dispatcher.clone(),
@@ -164,6 +170,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store: inner.tracking_store.clone(),
+                budget_tracker: inner.budget_tracker.clone(),
                 registry_store: inner.registry_store.clone(),
                 webhook_store: inner.webhook_store.clone(),
                 webhook_dispatcher: inner.webhook_dispatcher.clone(),
@@ -228,6 +235,7 @@ impl AppState {
         Self {
             inner: Arc::new(AppStateInner {
                 tracking_store,
+                budget_tracker: BudgetTracker::from_env(),
                 registry_store,
                 webhook_store,
                 webhook_dispatcher: None,
@@ -271,6 +279,12 @@ impl AppState {
     /// The tracking store (experiments, runs, metrics, traces, …).
     pub fn tracking_store(&self) -> &TrackingStore {
         &self.inner.tracking_store
+    }
+
+    /// Gateway budget tracker selected once when this application state is
+    /// constructed, matching Python's module-level tracker singleton.
+    pub fn budget_tracker(&self) -> &BudgetTracker {
+        &self.inner.budget_tracker
     }
 
     /// Generic jobs store over the same backend DB. It remains a distinct
