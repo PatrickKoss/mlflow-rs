@@ -3039,11 +3039,30 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       wire/auth 5/5, worker 2/2; post-merge gates fmt/clippy/test/
       route_parity/replay all exit 0. Ledger's submit/search/runner
       tests deferred to Phase 17 (runner surfaces).
-- [ ] **T16.6 Prompt-optimization CRUD**: 5 RPCs over the jobs store + runs
+- [x] **T16.6 Prompt-optimization CRUD**: 5 RPCs over the jobs store + runs
       (entity rebuild from job + run params, optimized-prompt URI from
       result); submission enqueues per Phase 17 (execution rides Phase 19).
       **AC/VER:** CRUD parity via corpus; create returns a queued job whose
       lifecycle matches Python's.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge after bad6dbd54, clean
+      no-conflict): NO dedicated table — rides jobs + runs/params/metrics/
+      dataset-inputs; no migration. All 5 RPCs (12 concrete routes),
+      §12.7 = 12 implemented/0 planned. Quirks ported: scorer_names
+      JSON-string on runs, optimizer_config_json raw vs parsed job
+      optimizer_config, reconstruction accepts native AND JSON-string
+      fields, optimized_prompt_uri only from successful job result,
+      failed results = raw error string, create-response tags not
+      persisted, completion timestamp omitted. Cancel kills job + run;
+      delete removes finalized job + soft-deletes run. Auth inherits
+      referenced experiment (update create/cancel, read get/search,
+      delete delete) — NO D21 gap. Submission leaves job PENDING with
+      `// Phase 19:` marker (no optimizer implemented, per plan). NEW
+      11-case prompt_optimization corpus section added to replay
+      (rust/compliance/corpus/prompt_optimization.yaml) — corpus now 144
+      cases. VER: Python handler suite 23/23, Rust-switched auth 2/2, 4
+      new Rust tests incl. cross-server byte-parity; 80 optimizer
+      execution tests correctly deferred to Phase 19. Post-merge gates
+      all exit 0.
 
 ### Phase 17 — Job runner + worker
 
