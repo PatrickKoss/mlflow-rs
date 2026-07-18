@@ -3119,12 +3119,35 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       fail before execution.
       **VER:** integration matrix using the deterministic `mlflow-genai`
       fixture + production-image-style PATH isolation.
-- [ ] **T17.3 Periodic scheduler + online-scoring scheduler**: tokio-based
+- [x] **T17.3 Periodic scheduler + online-scoring scheduler**: tokio-based
       cron with DB locking; port the scheduler logic (config scan, grouping,
       shuffle, sampler waterfall, checkpoint tags, per-job caps).
       **AC:** with a seeded config, Rust submits the same jobs Python would
       for the same trace timeline (deterministic-seed comparison).
       **VER:** scheduler differential test.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge on top of T17.1 base):
+      `online_scoring_scheduler.rs` (429 lines) — next-wall-clock-minute
+      tick + 60s cadence, missed ticks skipped, all workspaces scanned.
+      Python reference: crontab */1 + Huey lock_task
+      `online-scoring-scheduler-lock` (mlflow/server/jobs/utils.py) →
+      Rust `scheduler_locks.rs`: reserved job-table row with atomic
+      insert/takeover, owner fencing token, lease expiry, conditional
+      release. Groups by experiment, shuffles groups (SplitMix64/
+      Fisher-Yates vs Python's Mersenne Twister — DELIBERATE order-only
+      deviation; job SET + params identical), sampler = Python's SHA-256
+      dense waterfall, checkpoint experiment tags
+      mlflow.latestOnlineScoring.{trace,session}.checkpoint with 1h
+      lookback, caps 500 traces/100 sessions per job; submission does
+      NOT advance checkpoints (execution does, per Python). No dedup,
+      matching Python. run_once(seed) seam for determinism. Gate:
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION. VER: 8 Rust scheduler tests,
+      shared-DB Python-vs-Rust differential (seed 2026) exact sorted
+      (kind, params, workspace) equality 3/3 jobs, Python suites 10/10.
+      Post-merge gates green after fixing a REAL T17.1 latent bug the
+      gate run exposed: transient store errors (SQLITE_BUSY_SNAPSHOT on
+      deferred read→write tx) stranded finalizing jobs in RUNNING —
+      finalization writes now retry with fresh transactions
+      (7f9976748); flaky retry test 15/15 after.
 - [ ] **T17.4 Invoke endpoints**: evaluate-invoke, scorer-invoke,
       issue-detection-invoke, prompt-opt submission wired to the runner with
       submission-side byte parity (pre-created runs, tags, response shapes,
