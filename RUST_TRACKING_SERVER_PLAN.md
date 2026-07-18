@@ -3276,7 +3276,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       mlflow-server Cargo.toml. §12.9 implemented=2, planned=8 (T18.4).
       Workspace suite 1,270 tests. Gates fmt/clippy/test/parity/replay all
       0; corpus 188 cases, zero non-allowlisted diffs.
-- [ ] **T18.4 Full provider matrix**: passthrough + raw-proxy routes;
+- [x] **T18.4 Full provider matrix**: passthrough + raw-proxy routes;
       bedrock/databricks auth modes; openai-compatible family
       (groq/deepseek/xai/openrouter/ollama/portkey); every pinned LiteLLM
       fallback provider/request transform, model/token/cost entry, retry
@@ -3285,6 +3285,28 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       reachable natively with request/response/stream/cost parity; zero
       Python fallback and zero unsupported-provider allowlist entries.
       **VER:** generated provider manifest + hermetic conformance matrix.
+      **DONE (2026-07-19, codex agent, merge into 8a2f063c2 + fix
+      a6668d05d):** all 8 passthrough/raw-proxy routes native (openai chat/
+      embeddings/responses/responses-compact, anthropic messages, gemini
+      generate/streamGenerate, raw `/gateway/proxy/{name}/{path}`) with
+      endpoint USE auth, upstream query preservation, SSE framing. AC met:
+      191/191 pinned LiteLLM provider identifiers reachable natively, zero
+      Python fallback, zero unsupported entries; 2,908 model/token/cost
+      records; 6 explicit adapters (+bedrock SigV4/API-key/default-chain/
+      STS-assume-role, databricks PAT/env/OAuth-M2M) + 6 openai-compatible
+      variants + 179 pinned-transform entries. Manifest
+      `rust/genai-inventory/provider_manifest.json` (chat 146, embeddings
+      48, stream 146, cost 114) + regeneration check. Retry parity across
+      auth/timeout/rate-limit/content-policy/bad-request; pinned pricing.
+      38 differential comparisons. Orchestrator-found+fixed bug
+      (a6668d05d): manifest generator classified by exact name so aliases
+      amazon-bedrock/databricks-model-serving fell to
+      pinned_litellm_transform while adapter_for() resolves them to
+      explicit native adapters — matrix test only passed with ambient
+      AWS_* env creds; generator now normalizes aliases. §12.9
+      implemented=10, planned=0 — ALL §12 route families now fully
+      accounted. Workspace 1,288+ tests. Gates all 0; corpus 188, zero
+      non-allowlisted diffs.
 - [ ] **T18.5 Traffic split + fallback**: weighted routing and sequential
       fallback incl. status propagation and attempt accounting.
       **AC/VER:** statistical + deterministic tests on mock providers.
