@@ -347,6 +347,15 @@ pub struct WorkspaceStore {
     trace_archival_config_cache: TtlCache<(Option<String>, Option<String>)>,
 }
 
+impl Clone for WorkspaceStore {
+    fn clone(&self) -> Self {
+        // Store clones share the database pool but intentionally receive fresh
+        // short-lived caches. This is the same behavior as constructing the
+        // workspace store independently in another server component.
+        Self::new(self.db.clone(), self.workspace_uri.clone())
+    }
+}
+
 impl std::fmt::Debug for WorkspaceStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WorkspaceStore")
