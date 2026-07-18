@@ -170,6 +170,7 @@ pub enum Validator {
     ReadGatewayEndpoint,
     UpdateGatewayEndpoint,
     DeleteGatewayEndpoint,
+    UseGatewayEndpoint,
     CreateGatewayModelDefinition,
     ReadGatewayModelDefinition,
     UpdateGatewayModelDefinition,
@@ -299,6 +300,7 @@ impl Validator {
             DeleteGatewayEndpoint => Ok(gateway_permission(ctx, "gateway_endpoint", "endpoint_id")
                 .await?
                 .can_delete),
+            UseGatewayEndpoint => validate_gateway_endpoint_use(ctx).await,
             CreateGatewayModelDefinition => {
                 validate_gateway_dependencies(ctx, "secret_id", "gateway_secret").await
             }
@@ -422,6 +424,22 @@ async fn gateway_use_permission(
     )
     .await?
     .can_use)
+}
+
+async fn validate_gateway_endpoint_use(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let endpoint_name = ctx
+        .get_param("endpoint_name")
+        .or_else(|| ctx.get_param("model"))
+        .ok_or_else(|| MlflowError::invalid_parameter_value("No endpoint name found"))?;
+    let endpoint = match ctx
+        .tracking_store
+        .get_gateway_endpoint(ctx.workspace, None, Some(&endpoint_name))
+        .await
+    {
+        Ok(endpoint) => endpoint,
+        Err(_) => return Ok(false),
+    };
+    gateway_use_permission(ctx, "gateway_endpoint", &endpoint.endpoint_id).await
 }
 
 async fn validate_gateway_dependencies(

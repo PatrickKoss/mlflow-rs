@@ -77,6 +77,7 @@ pub use gateway::{
     BudgetPoliciesPage, BudgetPolicy, BudgetPolicyUpdate, BudgetWindow, Endpoint, EndpointBinding,
     EndpointModelConfig, EndpointModelMapping, EndpointUpdate, FallbackConfig, GatewayGuardrail,
     GatewayGuardrailConfig, GatewayModelDefinition, GatewaySecretInfo, GuardrailsPage,
+    ResolvedGatewayEndpointConfig, ResolvedGatewayFallbackConfig, ResolvedGatewayModelConfig,
 };
 pub use issues::{Issue, IssueUpdate, IssuesPage};
 pub use jobs::{Job, JobStatus, JobStore};

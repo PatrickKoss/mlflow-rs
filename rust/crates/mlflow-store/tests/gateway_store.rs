@@ -85,6 +85,60 @@ async fn secret_model_endpoint_crud_round_trip_and_cache_invalidation() {
         .unwrap();
     assert_eq!(endpoint.model_mappings.len(), 1);
     assert!(endpoint.experiment_id.is_some());
+    store
+        .create_gateway_endpoint_binding(
+            WORKSPACE_DEFAULT_NAME,
+            &endpoint.endpoint_id,
+            "scorer",
+            "scorer-obvious-fake",
+            Some("test-user"),
+        )
+        .await
+        .unwrap();
+
+    let resolved = store
+        .get_resolved_gateway_endpoint_config(WORKSPACE_DEFAULT_NAME, "fake-endpoint")
+        .await
+        .unwrap();
+    assert_eq!(resolved.endpoint_id, endpoint.endpoint_id);
+    assert_eq!(resolved.models.len(), 1);
+    assert_eq!(
+        resolved.models[0].secret_value,
+        json!({"api_key": "rotated-fake-654321"})
+    );
+    // One encrypted entry for the secret and one for the complete endpoint
+    // chain, using Python's exact endpoint_config cache key.
+    assert_eq!(store.secret_cache().unwrap().size(), 2);
+    let bound = store
+        .get_resolved_gateway_resource_endpoint_configs(
+            WORKSPACE_DEFAULT_NAME,
+            "scorer",
+            "scorer-obvious-fake",
+        )
+        .await
+        .unwrap();
+    assert_eq!(bound, vec![resolved]);
+
+    store
+        .update_gateway_secret(
+            WORKSPACE_DEFAULT_NAME,
+            &secret.secret_id,
+            Some(&fake_secret("runtime-fake-112233")),
+            None,
+            Some("test-user"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(store.secret_cache().unwrap().size(), 0);
+    assert_eq!(
+        store
+            .get_resolved_gateway_endpoint_config(WORKSPACE_DEFAULT_NAME, "fake-endpoint")
+            .await
+            .unwrap()
+            .models[0]
+            .secret_value,
+        json!({"api_key": "runtime-fake-112233"})
+    );
 
     let updated = store
         .update_gateway_endpoint(
@@ -102,6 +156,17 @@ async fn secret_model_endpoint_crud_round_trip_and_cache_invalidation() {
     assert!(!updated.usage_tracking);
     // Python keeps the experiment ID when usage tracking is disabled.
     assert_eq!(updated.experiment_id, endpoint.experiment_id);
+    assert_eq!(store.secret_cache().unwrap().size(), 0);
+    assert!(store
+        .get_resolved_gateway_endpoint_config(WORKSPACE_DEFAULT_NAME, "fake-endpoint")
+        .await
+        .is_err());
+    let resolved = store
+        .get_resolved_gateway_endpoint_config(WORKSPACE_DEFAULT_NAME, "fake-endpoint-updated")
+        .await
+        .unwrap();
+    assert_eq!(resolved.endpoint_name, "fake-endpoint-updated");
+    assert!(!resolved.usage_tracking);
 
     let scorer = store
         .register_scorer(

@@ -186,27 +186,29 @@ PLANNED_GET_ENDPOINT_ROUTES = {
     ),
 }
 
-IMPLEMENTED_EXTERNAL_ROUTES = route_info(
-    "12.8",
-    "T18.2",
-    "server/__init__.py",
-    ("GET", "/ajax-api/2.0/mlflow/gateway-proxy"),
-    ("POST", "/ajax-api/2.0/mlflow/gateway-proxy"),
-)
-
 # §12 routes mounted outside handlers.get_endpoints(): two Flask routes in
 # server/__init__.py and the FastAPI gateway/assistant routers. They cannot
 # participate in that function's parity diff, but keeping the concrete
 # (method, path) inventory here prevents them from disappearing from T15.2's
 # accounting.
-PLANNED_EXTERNAL_ROUTES = {
-    **planned(
+IMPLEMENTED_EXTERNAL_ROUTES = {
+    **route_info(
+        "12.8",
+        "T18.2",
+        "server/__init__.py",
+        ("GET", "/ajax-api/2.0/mlflow/gateway-proxy"),
+        ("POST", "/ajax-api/2.0/mlflow/gateway-proxy"),
+    ),
+    **route_info(
         "12.9",
         "T18.3",
         "gateway_api.py",
         ("POST", "/gateway/{endpoint_name}/mlflow/invocations"),
         ("POST", "/gateway/mlflow/v1/chat/completions"),
     ),
+}
+
+PLANNED_EXTERNAL_ROUTES = {
     **planned(
         "12.9",
         "T18.4",

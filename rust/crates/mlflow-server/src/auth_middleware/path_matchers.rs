@@ -387,6 +387,19 @@ fn build_dispatch() -> Dispatch {
         }
     }
 
+    // Native gateway invocation routes use endpoint USE permission. The
+    // unified route resolves the endpoint name from the request body's model.
+    d.exact.push(Route {
+        matcher: TemplateMatcher::compile("/gateway/<endpoint_name>/mlflow/invocations"),
+        method: "POST",
+        validator: Validator::UseGatewayEndpoint,
+    });
+    d.exact.push(Route {
+        matcher: TemplateMatcher::compile("/gateway/mlflow/v1/chat/completions"),
+        method: "POST",
+        validator: Validator::UseGatewayEndpoint,
+    });
+
     // Hand-registered RBAC routes (`BEFORE_REQUEST_VALIDATORS.update`,
     // `auth/__init__.py:2669-2720`). Super admins bypass these upstream; the
     // validators below implement workspace-admin, self, and resource-MANAGE
@@ -849,6 +862,24 @@ mod tests {
                 "DELETE"
             )),
             Validator::DeletePromptOptimizationJob
+        );
+    }
+
+    #[test]
+    fn gateway_invocation_routes_require_endpoint_use() {
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/gateway/my-endpoint/mlflow/invocations",
+                "POST"
+            )),
+            Validator::UseGatewayEndpoint
+        );
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/gateway/mlflow/v1/chat/completions",
+                "POST"
+            )),
+            Validator::UseGatewayEndpoint
         );
     }
 

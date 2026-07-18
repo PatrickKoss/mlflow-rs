@@ -98,7 +98,19 @@ fn forbidden_response() -> Response {
 /// Decode HTTP Basic credentials, mirroring `basic_credentials`
 /// (`auth_api/mod.rs`) — werkzeug splits the decoded pair on the first colon.
 fn basic_credentials(req: &Request<Body>) -> Option<(String, String)> {
-    let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
+    let value = if req.uri().path().starts_with("/gateway/") {
+        req.headers()
+            .get("x-mlflow-authorization")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                req.headers()
+                    .get(header::AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok())
+            })?
+    } else {
+        req.headers().get(header::AUTHORIZATION)?.to_str().ok()?
+    };
     let encoded = value
         .strip_prefix("Basic ")
         .or_else(|| value.strip_prefix("basic "))?;
