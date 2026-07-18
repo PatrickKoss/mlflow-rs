@@ -1,0 +1,50 @@
+{
+  "algorithms": [
+    {
+      "accepted_server_config": [
+        "reflection_model",
+        "max_metric_calls",
+        "display_progress_bar",
+        "gepa_kwargs"
+      ],
+      "entry_points": [
+        "gepa.optimize",
+        "gepa.GEPAAdapter",
+        "mlflow.genai.optimize.optimizers.GepaPromptOptimizer.optimize"
+      ],
+      "name": "GEPA",
+      "owner_task": "T19.5",
+      "pin": "gepa==0.0.27",
+      "source": "mlflow/genai/optimize/optimizers/gepa_optimizer.py:23",
+      "upstream_kwargs_entry_point": "gepa.optimize"
+    },
+    {
+      "accepted_server_config": [
+        "reflection_model",
+        "lm_kwargs",
+        "guidelines"
+      ],
+      "entry_points": [
+        "mlflow.genai.optimize.optimizers.MetaPromptOptimizer.optimize"
+      ],
+      "name": "MetaPrompt",
+      "owner_task": "T19.5",
+      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "source": "mlflow/genai/optimize/optimizers/metaprompt_optimizer.py:94"
+    }
+  ],
+  "reference": {
+    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "package_pins": {
+      "arize-phoenix-evals": "2.13.0",
+      "deepeval": "4.0.7",
+      "dspy": "3.2.1",
+      "gepa": "0.0.27",
+      "litellm": "1.91.2",
+      "ragas": "0.4.3",
+      "trulens": "2.8.1",
+      "trulens-providers-litellm": "2.8.1"
+    }
+  },
+  "schema_version": 1
+}
