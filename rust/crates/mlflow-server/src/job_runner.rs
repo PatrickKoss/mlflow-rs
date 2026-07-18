@@ -395,7 +395,11 @@ async fn execute_claimed(
             Some(guard) => Some(guard),
             None => {
                 tracing::info!(job_id = %job.job_id, %key, "skipping job because exclusive lock is held");
-                if let Err(error) = store.cancel_job(&job.workspace, &job.job_id).await {
+                let outcome = finalize_with_retry(&job.job_id, "cancel_job", || {
+                    store.cancel_job(&job.workspace, &job.job_id)
+                })
+                .await;
+                if let Err(error) = outcome {
                     tracing::error!(job_id = %job.job_id, %error, "failed to cancel locked job");
                 }
                 return JobCompletion { retry: None };
@@ -436,7 +440,11 @@ async fn execute_claimed(
                 }
                 if let Some(timeout) = job.timeout {
                     if started.elapsed().as_secs_f64() >= timeout {
-                        if let Err(error) = store.mark_job_timed_out(&job.workspace, &job.job_id).await {
+                        let outcome = finalize_with_retry(&job.job_id, "mark_job_timed_out", || {
+                            store.mark_job_timed_out(&job.workspace, &job.job_id)
+                        })
+                        .await;
+                        if let Err(error) = outcome {
                             tracing::error!(job_id = %job.job_id, %error, "failed to mark timed-out job");
                         }
                         return JobCompletion { retry: None };
@@ -456,7 +464,11 @@ async fn finish_execution(
     match outcome {
         Ok(JobExecutionResult::Succeeded(value)) => {
             let result = python_json_dumps(&value, false);
-            if let Err(error) = store.finish_job(&job.workspace, &job.job_id, &result).await {
+            let outcome = finalize_with_retry(&job.job_id, "finish_job", || {
+                store.finish_job(&job.workspace, &job.job_id, &result)
+            })
+            .await;
+            if let Err(error) = outcome {
                 tracing::error!(job_id = %job.job_id, %error, "failed to finish job");
             }
             JobCompletion { retry: None }
@@ -464,9 +476,10 @@ async fn finish_execution(
         Ok(JobExecutionResult::Failed {
             error,
             transient: true,
-        }) => match store
-            .retry_or_fail_job(&job.workspace, &job.job_id, &error, config.max_retries)
-            .await
+        }) => match finalize_with_retry(&job.job_id, "retry_or_fail_job", || {
+            store.retry_or_fail_job(&job.workspace, &job.job_id, &error, config.max_retries)
+        })
+        .await
         {
             Ok(Some(retry_count)) => JobCompletion {
                 retry: Some((
@@ -505,8 +518,51 @@ fn retry_delay(config: &JobRunnerConfig, retry_count: i64) -> Duration {
 }
 
 async fn fail_unless_finalized(store: &JobStore, job: &Job, error: &str) {
-    if let Err(store_error) = store.fail_job(&job.workspace, &job.job_id, error).await {
+    let outcome = finalize_with_retry(&job.job_id, "fail_job", || {
+        store.fail_job(&job.workspace, &job.job_id, error)
+    })
+    .await;
+    if let Err(store_error) = outcome {
         tracing::error!(job_id = %job.job_id, error = %store_error, "failed to fail job");
+    }
+}
+
+/// Retry a job-finalization write on store errors.
+///
+/// The runner is a background loop: unlike an HTTP handler, there is no client
+/// to surface a transient DB error to, and giving up strands the row in
+/// RUNNING until a server restart's recovery pass. Concretely, SQLite's WAL
+/// upgrade path returns SQLITE_BUSY_SNAPSHOT immediately (uncovered by
+/// `busy_timeout`) when a deferred read-then-write transaction races another
+/// writer — `retry_or_fail_job` does exactly that read-then-write. Each retry
+/// runs a fresh transaction, which is the required remedy; the guarded
+/// `status IN (PENDING, RUNNING)` updates make re-attempts safe.
+async fn finalize_with_retry<T, F, Fut>(
+    job_id: &str,
+    op_name: &str,
+    mut op: F,
+) -> Result<T, MlflowError>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, MlflowError>>,
+{
+    let mut attempt: u32 = 0;
+    loop {
+        match op().await {
+            Ok(value) => return Ok(value),
+            Err(error) if attempt < 4 => {
+                attempt += 1;
+                tracing::warn!(
+                    job_id,
+                    op_name,
+                    attempt,
+                    %error,
+                    "store error during job finalization; retrying"
+                );
+                tokio::time::sleep(Duration::from_millis(10 * u64::from(attempt))).await;
+            }
+            Err(error) => return Err(error),
+        }
     }
 }
 
