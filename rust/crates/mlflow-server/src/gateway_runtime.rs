@@ -21,6 +21,9 @@ use reqwest::Url;
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 
+use crate::gateway_guardrails::{
+    load_guardrails, GuardrailExecutionError, GuardrailPayloadSchema, LoadedGuardrails,
+};
 use crate::gateway_provider_matrix::{default_api_base, is_supported_provider, normalize_provider};
 use crate::state::AppState;
 use crate::workspace::Workspace;
@@ -1093,16 +1096,25 @@ async fn passthrough_value_route(
     action: PassthroughAction,
     start: Instant,
 ) -> Response {
-    let (model, adapter) = match resolve_runtime_provider(&state, &workspace, &endpoint_name).await
-    {
-        Ok(value) => value,
-        Err(error) => return error.response(start.elapsed()),
-    };
+    let (endpoint, model, adapter) =
+        match resolve_runtime_endpoint_provider(&state, &workspace, &endpoint_name).await {
+            Ok(value) => value,
+            Err(error) => return error.response(start.elapsed()),
+        };
     if !supports_passthrough(&model.provider, action) {
         return unsupported_passthrough(&model.provider, action).response(start.elapsed());
     }
     let streaming = action.streaming(&payload);
-    let mut request = match adapter.passthrough_request(&model, action, payload, &headers) {
+    let guardrails = load_guardrails(&state, &workspace, &endpoint, &headers).await;
+    let payload = match guardrails.before(payload, None).await {
+        Ok(payload) => payload,
+        Err(error) if streaming => {
+            tracing::error!(detail = %error.detail, "Error during streaming response");
+            return guardrail_stream_error_response(error, start);
+        }
+        Err(error) => return guardrail_error_response(error, start),
+    };
+    let mut request = match adapter.passthrough_request(&model, action, payload.clone(), &headers) {
         Ok(request) => request,
         Err(error) => return error.response(start.elapsed()),
     };
@@ -1112,7 +1124,14 @@ async fn passthrough_value_route(
     if streaming {
         raw_stream_response(request, start)
     } else {
-        raw_non_stream_response(request, start).await
+        raw_non_stream_response(
+            request,
+            start,
+            guardrails,
+            payload,
+            action != PassthroughAction::OpenAiEmbeddings,
+        )
+        .await
     }
 }
 
@@ -1129,23 +1148,28 @@ pub async fn raw_proxy(
         Ok(payload) => payload,
         Err(error) => return error.response(start.elapsed()),
     };
-    let (model, adapter) = match resolve_runtime_provider(&state, &workspace, &endpoint_name).await
-    {
-        Ok(value) => value,
-        Err(error) => return error.response(start.elapsed()),
-    };
+    let (endpoint, model, adapter) =
+        match resolve_runtime_endpoint_provider(&state, &workspace, &endpoint_name).await {
+            Ok(value) => value,
+            Err(error) => return error.response(start.elapsed()),
+        };
     let path = match uri.query() {
         Some(query) => format!("{path}?{query}"),
         None => path,
     };
-    let mut request = match adapter.proxy_request(&model, &path, payload, &headers) {
+    let guardrails = load_guardrails(&state, &workspace, &endpoint, &headers).await;
+    let payload = match guardrails.before(payload, None).await {
+        Ok(payload) => payload,
+        Err(error) => return guardrail_error_response(error, start),
+    };
+    let mut request = match adapter.proxy_request(&model, &path, payload.clone(), &headers) {
         Ok(request) => request,
         Err(error) => return error.response(start.elapsed()),
     };
     if let Err(error) = prepare_dynamic_auth(&model, &mut request).await {
         return error.response(start.elapsed());
     }
-    raw_proxy_response(request, start).await
+    raw_proxy_response(request, start, guardrails, payload).await
 }
 
 // Raw-proxy routes address the endpoint's primary model directly; traffic
@@ -1169,11 +1193,18 @@ fn primary_model(
         })
 }
 
-async fn resolve_runtime_provider(
+async fn resolve_runtime_endpoint_provider(
     state: &AppState,
     workspace: &str,
     endpoint_name: &str,
-) -> Result<(ResolvedGatewayModelConfig, Box<dyn GatewayProviderAdapter>), GatewayRuntimeError> {
+) -> Result<
+    (
+        ResolvedGatewayEndpointConfig,
+        ResolvedGatewayModelConfig,
+        Box<dyn GatewayProviderAdapter>,
+    ),
+    GatewayRuntimeError,
+> {
     let endpoint = state
         .tracking_store()
         .get_resolved_gateway_endpoint_config(workspace, endpoint_name)
@@ -1187,7 +1218,7 @@ async fn resolve_runtime_provider(
     let model = primary_model(&endpoint)?.clone();
     check_provider_allowed(&model.provider)?;
     let adapter = adapter_for(&model.provider)?;
-    Ok((model, adapter))
+    Ok((endpoint, model, adapter))
 }
 
 pub async fn invocations(
@@ -1270,7 +1301,7 @@ async fn invoke_value(
     state: AppState,
     workspace: &str,
     endpoint_name: String,
-    _client_headers: HeaderMap,
+    client_headers: HeaderMap,
     mut payload: Value,
     forced_kind: Option<InvocationKind>,
     start: Instant,
@@ -1297,14 +1328,8 @@ async fn invoke_value(
     if let Err(error) = validate_payload(&payload, kind) {
         return error.response(start.elapsed());
     }
-    // Pydantic's ChatCompletionRequest materializes `n=1` before provider
-    // transforms even when the client omitted it.
     if kind == InvocationKind::Chat {
-        payload
-            .as_object_mut()
-            .expect("validated object")
-            .entry("n")
-            .or_insert(json!(1));
+        payload = materialize_chat_payload(payload);
     }
 
     let endpoint = match state
@@ -1329,10 +1354,22 @@ async fn invoke_value(
         .get("stream")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if stream {
-        stream_response(plan, kind, payload, start).await
+    let guardrails = if kind == InvocationKind::Chat {
+        load_guardrails(&state, workspace, &endpoint, &client_headers).await
     } else {
-        non_stream_response(plan, kind, payload, start).await
+        LoadedGuardrails::empty()
+    };
+    if stream {
+        stream_response(plan, kind, payload, guardrails, start).await
+    } else {
+        let payload = match guardrails
+            .before(payload, Some(GuardrailPayloadSchema::ChatRequest))
+            .await
+        {
+            Ok(payload) => payload,
+            Err(error) => return guardrail_error_response(error, start),
+        };
+        non_stream_response(plan, kind, payload, guardrails, start).await
     }
 }
 
@@ -1340,6 +1377,7 @@ async fn non_stream_response(
     plan: RoutingPlan,
     kind: InvocationKind,
     payload: Value,
+    guardrails: LoadedGuardrails,
     start: Instant,
 ) -> Response {
     let mut provider_elapsed = Duration::ZERO;
@@ -1356,11 +1394,18 @@ async fn non_stream_response(
         provider_elapsed += result.1;
         match result.0 {
             Ok(value) => {
+                let value = match guardrails
+                    .after(&payload, value, Some(GuardrailPayloadSchema::ChatResponse))
+                    .await
+                {
+                    Ok(value) => value,
+                    Err(error) => return guardrail_error_response(error, start),
+                };
                 return with_non_stream_timing(
                     json_response(StatusCode::OK, value),
                     start,
                     provider_elapsed,
-                )
+                );
             }
             Err(error) => last_error = Some(error),
         }
@@ -1378,12 +1423,15 @@ async fn non_stream_response(
 async fn execute_non_stream_attempt(
     model: ResolvedGatewayModelConfig,
     kind: InvocationKind,
-    payload: Value,
+    mut payload: Value,
 ) -> (Result<Value, GatewayRuntimeError>, Duration) {
     let adapter = match adapter_for(&model.provider) {
         Ok(adapter) => adapter,
         Err(error) => return (Err(error), Duration::ZERO),
     };
+    if kind == InvocationKind::Chat {
+        compact_chat_payload(&mut payload);
+    }
     let request = match adapter.transform_request(&model, kind, payload, false) {
         Ok(request) => request,
         Err(error) => return (Err(error), Duration::ZERO),
@@ -1463,6 +1511,86 @@ fn with_non_stream_timing(
     response
 }
 
+fn guardrail_error_response(error: GuardrailExecutionError, start: Instant) -> Response {
+    GatewayRuntimeError {
+        status: error.status,
+        detail: Value::String(error.detail),
+        stream_type: error.stream_type,
+    }
+    .response(start.elapsed())
+}
+
+fn guardrail_stream_error_response(error: GuardrailExecutionError, start: Instant) -> Response {
+    let output =
+        stream::once(
+            async move { Ok::<_, Infallible>(sse_error(&error.detail, error.stream_type)) },
+        );
+    let mut response = Response::new(Body::from_stream(output));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream; charset=utf-8"),
+    );
+    insert_timing_header(&mut response, DURATION_HEADER, start.elapsed().as_millis());
+    response
+}
+
+fn materialize_chat_payload(payload: Value) -> Value {
+    let source = payload
+        .as_object()
+        .expect("validated chat payload is an object");
+    let value_or_null = |field: &str| source.get(field).cloned().unwrap_or(Value::Null);
+    let messages = source
+        .get("messages")
+        .and_then(Value::as_array)
+        .expect("validated chat messages are an array")
+        .iter()
+        .map(|message| {
+            let message = message
+                .as_object()
+                .expect("validated chat message is an object");
+            json!({
+                "role": message.get("role").cloned().unwrap_or(Value::Null),
+                "content": message.get("content").cloned().unwrap_or(Value::Null),
+                "tool_calls": message.get("tool_calls").cloned().unwrap_or(Value::Null),
+                "refusal": message.get("refusal").cloned().unwrap_or(Value::Null),
+                "tool_call_id": message.get("tool_call_id").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "n": source.get("n").cloned().unwrap_or(json!(1)),
+        "stop": value_or_null("stop"),
+        "max_tokens": value_or_null("max_tokens"),
+        "max_completion_tokens": value_or_null("max_completion_tokens"),
+        "stream": value_or_null("stream"),
+        "stream_options": value_or_null("stream_options"),
+        "model": value_or_null("model"),
+        "response_format": value_or_null("response_format"),
+        "temperature": value_or_null("temperature"),
+        "top_p": value_or_null("top_p"),
+        "presence_penalty": value_or_null("presence_penalty"),
+        "frequency_penalty": value_or_null("frequency_penalty"),
+        "top_k": value_or_null("top_k"),
+        "messages": messages,
+        "tools": value_or_null("tools"),
+        "tool_choice": value_or_null("tool_choice"),
+    })
+}
+
+fn compact_chat_payload(payload: &mut Value) {
+    let Some(object) = payload.as_object_mut() else {
+        return;
+    };
+    object.retain(|_, value| !value.is_null());
+    if let Some(messages) = object.get_mut("messages").and_then(Value::as_array_mut) {
+        for message in messages {
+            if let Some(message) = message.as_object_mut() {
+                message.retain(|_, value| !value.is_null());
+            }
+        }
+    }
+}
+
 async fn send_provider_request(
     request: ProviderRequest,
 ) -> Result<reqwest::Response, reqwest::Error> {
@@ -1476,7 +1604,13 @@ async fn send_provider_request(
         .await
 }
 
-async fn raw_non_stream_response(request: ProviderRequest, start: Instant) -> Response {
+async fn raw_non_stream_response(
+    request: ProviderRequest,
+    start: Instant,
+    guardrails: LoadedGuardrails,
+    request_payload: Value,
+    run_after: bool,
+) -> Response {
     let provider_start = Instant::now();
     let response = match send_provider_request(request).await {
         Ok(response) => response,
@@ -1513,6 +1647,14 @@ async fn raw_non_stream_response(request: ProviderRequest, start: Instant) -> Re
         return with_non_stream_timing(response, start, provider_elapsed);
     };
     let response = if status.is_success() {
+        let value = if run_after {
+            match guardrails.after(&request_payload, value, None).await {
+                Ok(value) => value,
+                Err(error) => return guardrail_error_response(error, start),
+            }
+        } else {
+            value
+        };
         json_response(status, value)
     } else {
         let detail = value.pointer("/error/message").cloned().unwrap_or(value);
@@ -1588,7 +1730,12 @@ async fn next_raw_stream_chunk(mut state: RawProviderStream) -> Option<(Bytes, R
     }
 }
 
-async fn raw_proxy_response(request: ProviderRequest, start: Instant) -> Response {
+async fn raw_proxy_response(
+    request: ProviderRequest,
+    start: Instant,
+    guardrails: LoadedGuardrails,
+    request_payload: Value,
+) -> Response {
     let provider_start = Instant::now();
     let response = match send_provider_request(request).await {
         Ok(response) => response,
@@ -1633,11 +1780,14 @@ async fn raw_proxy_response(request: ProviderRequest, start: Instant) -> Respons
     }
     if content_type.contains("application/json") {
         return match response.json::<Value>().await {
-            Ok(value) => with_non_stream_timing(
-                json_response(StatusCode::OK, value),
-                start,
-                provider_start.elapsed(),
-            ),
+            Ok(value) => match guardrails.after(&request_payload, value, None).await {
+                Ok(value) => with_non_stream_timing(
+                    json_response(StatusCode::OK, value),
+                    start,
+                    provider_start.elapsed(),
+                ),
+                Err(error) => guardrail_error_response(error, start),
+            },
             Err(error) => {
                 GatewayRuntimeError::http(StatusCode::BAD_GATEWAY, Value::String(error.to_string()))
                     .response(start.elapsed())
@@ -1645,11 +1795,13 @@ async fn raw_proxy_response(request: ProviderRequest, start: Instant) -> Respons
         };
     }
     if content_type.contains("text/plain") {
+        let value = json!({"message":response.text().await.unwrap_or_default()});
+        let value = match guardrails.after(&request_payload, value, None).await {
+            Ok(value) => value,
+            Err(error) => return guardrail_error_response(error, start),
+        };
         return with_non_stream_timing(
-            json_response(
-                StatusCode::OK,
-                json!({"message":response.text().await.unwrap_or_default()}),
-            ),
+            json_response(StatusCode::OK, value),
             start,
             provider_start.elapsed(),
         );
@@ -1667,6 +1819,8 @@ struct ProviderStream {
     plan: RoutingPlan,
     kind: InvocationKind,
     payload: Value,
+    guardrails: LoadedGuardrails,
+    pre_guardrails_complete: bool,
     next_attempt: usize,
     active: Option<ActiveProviderStream>,
     last_error: Option<GatewayRuntimeError>,
@@ -1687,12 +1841,15 @@ async fn stream_response(
     plan: RoutingPlan,
     kind: InvocationKind,
     payload: Value,
+    guardrails: LoadedGuardrails,
     start: Instant,
 ) -> Response {
     let state = ProviderStream {
         plan,
         kind,
         payload,
+        guardrails,
+        pre_guardrails_complete: false,
         next_attempt: 0,
         active: None,
         last_error: None,
@@ -1718,6 +1875,29 @@ async fn next_stream_chunk(mut state: ProviderStream) -> Option<(Bytes, Provider
         }
         if state.done {
             return None;
+        }
+        if !state.pre_guardrails_complete {
+            match state
+                .guardrails
+                .before(
+                    state.payload.clone(),
+                    Some(GuardrailPayloadSchema::ChatRequest),
+                )
+                .await
+            {
+                Ok(payload) => {
+                    state.payload = payload;
+                    state.pre_guardrails_complete = true;
+                }
+                Err(error) => {
+                    tracing::error!(detail = %error.detail, "Error during streaming response");
+                    state
+                        .pending
+                        .push(sse_error(&error.detail, error.stream_type));
+                    state.done = true;
+                }
+            }
+            continue;
         }
         if state.active.is_none() {
             start_stream_attempt(&mut state);
@@ -1818,7 +1998,11 @@ fn start_stream_attempt(state: &mut ProviderStream) {
             return;
         }
     };
-    let request = match adapter.transform_request(&model, state.kind, state.payload.clone(), true) {
+    let mut payload = state.payload.clone();
+    if state.kind == InvocationKind::Chat {
+        compact_chat_payload(&mut payload);
+    }
+    let request = match adapter.transform_request(&model, state.kind, payload, true) {
         Ok(request) => request,
         Err(error) => {
             fail_stream_attempt(state, error);
