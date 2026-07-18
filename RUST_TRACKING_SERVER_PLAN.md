@@ -17,7 +17,9 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
 
 **Open:**
 - **Part 2 (genai port)** — Phase 15 (foundations) COMPLETE 2026-07-18; Phase
-  16 (GenAI CRUD) in progress.
+  16 (GenAI CRUD) COMPLETE 2026-07-18 (all six tasks; zero new migrations —
+  every table pre-existed at head `c4a9b7d3e812`; replay corpus grew to 144
+  cases). Next: Phase 17 (job runner + native worker).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3011,10 +3013,28 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       same-DB differential byte-identical with AND without
       include_trace_count; route_parity §12.4=8, §12.5=12 implemented.
       Post-merge gates fmt/clippy/test/route_parity/replay all exit 0.
-- [ ] **T16.4 Review queues**: 11 RPCs, 4 tables, name_key semantics, soft
+- [x] **T16.4 Review queues**: 11 RPCs, 4 tables, name_key semantics, soft
       references, user-queue schema resolution, full auth validator set +
       integrity hook.
       **AC/VER:** review-queue suites + multi-user auth differential.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 84b006bed): NO new
+      migration — all 4 tables pre-existed at head `c4a9b7d3e812`. All 11
+      RPCs on both prefixes; §12.6 = 22 implemented/0 planned. Full auth
+      set ported (NOT D21): create/edit gates, owner/member/manager
+      rules, list filtering, custom-only owner delete/prune, owner
+      reassignment requires MANAGE, EDIT+membership status updates,
+      attribution binding, admin username-shadow integrity hook.
+      Semantics: case-insensitive (experiment_id, name_key) uniqueness
+      with preserved display casing; trace/schema soft references (trace
+      deletion prunes items; deleted schemas stay as literal
+      associations but drop out of live resolution); user queues
+      dynamically inherit current experiment schemas. VER: 103/103
+      Python parametrized cases, 4 new Rust tests, 2-user auth
+      differential byte-identical (8 grant/denial responses).
+      Post-merge: conflicts vs T16.6 unioned; the unimplemented-endpoint
+      sentinel test collided (T16.4 pointed it at prompt-optimization,
+      which T16.6 implemented first) — moved to gateway CRUD/T18.1
+      (f5363f23d); gates then all exit 0. PHASE 16 COMPLETE.
 - [x] **T16.5 Jobs store + API**: `jobs` table store (states, retries,
       finalized-immutability) + GET/cancel endpoints; resolve and document
       the `/mlflow/jobs` vs `/jobs` auth-prefix question (§12.13).
