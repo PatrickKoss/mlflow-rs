@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{Datelike, TimeZone, Utc};
 use mlflow_error::MlflowError;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
@@ -43,6 +44,39 @@ pub struct GatewayModelDefinition {
     pub created_by: Option<String>,
     pub last_updated_by: Option<String>,
     pub workspace: String,
+}
+
+/// Privileged, invocation-ready model configuration. Unlike the public CRUD
+/// entities this contains the decrypted secret and must never be serialized on
+/// an HTTP response or logged.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedGatewayModelConfig {
+    pub model_definition_id: String,
+    pub provider: String,
+    pub model_name: String,
+    pub secret_value: Value,
+    pub auth_config: HashMap<String, String>,
+    pub weight: f64,
+    pub linkage_type: String,
+    pub fallback_order: Option<i32>,
+}
+
+/// Python `GatewayEndpointConfig` equivalent used by the native runtime.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedGatewayEndpointConfig {
+    pub endpoint_id: String,
+    pub endpoint_name: String,
+    pub models: Vec<ResolvedGatewayModelConfig>,
+    pub routing_strategy: Option<String>,
+    pub fallback_config: Option<ResolvedGatewayFallbackConfig>,
+    pub experiment_id: Option<String>,
+    pub usage_tracking: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolvedGatewayFallbackConfig {
+    pub strategy: Option<String>,
+    pub max_attempts: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -870,6 +904,124 @@ impl TrackingStore {
             .map_err(internal)?
             .ok_or_else(|| endpoint_not_found(field, value))?;
         self.populate_endpoint(root).await
+    }
+
+    /// Resolve endpoint -> mappings -> model definitions -> decrypted secrets.
+    ///
+    /// The cache key and full-cache mutation invalidation deliberately match
+    /// Python's `get_endpoint_config`: resolved plaintext is handed to the
+    /// existing encrypted `SecretCache`, never a second plaintext cache.
+    pub async fn get_resolved_gateway_endpoint_config(
+        &self,
+        workspace: &str,
+        endpoint_name: &str,
+    ) -> Result<ResolvedGatewayEndpointConfig, MlflowError> {
+        let cache_key = format!("endpoint_config:{workspace}:{endpoint_name}");
+        if let Some(value) = self.secret_cache()?.get(&cache_key) {
+            return serde_json::from_value(value).map_err(|error| {
+                MlflowError::internal_error(format!(
+                    "Failed to deserialize cached gateway endpoint configuration: {error}"
+                ))
+            });
+        }
+
+        let endpoint = self
+            .get_gateway_endpoint(workspace, None, Some(endpoint_name))
+            .await?;
+        let mut models = Vec::with_capacity(endpoint.model_mappings.len());
+        for mapping in &endpoint.model_mappings {
+            let definition = match &mapping.model_definition {
+                Some(definition) => definition.clone(),
+                None => {
+                    self.get_gateway_model_definition(
+                        workspace,
+                        Some(&mapping.model_definition_id),
+                        None,
+                    )
+                    .await?
+                }
+            };
+            let Some(secret_id) = definition.secret_id.as_deref() else {
+                continue;
+            };
+            let secret = self
+                .get_gateway_secret_info(workspace, Some(secret_id), None)
+                .await?;
+            models.push(ResolvedGatewayModelConfig {
+                model_definition_id: definition.model_definition_id,
+                provider: definition.provider,
+                model_name: definition.model_name,
+                secret_value: self
+                    .get_decrypted_gateway_secret(workspace, secret_id)
+                    .await?,
+                auth_config: secret.auth_config,
+                weight: mapping.weight,
+                linkage_type: mapping.linkage_type.clone(),
+                fallback_order: mapping.fallback_order,
+            });
+        }
+
+        let result = ResolvedGatewayEndpointConfig {
+            endpoint_id: endpoint.endpoint_id,
+            endpoint_name: endpoint.name.unwrap_or_else(|| endpoint_name.to_string()),
+            models,
+            routing_strategy: endpoint.routing_strategy,
+            fallback_config: endpoint
+                .fallback_config
+                .map(|config| ResolvedGatewayFallbackConfig {
+                    strategy: config.strategy,
+                    max_attempts: config.max_attempts,
+                }),
+            experiment_id: endpoint.experiment_id.clone(),
+            usage_tracking: endpoint.usage_tracking && endpoint.experiment_id.is_some(),
+        };
+        let value = serde_json::to_value(&result).map_err(|error| {
+            MlflowError::internal_error(format!(
+                "Failed to serialize gateway endpoint configuration: {error}"
+            ))
+        })?;
+        self.secret_cache()?.set(&cache_key, &value);
+        Ok(result)
+    }
+
+    /// Resolve every endpoint bound to a resource. Python does not cache this
+    /// binding lookup, but each endpoint reached through it uses the same
+    /// encrypted endpoint-config cache as direct invocation resolution.
+    pub async fn get_resolved_gateway_resource_endpoint_configs(
+        &self,
+        workspace: &str,
+        resource_type: &str,
+        resource_id: &str,
+    ) -> Result<Vec<ResolvedGatewayEndpointConfig>, MlflowError> {
+        let dialect = self.db().dialect();
+        let endpoint_names = self
+            .db()
+            .fetch_all(
+                &format!(
+                    "SELECT e.name FROM endpoint_bindings b JOIN endpoints e ON e.endpoint_id = \
+                     b.endpoint_id WHERE b.resource_type = {} AND b.resource_id = {} AND \
+                     e.workspace = {}",
+                    dialect.placeholder(1),
+                    dialect.placeholder(2),
+                    dialect.placeholder(3)
+                ),
+                &[
+                    Val::Text(resource_type.to_string()),
+                    Val::Text(resource_id.to_string()),
+                    Val::Text(workspace.to_string()),
+                ],
+                |row| row.get_string("name"),
+            )
+            .await
+            .map_err(internal)?;
+        let mut configs = Vec::with_capacity(endpoint_names.len());
+        for endpoint_name in endpoint_names {
+            configs.push(
+                self.get_resolved_gateway_endpoint_config(workspace, &endpoint_name)
+                    .await?,
+            );
+        }
+        Ok(configs)
     }
 
     pub async fn list_gateway_endpoints(

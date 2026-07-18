@@ -103,6 +103,7 @@ flate2 = "1.1"
 pbkdf2 = { version = "0.12", default-features = false }
 scrypt = { version = "0.11", default-features = false }
 sha2 = "0.10"
+md5 = { package = "md-5", version = "0.10" }
 hmac = "0.12"
 subtle = "2.6"
 aes-gcm = "0.10"

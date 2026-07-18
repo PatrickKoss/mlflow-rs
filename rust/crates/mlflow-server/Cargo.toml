@@ -48,10 +48,12 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
+reqwest = { workspace = true, features = ["deflate", "gzip", "stream"] }
 chrono = { workspace = true }
 # `/signup` CSRF signing (T9.7): HMAC-SHA256 tokens, own secret per plan D12.
 hmac = { workspace = true }
 sha2 = { workspace = true }
+md5 = { workspace = true }
 subtle = { workspace = true }
 
 # GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the

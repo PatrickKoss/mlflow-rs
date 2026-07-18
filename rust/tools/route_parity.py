@@ -189,6 +189,14 @@ PLANNED_GET_ENDPOINT_ROUTES = {
 # participate in that function's parity diff, but keeping the concrete
 # (method, path) inventory here prevents them from disappearing from T15.2's
 # accounting.
+IMPLEMENTED_EXTERNAL_ROUTES = route_info(
+    "12.9",
+    "T18.3",
+    "gateway_api.py",
+    ("POST", "/gateway/{endpoint_name}/mlflow/invocations"),
+    ("POST", "/gateway/mlflow/v1/chat/completions"),
+)
+
 PLANNED_EXTERNAL_ROUTES = {
     **planned(
         "12.8",
@@ -196,13 +204,6 @@ PLANNED_EXTERNAL_ROUTES = {
         "server/__init__.py",
         ("GET", "/ajax-api/2.0/mlflow/gateway-proxy"),
         ("POST", "/ajax-api/2.0/mlflow/gateway-proxy"),
-    ),
-    **planned(
-        "12.9",
-        "T18.3",
-        "gateway_api.py",
-        ("POST", "/gateway/{endpoint_name}/mlflow/invocations"),
-        ("POST", "/gateway/mlflow/v1/chat/completions"),
     ),
     **planned(
         "12.9",
@@ -313,7 +314,10 @@ def proto_section_routes(routes: list[dict[str, str]]) -> dict[str, set[Route]]:
 def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
     print("§12 route accounting (proto metadata plus classified hand routes):")
     all_non_proto = (
-        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+        PLANNED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_EXTERNAL_ROUTES
+        | PLANNED_EXTERNAL_ROUTES
     )
     for section, title in SECTION_TITLES.items():
         generated = len(proto_routes.get(section, set()))
@@ -327,7 +331,7 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
         suffix = f"; {phase_text}" if phase_text else ""
         implemented = sum(
             info.section == section for info in IMPLEMENTED_GET_ENDPOINT_ROUTES.values()
-        )
+        ) + sum(info.section == section for info in IMPLEMENTED_EXTERNAL_ROUTES.values())
         print(
             f"  §{section} {title}: implemented={proto_implemented + implemented}, "
             f"planned={proto_planned + len(hand) - implemented} "
@@ -339,7 +343,10 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
 
 def section_route_counts(proto_routes: dict[str, set[Route]]) -> dict[str, int]:
     all_non_proto = (
-        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+        PLANNED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_EXTERNAL_ROUTES
+        | PLANNED_EXTERNAL_ROUTES
     )
     return {
         section: len(proto_routes.get(section, set()))

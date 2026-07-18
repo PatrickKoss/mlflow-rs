@@ -20,6 +20,7 @@ pub mod config;
 pub mod datasets;
 pub mod experiments;
 pub mod gateway;
+pub mod gateway_runtime;
 pub mod graphql;
 pub mod invoke;
 pub mod issues;
@@ -380,6 +381,19 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         axum::routing::post(invoke::invoke_issue_detection),
     );
     // ---- end GenAI invoke submissions ----
+
+    // ---- Gateway runtime core (T18.3, §12.9) ----
+    // These native FastAPI-equivalent routes deliberately exclude provider
+    // passthrough and raw proxy paths, which remain T18.4 accounting.
+    router = router.route(
+        "/gateway/{endpoint_name}/mlflow/invocations",
+        axum::routing::post(gateway_runtime::invocations),
+    );
+    router = router.route(
+        "/gateway/mlflow/v1/chat/completions",
+        axum::routing::post(gateway_runtime::chat_completions),
+    );
+    // ---- end Gateway runtime core ----
 
     // AUTH GAP: online configs (D21) are authenticated-only in Python; no
     // experiment/scorer-specific validator is applied.
