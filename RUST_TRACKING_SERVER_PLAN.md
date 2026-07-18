@@ -2939,7 +2939,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 16 — GenAI CRUD (Tier A)
 
-- [ ] **T16.1 Evaluation datasets**: store (3 tables + associations, offset +
+- [x] **T16.1 Evaluation datasets**: store (3 tables + associations, offset +
       cursor tokens, input_hash upsert dedup, schema/profile/digest
       recompute, `SearchEvaluationDatasetsUtils` filter DSL in
       `mlflow-search`) + all 12 endpoints with the JSON-string field quirks.
@@ -2947,6 +2947,25 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       Rust; record-pagination tokens interop with Python-written tokens
       (legacy offset fallback included).
       **VER:** Phase 22 runner + differential corpus section.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 0480b8906): NO new
+      migration — tables pre-existed via upstream `71994744cf8e` (datasets/
+      tags/records/associations) + `3da73c924c2f` (record outputs); head
+      stays `c4a9b7d3e812`. All 12 endpoints under /api/3.0 + /ajax-api/3.0
+      with Python's JSON-string quirks (tags/schema/profile; record
+      inputs/outputs/expectations/tags/source; record list as ONE JSON
+      string both directions). D21 authenticated-only, workspace-scoped.
+      Cross-server token interop on one shared sqlite DB Rust→Python→Rust:
+      record cursors both directions + legacy decimal-offset + search
+      offset tokens. VER: Python store suite 32/32 (before and after),
+      Rust-backed REST 13 passed/12 expected file-store skips, token
+      interop 1/1; route_parity §12.1 = 26 implemented/0 planned.
+      Merge notes: route_parity.py accounting conflict with T16.5 resolved
+      by summing proto-implemented + hand-implemented counts; the corpus
+      `dataset_search` allowlist entry turned out NOT stale (case hits the
+      legacy 2.0 experiments/search-datasets path, not the 3.0 API) —
+      restored with a clarifying comment (4410bc04b). Post-merge gates
+      fmt/clippy/test/route_parity all 0; replay 133 cases, 0
+      non-allowlisted diffs.
 - [ ] **T16.2 Scorers CRUD + online configs**: 5 RPCs + 2 config routes;
       MAX+1 versioning, latest-per-name listing, gateway-endpoint name→ID
       payload rewrite, decorator-scorer registration rejection (exact error).
