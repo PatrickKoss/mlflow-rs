@@ -3247,12 +3247,35 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       gateway_proxy_validation.yaml) → 188 total, zero non-allowlisted
       diffs. Sentinel moved to `/ajax-api/3.0/mlflow/assistant/config`
       (§12.10, moves at T20.1). Gates fmt/clippy/test/parity/replay all 0.
-- [ ] **T18.3 Runtime core**: unified invocations + `mlflow/v1/chat/
+- [x] **T18.3 Runtime core**: unified invocations + `mlflow/v1/chat/
       completions`, provider trait, native adapters for openai/azure,
       anthropic, gemini; SSE plumbing with the §12.9 exactness list; timing
       headers; endpoint-config resolution + cache.
       **AC:** mock-provider differential streams frame-identical to Python.
       **VER:** SSE recorder (T15.5 design) + adapter unit tests.
+      **DONE (2026-07-18, codex agent, merge 09b1e527d):** provider trait
+      (transform_request/response/stream_frame, map_error, inject_auth,
+      cross-frame state for the D16 matrix); native openai/azure(+Azure AD)/
+      anthropic/gemini adapters. Endpoints: `/gateway/{name}/mlflow/
+      invocations` + `/gateway/mlflow/v1/chat/completions` with FastAPI-
+      style errors and representative Pydantic messages. §12.9 SSE honored:
+      `data: {json}\n\n` compact reserialization, no [DONE], keep-alive/
+      event/blank lines ignored, cross-chunk line buffering, OpenAI bad
+      frames skipped vs Anthropic/Gemini exact JSONDecodeError envelopes,
+      mid-stream errors in-band at HTTP 200, lazy upstream connect
+      (Python's setup-duration semantics), duration always + overhead only
+      non-stream, forced gzip/deflate/identity, X-MLflow-Authorization
+      never forwarded. Config chain endpoint→mapping→model-def→secret with
+      shared encrypted SecretCache (`endpoint_config:{ws}:{name}`),
+      mutation invalidation. AC: 27 recorder comparisons — all 4 providers
+      frame-identical (non-stream/multi-frame SSE/429+500/mid-stream).
+      Corpus harness can't spawn per-case mocks → runtime differential
+      lives in recorder + integration tests (documented). Merge conflicts
+      hand-resolved: route_parity IMPLEMENTED_EXTERNAL_ROUTES made a dict
+      union (T18.2 proxy + T18.3 runtime), deduped reqwest features in
+      mlflow-server Cargo.toml. §12.9 implemented=2, planned=8 (T18.4).
+      Workspace suite 1,270 tests. Gates fmt/clippy/test/parity/replay all
+      0; corpus 188 cases, zero non-allowlisted diffs.
 - [ ] **T18.4 Full provider matrix**: passthrough + raw-proxy routes;
       bedrock/databricks auth modes; openai-compatible family
       (groq/deepseek/xai/openrouter/ollama/portkey); every pinned LiteLLM
