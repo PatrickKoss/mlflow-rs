@@ -26,6 +26,7 @@ pub(crate) enum Val {
     OptFloat(Option<f64>),
     OptJson(Option<serde_json::Value>),
     Bool(bool),
+    Bytes(Vec<u8>),
 }
 
 /// Bind a single [`Val`] onto a sqlx query for one backend. A macro keeps the
@@ -41,6 +42,7 @@ macro_rules! bind_val {
             Val::OptFloat(f) => $q.bind(*f),
             Val::OptJson(value) => $q.bind(value.clone().map(sqlx::types::Json)),
             Val::Bool(b) => $q.bind(*b),
+            Val::Bytes(bytes) => $q.bind(bytes.clone()),
         }
     }};
 }
@@ -232,6 +234,7 @@ pub(crate) trait RowLike {
     fn get_opt_f64(&self, col: &str) -> Result<Option<f64>, sqlx::Error>;
     fn get_bool(&self, col: &str) -> Result<bool, sqlx::Error>;
     fn get_opt_json(&self, col: &str) -> Result<Option<serde_json::Value>, sqlx::Error>;
+    fn get_bytes(&self, col: &str) -> Result<Vec<u8>, sqlx::Error>;
 
     /// Read an SQLAlchemy `Integer` column (e.g. `experiment_id`), widening to
     /// `i64`. On Postgres this maps to `INT4`/`i32`; SQLite and MySQL store it
@@ -239,6 +242,7 @@ pub(crate) trait RowLike {
     /// [`RowLike::get_i64`] (used for `BigInteger`/`INT8` columns) so we never
     /// mis-decode a 32-bit column as 64-bit on Postgres.
     fn get_int(&self, col: &str) -> Result<i64, sqlx::Error>;
+    fn get_opt_int(&self, col: &str) -> Result<Option<i64>, sqlx::Error>;
 }
 
 /// Backends that store SQLAlchemy `Integer` as a native 64-bit column
@@ -271,7 +275,13 @@ macro_rules! impl_rowlike_i64_int {
                 self.try_get::<Option<sqlx::types::Json<serde_json::Value>>, _>(col)
                     .map(|value| value.map(|value| value.0))
             }
+            fn get_bytes(&self, col: &str) -> Result<Vec<u8>, sqlx::Error> {
+                self.try_get(col)
+            }
             fn get_int(&self, col: &str) -> Result<i64, sqlx::Error> {
+                self.try_get(col)
+            }
+            fn get_opt_int(&self, col: &str) -> Result<Option<i64>, sqlx::Error> {
                 self.try_get(col)
             }
         }
@@ -309,8 +319,15 @@ impl RowLike for sqlx::postgres::PgRow {
         self.try_get::<Option<sqlx::types::Json<serde_json::Value>>, _>(col)
             .map(|value| value.map(|value| value.0))
     }
+    fn get_bytes(&self, col: &str) -> Result<Vec<u8>, sqlx::Error> {
+        self.try_get(col)
+    }
     fn get_int(&self, col: &str) -> Result<i64, sqlx::Error> {
         let v: i32 = self.try_get(col)?;
         Ok(i64::from(v))
+    }
+    fn get_opt_int(&self, col: &str) -> Result<Option<i64>, sqlx::Error> {
+        let value: Option<i32> = self.try_get(col)?;
+        Ok(value.map(i64::from))
     }
 }

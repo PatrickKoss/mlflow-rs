@@ -104,7 +104,7 @@ PROTO_SECTIONS = {
 
 # Proto sections that are live in `mlflow-server::handler_for`. Other Part II
 # routes are generated but deliberately fall through to not-implemented.
-IMPLEMENTED_PROTO_SECTIONS = {"12.1", "12.3", "12.4", "12.5", "12.6", "12.7"}
+IMPLEMENTED_PROTO_SECTIONS = {"12.1", "12.3", "12.4", "12.5", "12.6", "12.7", "12.8"}
 
 
 def route_info(section: str, phase: str, source: str, *routes: Route) -> dict[Route, RouteInfo]:

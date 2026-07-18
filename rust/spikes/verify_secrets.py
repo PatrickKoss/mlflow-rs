@@ -41,6 +41,22 @@ def main() -> int:
             case["secret_name"],
         )
         assert plaintext == case["plaintext"], case["case_id"]
+        for wrong_id, wrong_name in [
+            ("wrong-secret-id", case["secret_name"]),
+            (case["secret_id"], "wrong-secret-name"),
+        ]:
+            try:
+                _decrypt_secret(
+                    decode(case["encrypted_value_b64"]),
+                    decode(case["wrapped_dek_b64"]),
+                    manager(case["passphrase"], case["kek_version"]),
+                    wrong_id,
+                    wrong_name,
+                )
+            except MlflowException:
+                pass
+            else:
+                raise AssertionError(f"AAD mismatch decrypted {case['case_id']}")
 
     for case in document["rotations"]:
         encrypted_value = decode(case["encrypted_value_b64"])

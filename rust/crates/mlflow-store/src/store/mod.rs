@@ -32,6 +32,7 @@ mod dbutil;
 mod entities;
 mod evaluation_datasets;
 mod experiments;
+mod gateway;
 mod issues;
 mod jobs;
 mod label_schemas;
@@ -72,6 +73,11 @@ pub use evaluation_datasets::{
     EvaluationRecordsPage, UpsertEvaluationRecordsResult,
 };
 pub use experiments::{ViewType, WorkspaceArtifactRoot};
+pub use gateway::{
+    BudgetPoliciesPage, BudgetPolicy, BudgetPolicyUpdate, BudgetWindow, Endpoint, EndpointBinding,
+    EndpointModelConfig, EndpointModelMapping, EndpointUpdate, FallbackConfig, GatewayGuardrail,
+    GatewayGuardrailConfig, GatewayModelDefinition, GatewaySecretInfo, GuardrailsPage,
+};
 pub use issues::{Issue, IssueUpdate, IssuesPage};
 pub use jobs::{Job, JobStatus, JobStore};
 pub use label_schemas::{
@@ -107,6 +113,8 @@ pub use workspaces::{
 };
 
 use crate::db::Db;
+use crate::secrets::SecretCache;
+use std::sync::{Arc, OnceLock};
 
 /// The reserved tag key that mirrors a run's name (`mlflow.runName`).
 pub(crate) const MLFLOW_RUN_NAME: &str = "mlflow.runName";
@@ -124,6 +132,7 @@ pub(crate) const ARTIFACTS_FOLDER_NAME: &str = "artifacts";
 pub struct TrackingStore {
     db: Db,
     artifact_root_uri: String,
+    secret_cache: Arc<OnceLock<SecretCache>>,
 }
 
 impl TrackingStore {
@@ -133,6 +142,7 @@ impl TrackingStore {
         Self {
             db,
             artifact_root_uri: artifact_root_uri.into(),
+            secret_cache: Arc::new(OnceLock::new()),
         }
     }
 
@@ -144,5 +154,24 @@ impl TrackingStore {
     /// The default artifact root URI.
     pub fn artifact_root_uri(&self) -> &str {
         &self.artifact_root_uri
+    }
+
+    pub fn secret_cache(&self) -> Result<&SecretCache, mlflow_error::MlflowError> {
+        if let Some(cache) = self.secret_cache.get() {
+            return Ok(cache);
+        }
+        let cache = SecretCache::from_environment()
+            .map_err(mlflow_error::MlflowError::invalid_parameter_value)?;
+        let _ = self.secret_cache.set(cache);
+        Ok(self
+            .secret_cache
+            .get()
+            .expect("secret cache was initialized"))
+    }
+
+    pub(crate) fn invalidate_secret_cache(&self) {
+        if let Some(cache) = self.secret_cache.get() {
+            cache.clear();
+        }
     }
 }

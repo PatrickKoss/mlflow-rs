@@ -162,6 +162,18 @@ pub enum Validator {
     ReadScorerList,
     ReadScorer,
     DeleteScorer,
+    // ---- AI Gateway ----
+    ReadGatewaySecret,
+    UpdateGatewaySecret,
+    DeleteGatewaySecret,
+    CreateGatewayEndpoint,
+    ReadGatewayEndpoint,
+    UpdateGatewayEndpoint,
+    DeleteGatewayEndpoint,
+    CreateGatewayModelDefinition,
+    ReadGatewayModelDefinition,
+    UpdateGatewayModelDefinition,
+    DeleteGatewayModelDefinition,
     // ---- Runs (inherit experiment) ----
     ReadRun,
     UpdateRun,
@@ -267,6 +279,44 @@ impl Validator {
             ReadScorerList => validate_can_read_scorer_list(ctx).await,
             ReadScorer => Ok(scorer_permission(ctx).await?.can_read),
             DeleteScorer => Ok(scorer_permission(ctx).await?.can_delete),
+            ReadGatewaySecret => Ok(gateway_permission(ctx, "gateway_secret", "secret_id")
+                .await?
+                .can_read),
+            UpdateGatewaySecret => Ok(gateway_permission(ctx, "gateway_secret", "secret_id")
+                .await?
+                .can_update),
+            DeleteGatewaySecret => Ok(gateway_permission(ctx, "gateway_secret", "secret_id")
+                .await?
+                .can_delete),
+            CreateGatewayEndpoint => {
+                validate_gateway_dependencies(ctx, "model_configs", "gateway_model_definition")
+                    .await
+            }
+            ReadGatewayEndpoint => Ok(gateway_permission(ctx, "gateway_endpoint", "endpoint_id")
+                .await?
+                .can_read),
+            UpdateGatewayEndpoint => validate_update_gateway_endpoint(ctx).await,
+            DeleteGatewayEndpoint => Ok(gateway_permission(ctx, "gateway_endpoint", "endpoint_id")
+                .await?
+                .can_delete),
+            CreateGatewayModelDefinition => {
+                validate_gateway_dependencies(ctx, "secret_id", "gateway_secret").await
+            }
+            ReadGatewayModelDefinition => {
+                Ok(
+                    gateway_permission(ctx, "gateway_model_definition", "model_definition_id")
+                        .await?
+                        .can_read,
+                )
+            }
+            UpdateGatewayModelDefinition => validate_update_gateway_model_definition(ctx).await,
+            DeleteGatewayModelDefinition => {
+                Ok(
+                    gateway_permission(ctx, "gateway_model_definition", "model_definition_id")
+                        .await?
+                        .can_delete,
+                )
+            }
             // Runs inherit experiment.
             ReadRun => Ok(experiment_perm_from_run(ctx).await?.can_read),
             UpdateRun => Ok(experiment_perm_from_run(ctx).await?.can_update),
@@ -338,6 +388,104 @@ impl Validator {
             GetUserPermission => validate_can_get_user_permission(ctx).await,
         }
     }
+}
+
+async fn gateway_permission(
+    ctx: &RequestCtx<'_>,
+    resource_type: &str,
+    parameter: &str,
+) -> Result<&'static Permission, MlflowError> {
+    let id = require_param(ctx, parameter)?;
+    resolve_role_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        resource_type,
+        &id,
+    )
+    .await
+}
+
+async fn gateway_use_permission(
+    ctx: &RequestCtx<'_>,
+    resource_type: &str,
+    id: &str,
+) -> Result<bool, MlflowError> {
+    Ok(resolve_role_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        resource_type,
+        id,
+    )
+    .await?
+    .can_use)
+}
+
+async fn validate_gateway_dependencies(
+    ctx: &RequestCtx<'_>,
+    field: &str,
+    resource_type: &str,
+) -> Result<bool, MlflowError> {
+    if field == "secret_id" {
+        let Some(id) = ctx.get_param(field).filter(|value| !value.is_empty()) else {
+            return Ok(true);
+        };
+        return gateway_use_permission(ctx, resource_type, &id).await;
+    }
+    let configs = ctx
+        .json_body
+        .and_then(|body| body.get(field))
+        .and_then(Value::as_array);
+    let Some(configs) = configs else {
+        return if ctx.workspaces_enabled {
+            user_can_create_in_workspace(ctx).await
+        } else {
+            Ok(true)
+        };
+    };
+    for id in configs.iter().filter_map(|config| {
+        config
+            .get("model_definition_id")
+            .or_else(|| config.get("modelDefinitionId"))
+            .and_then(Value::as_str)
+    }) {
+        if !gateway_use_permission(ctx, resource_type, id).await? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+async fn validate_update_gateway_endpoint(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    if !gateway_permission(ctx, "gateway_endpoint", "endpoint_id")
+        .await?
+        .can_update
+    {
+        return Ok(false);
+    }
+    if ctx
+        .json_body
+        .and_then(|body| body.get("model_configs"))
+        .is_none()
+    {
+        return Ok(true);
+    }
+    validate_gateway_dependencies(ctx, "model_configs", "gateway_model_definition").await
+}
+
+async fn validate_update_gateway_model_definition(
+    ctx: &RequestCtx<'_>,
+) -> Result<bool, MlflowError> {
+    if !gateway_permission(ctx, "gateway_model_definition", "model_definition_id")
+        .await?
+        .can_update
+    {
+        return Ok(false);
+    }
+    validate_gateway_dependencies(ctx, "secret_id", "gateway_secret").await
 }
 
 async fn review_queue(ctx: &RequestCtx<'_>) -> Result<mlflow_store::ReviewQueue, MlflowError> {
