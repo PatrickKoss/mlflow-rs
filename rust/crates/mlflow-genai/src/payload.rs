@@ -78,6 +78,14 @@ pub enum ScorerPayloadError {
     RepresentationCount(usize),
     #[error("{0} must be a JSON object")]
     ExpectedObject(&'static str),
+    #[error(
+        "Phoenix scorer metric '{metric}' is unavailable in the Rust server: \
+         arize-phoenix-evals is licensed under Elastic-2.0, which is incompatible with \
+         reimplementation in Apache-2.0 MLflow. Use the MLflow builtins Faithfulness \
+         (Hallucination), RelevanceToQuery (Relevance), Correctness (QA), or Safety (Toxicity); \
+         for Summarization and SQL, use a custom instructions judge."
+    )]
+    PhoenixLicense { metric: String },
 }
 
 #[derive(Deserialize)]
@@ -172,11 +180,33 @@ impl TryFrom<RawSerializedScorer> for SerializedScorer {
                 data: as_object(Some(data), "memory_augmented_judge_data")?,
             });
         }
-        Ok(Self::ThirdParty {
-            common,
-            data: as_object(raw.third_party_scorer_data, "third_party_scorer_data")?,
-        })
+        let data = as_object(raw.third_party_scorer_data, "third_party_scorer_data")?;
+        // D23: Phoenix's six judge metrics come from the Elastic-2.0
+        // `arize-phoenix-evals` package and cannot be reimplemented in this
+        // Apache-2.0 server. Python accepts them; Rust deliberately rejects
+        // them at the shared serialized-scorer acceptance boundary.
+        if let Some(metric) = phoenix_metric(&data) {
+            return Err(ScorerPayloadError::PhoenixLicense {
+                metric: metric.to_string(),
+            });
+        }
+        Ok(Self::ThirdParty { common, data })
     }
+}
+
+fn phoenix_metric(data: &Map<String, Value>) -> Option<&str> {
+    const PHOENIX_METRICS: [&str; 6] = [
+        "Hallucination",
+        "QA",
+        "Relevance",
+        "SQL",
+        "Summarization",
+        "Toxicity",
+    ];
+    ["class", "metric_name"]
+        .into_iter()
+        .filter_map(|field| data.get(field).and_then(Value::as_str))
+        .find(|metric| PHOENIX_METRICS.contains(metric))
 }
 
 fn as_object(

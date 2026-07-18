@@ -79,10 +79,14 @@ pub enum AfterRequestHandler {
     /// `set_can_manage_registered_model_permission` — grant creator MANAGE on the
     /// new registered model / prompt (namespace from the response tag).
     CreatorGrantRegisteredModel,
+    /// `set_can_manage_scorer_permission`.
+    CreatorGrantScorer,
     /// `delete_can_manage_registered_model_permission` — sweep grants on delete.
     DeleteGrantsRegisteredModel,
     /// `rename_registered_model_permission` — rewrite grants on rename.
     RenameGrantsRegisteredModel,
+    /// `delete_scorer_permissions_cascade`.
+    DeleteGrantsScorer,
     /// `filter_search_experiments`.
     FilterSearchExperiments,
     /// `filter_search_registered_models`.
@@ -91,6 +95,8 @@ pub enum AfterRequestHandler {
     FilterSearchModelVersions,
     /// `filter_search_logged_models`.
     FilterSearchLoggedModels,
+    /// `filter_list_scorers`.
+    FilterListScorers,
     /// `filter_list_workspaces` — drop workspaces the caller can't access from a
     /// ListWorkspaces response (T10.4). Admins skip.
     FilterListWorkspaces,
@@ -113,6 +119,7 @@ impl AfterRequestHandler {
             self,
             AfterRequestHandler::DeleteGrantsRegisteredModel
                 | AfterRequestHandler::RenameGrantsRegisteredModel
+                | AfterRequestHandler::DeleteGrantsScorer
                 // `_cleanup_workspace_permissions` reads `request.view_args`;
                 // DeleteWorkspace returns 204 with no body.
                 | AfterRequestHandler::CleanupWorkspacePermissions
@@ -132,6 +139,9 @@ pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
         ("MlflowService", "createExperiment") => CreatorGrantExperiment,
         ("MlflowService", "searchExperiments") => FilterSearchExperiments,
         ("MlflowService", "searchLoggedModels") => FilterSearchLoggedModels,
+        ("MlflowService", "registerScorer") => CreatorGrantScorer,
+        ("MlflowService", "listScorers") => FilterListScorers,
+        ("MlflowService", "deleteScorer") => DeleteGrantsScorer,
         ("ModelRegistryService", "createRegisteredModel") => CreatorGrantRegisteredModel,
         ("ModelRegistryService", "deleteRegisteredModel") => DeleteGrantsRegisteredModel,
         ("ModelRegistryService", "renameRegisteredModel") => RenameGrantsRegisteredModel,
@@ -239,6 +249,10 @@ async fn run_inner(
             grant_creator_registered_model(ctx, body_json(resp_body)?).await?;
             Ok(None)
         }
+        CreatorGrantScorer => {
+            grant_creator_scorer(ctx, body_json(resp_body)?).await?;
+            Ok(None)
+        }
         DeleteGrantsRegisteredModel => {
             delete_grants_registered_model(ctx).await?;
             Ok(None)
@@ -247,12 +261,17 @@ async fn run_inner(
             rename_grants_registered_model(ctx).await?;
             Ok(None)
         }
+        DeleteGrantsScorer => {
+            delete_grants_scorer(ctx).await?;
+            Ok(None)
+        }
         FilterSearchExperiments => filter_search_experiments(ctx, body_json(resp_body)?).await,
         FilterSearchRegisteredModels => {
             filter_search_registered_models(ctx, body_json(resp_body)?).await
         }
         FilterSearchModelVersions => filter_search_model_versions(ctx, body_json(resp_body)?).await,
         FilterSearchLoggedModels => filter_search_logged_models(ctx, body_json(resp_body)?).await,
+        FilterListScorers => filter_list_scorers(ctx, body_json(resp_body)?).await,
         FilterListWorkspaces => filter_list_workspaces(ctx, body_json(resp_body)?).await,
         SeedDefaultWorkspaceRoles => {
             seed_default_workspace_roles(ctx, body_json(resp_body)?).await?;
@@ -317,6 +336,26 @@ async fn grant_creator_registered_model(
         .await
 }
 
+async fn grant_creator_scorer(
+    ctx: &AfterCtx<'_>,
+    resp_json: serde_json::Value,
+) -> Result<(), MlflowError> {
+    let experiment_id = resp_json
+        .get("experiment_id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let name = resp_json
+        .get("name")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let pattern = AuthStore::scorer_pattern(experiment_id, name);
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .grant_user_permission(ctx.username, "scorer", &pattern, "MANAGE", ctx.workspace)
+        .await
+}
+
 // ---------------------------------------------------------------------------
 // Grant cascade on delete / rename
 // ---------------------------------------------------------------------------
@@ -358,6 +397,42 @@ async fn rename_grants_registered_model(ctx: &AfterCtx<'_>) -> Result<(), Mlflow
     store
         .rename_grants_for_resource("prompt", &old_name, &new_name, Some(ctx.workspace))
         .await
+}
+
+async fn delete_grants_scorer(ctx: &AfterCtx<'_>) -> Result<(), MlflowError> {
+    let (Some(experiment_id), Some(name)) =
+        (request_str(ctx, "experiment_id"), request_str(ctx, "name"))
+    else {
+        return Ok(());
+    };
+    let pattern = AuthStore::scorer_pattern(&experiment_id, &name);
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .delete_grants_for_resource("scorer", &pattern, None)
+        .await
+}
+
+async fn filter_list_scorers(
+    ctx: &AfterCtx<'_>,
+    resp_json: serde_json::Value,
+) -> Result<Option<Vec<u8>>, MlflowError> {
+    if ctx.is_admin {
+        return Ok(None);
+    }
+    let mut resp: pb::list_scorers::Response =
+        parse_response(&resp_json, "mlflow.ListScorers.Response")?;
+    let experiments = readable_set(ctx, "experiment").await?;
+    let scorers = readable_set(ctx, "scorer").await?;
+    resp.scorers.retain(|scorer| {
+        let experiment_id = scorer.experiment_id.unwrap_or_default().to_string();
+        experiments.allows(&experiment_id)
+            && scorers.allows(&AuthStore::scorer_pattern(
+                &experiment_id,
+                scorer.scorer_name.as_deref().unwrap_or(""),
+            ))
+    });
+    serialize_response(&resp, "mlflow.ListScorers.Response").map(Some)
 }
 
 // ---------------------------------------------------------------------------

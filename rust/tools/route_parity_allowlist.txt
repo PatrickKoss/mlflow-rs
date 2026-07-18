@@ -11,3 +11,7 @@ GET /ajax-api/3.0/mlflow/server-info                  # server-info (§3.13) —
 GET /api/3.0/mlflow/server-info                       # server-info (§3.13) — hand-registered via _get_paths, not a proto RPC
 GET /ajax-api/3.0/mlflow/jobs/<job_id>                # generic jobs (T16.5) — hand-registered Flask route, not a proto RPC
 PATCH /ajax-api/3.0/mlflow/jobs/cancel/<job_id>       # generic jobs (T16.5) — hand-registered Flask route, not a proto RPC
+GET /api/3.0/mlflow/scorers/online-configs            # scorer online configs (T16.2) — hand-registered Flask route, not a proto RPC
+GET /ajax-api/3.0/mlflow/scorers/online-configs       # scorer online configs (T16.2) — hand-registered Flask route, not a proto RPC
+PUT /api/3.0/mlflow/scorers/online-config             # scorer online config (T16.2) — hand-registered Flask route, not a proto RPC
+PUT /ajax-api/3.0/mlflow/scorers/online-config        # scorer online config (T16.2) — hand-registered Flask route, not a proto RPC

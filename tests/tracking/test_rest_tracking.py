@@ -4208,7 +4208,6 @@ def test_client_api_add_remove_experiments_rest_tracking(mlflow_client, store_ty
 
 
 def test_scorer_CRUD(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("scorers API")
     if store_type == "file":
         pytest.skip("File store doesn't support scorer CRUD operations")
     experiment_id = mlflow_client.create_experiment("test_scorer_api_experiment")

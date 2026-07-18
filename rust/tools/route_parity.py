@@ -104,7 +104,7 @@ PROTO_SECTIONS = {
 
 # Proto sections that are live in `mlflow-server::handler_for`. Other Part II
 # routes are generated but deliberately fall through to not-implemented.
-IMPLEMENTED_PROTO_SECTIONS = {"12.1"}
+IMPLEMENTED_PROTO_SECTIONS = {"12.1", "12.3"}
 
 
 def route_info(section: str, phase: str, source: str, *routes: Route) -> dict[Route, RouteInfo]:
@@ -125,6 +125,17 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES = route_info(
     ("GET", "/ajax-api/3.0/mlflow/jobs/<job_id>"),
     ("PATCH", "/ajax-api/3.0/mlflow/jobs/cancel/<job_id>"),
 )
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
+        "12.3",
+        "T16.2",
+        "get_endpoints",
+        ("GET", "/api/3.0/mlflow/scorers/online-configs"),
+        ("GET", "/ajax-api/3.0/mlflow/scorers/online-configs"),
+        ("PUT", "/api/3.0/mlflow/scorers/online-config"),
+        ("PUT", "/ajax-api/3.0/mlflow/scorers/online-config"),
+    )
+)
 
 
 # Non-proto routes returned by handlers.get_endpoints(). These are the 15
@@ -136,15 +147,6 @@ PLANNED_GET_ENDPOINT_ROUTES = {
         "T17.4",
         "get_endpoints",
         ("POST", "/ajax-api/3.0/mlflow/genai/evaluate/invoke"),
-    ),
-    **planned(
-        "12.3",
-        "T16.2",
-        "get_endpoints",
-        ("GET", "/api/3.0/mlflow/scorers/online-configs"),
-        ("GET", "/ajax-api/3.0/mlflow/scorers/online-configs"),
-        ("PUT", "/api/3.0/mlflow/scorers/online-config"),
-        ("PUT", "/ajax-api/3.0/mlflow/scorers/online-config"),
     ),
     **planned(
         "12.3",
@@ -374,7 +376,7 @@ def compare() -> int:
         for section, expected in EXPECTED_SECTION_ROUTE_COUNTS.items()
         if actual_section_counts[section] != expected
     ]
-    bad_planned_get_count = len(planned_get) != 13
+    bad_planned_get_count = len(planned_get) != 9
 
     ok = True
     if rust_only:
@@ -429,7 +431,7 @@ def compare() -> int:
     if bad_planned_get_count:
         ok = False
         print(
-            "FAILURE: expected exactly 13 phase-tagged non-proto get_endpoints routes, "
+            "FAILURE: expected exactly 9 phase-tagged non-proto get_endpoints routes, "
             f"found {len(planned_get)}"
         )
 

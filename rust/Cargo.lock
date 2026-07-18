@@ -1820,6 +1820,7 @@ dependencies = [
  "mlflow-artifacts",
  "mlflow-auth",
  "mlflow-error",
+ "mlflow-genai",
  "mlflow-proto",
  "mlflow-registry",
  "mlflow-search",

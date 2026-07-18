@@ -41,6 +41,7 @@ mod names_data;
 mod params_tags;
 mod record_logged_model;
 mod runs;
+mod scorers;
 mod search;
 mod search_experiments;
 mod spans;
@@ -75,6 +76,7 @@ pub use logged_models::{
 };
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};
+pub use scorers::{OnlineScoringConfig, ScorerVersion};
 pub use search::{RunsPage, SEARCH_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_THRESHOLD};
 pub use search_experiments::ExperimentsPage;
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};

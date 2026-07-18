@@ -124,6 +124,12 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         ("MlflowService", "updateExperiment") => UpdateExperiment,
         ("MlflowService", "setExperimentTag") => UpdateExperiment,
         ("MlflowService", "deleteExperimentTag") => UpdateExperiment,
+        // ---- Scorers ----
+        ("MlflowService", "registerScorer") => UpdateExperiment,
+        ("MlflowService", "listScorers") => ReadScorerList,
+        ("MlflowService", "getScorer") => ReadScorer,
+        ("MlflowService", "listScorerVersions") => ReadScorer,
+        ("MlflowService", "deleteScorer") => DeleteScorer,
         // ---- Runs (inherit experiment) ----
         ("MlflowService", "createRun") => UpdateExperiment,
         ("MlflowService", "getRun") => ReadRun,

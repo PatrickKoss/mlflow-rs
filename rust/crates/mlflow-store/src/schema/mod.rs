@@ -27,6 +27,7 @@ pub mod jobs;
 pub mod logged_models;
 pub mod metrics;
 pub mod runs;
+pub mod scorers;
 pub mod traces;
 
 /// All tracking/tracing table names owned by the Rust store (plan §5.1).
@@ -47,6 +48,9 @@ pub const TRACKING_TABLES: &[&str] = &[
     logged_models::LOGGED_MODEL_PARAMS,
     logged_models::LOGGED_MODEL_TAGS,
     logged_models::LOGGED_MODEL_METRICS,
+    scorers::SCORERS,
+    scorers::SCORER_VERSIONS,
+    scorers::ONLINE_SCORING_CONFIGS,
     jobs::JOBS,
     traces::TRACE_INFO,
     traces::TRACE_TAGS,
@@ -65,7 +69,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        assert_eq!(TRACKING_TABLES.len(), 24);
+        assert_eq!(TRACKING_TABLES.len(), 27);
     }
 
     #[test]
