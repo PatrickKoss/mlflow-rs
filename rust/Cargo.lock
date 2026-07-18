@@ -1750,10 +1750,11 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "mlflow-genai",
+ "mlflow-store",
+ "mlflow-test-support",
  "nix",
  "serde",
  "serde_json",
- "sqlx",
  "tempfile",
  "tokio",
 ]

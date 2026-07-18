@@ -8,9 +8,9 @@ use axum::{extract::State, routing::post, Json, Router};
 use mlflow_genai::{
     JobKind, WorkerLaunchError, WorkerLauncher, WorkerRequest, NATIVE_WORKER_PROTOCOL_VERSION,
 };
+use mlflow_store::{Job, JobStatus, JobStore};
+use mlflow_test_support::TempDb;
 use serde_json::{json, Value};
-use sqlx::sqlite::SqlitePoolOptions;
-use sqlx::SqlitePool;
 use tempfile::TempDir;
 
 const BUILTIN_SCORER: &str =
@@ -97,10 +97,10 @@ async fn both_python_oracles_execute_inside_path_isolated_worker() {
     let launcher = isolated_launcher(path.path());
     let database = SpikeJobDatabase::new().await;
 
-    database.create_and_start("job-builtin").await;
+    let builtin_job = database.create_and_start("job-builtin").await;
     let builtin = launcher
         .run(&invoke_request(
-            "job-builtin",
+            &builtin_job.job_id,
             BUILTIN_SCORER,
             json!("native Rust worker works"),
             None,
@@ -108,13 +108,16 @@ async fn both_python_oracles_execute_inside_path_isolated_worker() {
         .await
         .expect("builtin worker succeeds without Python");
     assert_eq!(builtin, fixture(BUILTIN_EXPECTED));
-    database.record_success("job-builtin", &builtin).await;
-    assert_eq!(database.get("job-builtin").await.status, 2);
+    database.record_success(&builtin_job.job_id, &builtin).await;
+    assert_eq!(
+        database.get(&builtin_job.job_id).await.status,
+        JobStatus::Succeeded
+    );
 
-    database.create_and_start("job-instructions").await;
+    let instructions_job = database.create_and_start("job-instructions").await;
     let instructions = launcher
         .run(&invoke_request(
-            "job-instructions",
+            &instructions_job.job_id,
             INSTRUCTIONS_SCORER,
             json!("Brief answer."),
             Some(&gateway.url),
@@ -123,13 +126,13 @@ async fn both_python_oracles_execute_inside_path_isolated_worker() {
         .expect("instructions worker succeeds without Python");
     assert_eq!(instructions, fixture(INSTRUCTIONS_EXPECTED));
     database
-        .record_success("job-instructions", &instructions)
+        .record_success(&instructions_job.job_id, &instructions)
         .await;
-    let instructions_job = database.get("job-instructions").await;
-    assert_eq!(instructions_job.status, 2);
+    let instructions_job = database.get(&instructions_job.job_id).await;
+    assert_eq!(instructions_job.status, JobStatus::Succeeded);
     assert_eq!(
-        serde_json::from_str::<Value>(&instructions_job.result).expect("job result JSON"),
-        instructions
+        instructions_job.parsed_result().expect("job result JSON"),
+        Some(instructions)
     );
 
     let requests = gateway.requests.lock().expect("request lock");
@@ -148,17 +151,27 @@ async fn distinct_worker_failures_are_observable_in_spike_jobs_table() {
     );
 
     let cases = [
-        ("job-nonzero", "nonzero", "non_zero_exit", 3_i64),
-        ("job-signal", "signal", "signal", 3_i64),
-        ("job-malformed", "malformed", "malformed_output", 3_i64),
-        ("job-timeout", "spawn-child-and-hang", "timeout", 4_i64),
+        ("job-nonzero", "nonzero", "non_zero_exit", JobStatus::Failed),
+        ("job-signal", "signal", "signal", JobStatus::Failed),
+        (
+            "job-malformed",
+            "malformed",
+            "malformed_output",
+            JobStatus::Failed,
+        ),
+        (
+            "job-timeout",
+            "spawn-child-and-hang",
+            "timeout",
+            JobStatus::Timeout,
+        ),
     ];
 
     let mut timeout_child_pid = None;
-    for (job_id, mode, failure_type, expected_status) in cases {
-        database.create_and_start(job_id).await;
+    for (job_label, mode, failure_type, expected_status) in cases {
+        let job = database.create_and_start(job_label).await;
         let mut job_request = request.clone();
-        job_request.job_id = job_id.to_string();
+        job_request.job_id = job.job_id.clone();
         let error = isolated_launcher(path.path())
             .timeout(Duration::from_millis(300))
             .env(SPIKE_MODE_ENV, mode)
@@ -168,14 +181,19 @@ async fn distinct_worker_failures_are_observable_in_spike_jobs_table() {
         if let WorkerLaunchError::Timeout { stderr, .. } = &error {
             timeout_child_pid = Some(parse_child_pid(stderr));
         }
-        database.record_failure(job_id, &error).await;
-        let row = database.get(job_id).await;
-        assert_eq!(row.status, expected_status, "status for {job_id}");
+        database.record_failure(&job.job_id, &error).await;
+        let row = database.get(&job.job_id).await;
+        assert_eq!(row.status, expected_status, "status for {job_label}");
         assert_eq!(
-            row.status_details["failure_type"], failure_type,
-            "details for {job_id}"
+            row.status_details.as_ref().unwrap()["failure_type"],
+            failure_type,
+            "details for {job_label}"
         );
-        assert!(row.result.contains(failure_type) || !row.result.is_empty());
+        if expected_status == JobStatus::Failed {
+            assert!(!row.result.as_deref().unwrap_or_default().is_empty());
+        } else {
+            assert_eq!(row.result, None);
+        }
     }
 
     let child_pid = timeout_child_pid.expect("timeout worker reported its child PID");
@@ -268,134 +286,108 @@ async fn wait_until_process_is_dead(process_id: i32) {
     panic!("process-group child {process_id} survived timeout kill");
 }
 
-/// Scratch-only T15.4 table adapter. T17 replaces this with `mlflow-store`.
+/// Test fixture over the production jobs store and migrated shared schema.
 struct SpikeJobDatabase {
-    pool: SqlitePool,
-    _directory: TempDir,
-}
-
-struct JobRow {
-    status: i64,
-    result: String,
-    status_details: Value,
+    store: JobStore,
+    _database: TempDb,
 }
 
 impl SpikeJobDatabase {
     async fn new() -> Self {
-        let directory = tempfile::tempdir().expect("scratch jobs directory");
-        let url = format!(
-            "sqlite://{}?mode=rwc",
-            directory.path().join("jobs.db").display()
-        );
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&url)
-            .await
-            .expect("scratch jobs database");
-        sqlx::query(
-            "CREATE TABLE jobs (\
-                id TEXT PRIMARY KEY, creation_time INTEGER NOT NULL, job_name TEXT NOT NULL, \
-                params TEXT NOT NULL, workspace TEXT NOT NULL, timeout REAL, status INTEGER NOT NULL, \
-                result TEXT, retry_count INTEGER NOT NULL, last_update_time INTEGER NOT NULL, \
-                status_details TEXT\
-            )",
-        )
-        .execute(&pool)
-        .await
-        .expect("scratch jobs table");
+        let database = TempDb::new("genai_worker_jobs").await;
+        let store = JobStore::new(database.connect().await);
         Self {
-            pool,
-            _directory: directory,
+            store,
+            _database: database,
         }
     }
 
-    async fn create_and_start(&self, job_id: &str) {
-        sqlx::query(
-            "INSERT INTO jobs \
-             (id, creation_time, job_name, params, workspace, timeout, status, result, retry_count, last_update_time, status_details) \
-             VALUES (?, 1, 'invoke_scorer', '{}', 'spike-workspace', 0.3, 0, NULL, 0, 1, NULL)",
-        )
-        .bind(job_id)
-        .execute(&self.pool)
-        .await
-        .expect("pending job inserted");
-        let changed = sqlx::query(
-            "UPDATE jobs SET status = 1, last_update_time = 2 WHERE id = ? AND status = 0",
-        )
-        .bind(job_id)
-        .execute(&self.pool)
-        .await
-        .expect("job starts")
-        .rows_affected();
-        assert_eq!(changed, 1);
+    async fn create_and_start(&self, label: &str) -> Job {
+        let job = self
+            .store
+            .create_job(
+                "spike-workspace",
+                "invoke_scorer",
+                &json!({"label": label}).to_string(),
+                Some(0.3),
+            )
+            .await
+            .expect("pending job inserted");
+        self.store
+            .start_job("spike-workspace", &job.job_id)
+            .await
+            .expect("job starts");
+        job
     }
 
     async fn record_failure(&self, job_id: &str, error: &WorkerLaunchError) {
         let (status, details) = failure_record(error);
-        sqlx::query(
-            "UPDATE jobs SET status = ?, result = ?, status_details = ?, last_update_time = 3 WHERE id = ?",
-        )
-        .bind(status)
-        .bind(error.to_string())
-        .bind(details.to_string())
-        .bind(job_id)
-        .execute(&self.pool)
-        .await
-        .expect("failure recorded");
+        self.store
+            .update_status_details("spike-workspace", job_id, &details)
+            .await
+            .expect("failure details recorded");
+        match status {
+            JobStatus::Failed => {
+                self.store
+                    .fail_job("spike-workspace", job_id, &error.to_string())
+                    .await
+                    .expect("failure recorded");
+            }
+            JobStatus::Timeout => {
+                self.store
+                    .mark_job_timed_out("spike-workspace", job_id)
+                    .await
+                    .expect("timeout recorded");
+            }
+            other => panic!("unexpected failure status: {other}"),
+        }
     }
 
     async fn record_success(&self, job_id: &str, result: &Value) {
-        sqlx::query(
-            "UPDATE jobs SET status = 2, result = ?, status_details = '{}', last_update_time = 3 WHERE id = ? AND status = 1",
-        )
-        .bind(result.to_string())
-        .bind(job_id)
-        .execute(&self.pool)
-        .await
-        .expect("success recorded");
+        self.store
+            .finish_job("spike-workspace", job_id, &result.to_string())
+            .await
+            .expect("success recorded");
     }
 
-    async fn get(&self, job_id: &str) -> JobRow {
-        let (status, result, details): (i64, String, String) =
-            sqlx::query_as("SELECT status, result, status_details FROM jobs WHERE id = ?")
-                .bind(job_id)
-                .fetch_one(&self.pool)
-                .await
-                .expect("job row");
-        JobRow {
-            status,
-            result,
-            status_details: serde_json::from_str(&details).expect("status details JSON"),
-        }
+    async fn get(&self, job_id: &str) -> Job {
+        self.store
+            .get_job("spike-workspace", job_id)
+            .await
+            .expect("job row")
     }
 
     async fn all_details(&self) -> Vec<Value> {
-        let details: Vec<(String,)> = sqlx::query_as("SELECT status_details FROM jobs ORDER BY id")
-            .fetch_all(&self.pool)
+        let jobs = self
+            .store
+            .list_jobs("spike-workspace", None, &[], None, None, None)
             .await
             .expect("job details");
-        details
+        let mut details = jobs
             .into_iter()
-            .map(|(details,)| serde_json::from_str(&details).expect("status details JSON"))
-            .collect()
+            .map(|job| job.status_details.expect("status details JSON"))
+            .collect::<Vec<_>>();
+        details.sort_by_key(|value| value["failure_type"].as_str().unwrap().to_string());
+        details
     }
 }
 
-fn failure_record(error: &WorkerLaunchError) -> (i64, Value) {
+fn failure_record(error: &WorkerLaunchError) -> (JobStatus, Value) {
     match error {
         WorkerLaunchError::NonZeroExit { code, .. } => (
-            3,
+            JobStatus::Failed,
             json!({"failure_type": "non_zero_exit", "exit_code": code}),
         ),
-        WorkerLaunchError::Signal { signal, .. } => {
-            (3, json!({"failure_type": "signal", "signal": signal}))
-        }
+        WorkerLaunchError::Signal { signal, .. } => (
+            JobStatus::Failed,
+            json!({"failure_type": "signal", "signal": signal}),
+        ),
         WorkerLaunchError::MalformedOutput { message, .. } => (
-            3,
+            JobStatus::Failed,
             json!({"failure_type": "malformed_output", "message": message}),
         ),
         WorkerLaunchError::Timeout { timeout, .. } => (
-            4,
+            JobStatus::Timeout,
             json!({"failure_type": "timeout", "timeout_ms": timeout.as_millis()}),
         ),
         other => panic!("unexpected spike failure: {other}"),
