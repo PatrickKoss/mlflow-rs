@@ -20,8 +20,10 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
   at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
   invoke endpoints; jobs execute Python-free end to end (fixture mode for
-  Phase 19 semantics); replay corpus now 154 cases. Next: Phase 18
-  (gateway).
+  Phase 19 semantics). Phase 18 underway: T18.1 (gateway CRUD + crypto)
+  merged 2026-07-18 — 36 endpoints/72 routes, envelope crypto promoted,
+  cross-language secret round-trip verified; replay corpus now 175 cases.
+  Next: T18.2 (discovery + bridge) ∥ T18.3 (runtime core).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3201,10 +3203,29 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 18 — Gateway
 
-- [ ] **T18.1 Gateway CRUD + crypto**: 9 tables, 36 endpoints, envelope
+- [x] **T18.1 Gateway CRUD + crypto**: 9 tables, 36 endpoints, envelope
       crypto (T15.3), secret masking, secret cache, workspace scoping.
       **AC:** secrets round-trip cross-language; CRUD suites pass.
       **VER:** Phase 22 runner + corpus `-k gateway`.
+      **DONE (2026-07-18, codex agent, merge bd5d2ecbd):** all 9 gateway
+      tables pre-existed at head `c4a9b7d3e812` — no migration. T15.3 spike
+      promoted to `mlflow-store/src/secrets.rs` (exact format: AES-256-GCM
+      nonce||ct||tag, 60-byte wrapped DEK, PBKDF2 600k, versioned KEK, AAD
+      id|name). Cross-language AC passed both directions: Python decrypted
+      32 Rust envelopes (kek_version 1 and 42), Rust decrypted 32 Python
+      envelopes; wrong-id/wrong-name AAD negatives rejected both ways.
+      Masking (Unicode-char based, <8 → `***`, else first3...last4) on all
+      public reads; encrypted LRU cache mirrors Python (TTL 60s clamp
+      10–300, max 1000, dual time-bucket keys, lazy expiry, full-cache
+      invalidation on mutation). 36 proto handlers / 72 routes with quirks
+      (usage-tracking default true, ignored list `secret_id`, empty-update
+      no-ops, ASCII endpoint names, guardrail name serialization); auth:
+      dependency USE checks, creator MANAGE, deletion cascades, admin-only
+      budgets. Python gateway suites 266 passed / 1 skipped against Rust
+      store. Corpus +21 gateway cases (masked bytes) → 175 total, zero
+      non-allowlisted diffs. Route parity: §12.8 implemented=72, planned=6
+      (T18.2 discovery). 404 sentinel moved to `gateway/supported-models`
+      (moves again at T18.2). Gates fmt/clippy/test/parity/replay all 0.
 - [ ] **T18.2 Discovery + bridge routes**: 4 ajax discovery routes +
       `gateway-proxy` with its validation quirks and empty-target behavior.
       **AC/VER:** corpus section; UI provider-picker renders from Rust.
