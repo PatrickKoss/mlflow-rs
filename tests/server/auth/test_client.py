@@ -1,4 +1,5 @@
 import json
+import os
 from contextlib import contextmanager
 from urllib.parse import quote
 
@@ -29,6 +30,7 @@ from tests.server.auth.auth_test_utils import (
     ADMIN_PASSWORD,
     ADMIN_USERNAME,
     User,
+    resolve_auth_server_launch,
     write_isolated_auth_config,
 )
 from tests.tracking.integration_test_utils import _init_server
@@ -46,15 +48,18 @@ def client(tmp_path):
     path = tmp_path.joinpath("sqlalchemy.db").as_uri()
     backend_uri = ("sqlite://" if is_windows() else "sqlite:////") + path[len("file://") :]
 
+    extra_env = {
+        MLFLOW_FLASK_SERVER_SECRET_KEY.name: "my-secret-key",
+        MLFLOW_AUTH_CONFIG_PATH.name: str(auth_config_path),
+    }
+    server_type, extra_env = resolve_auth_server_launch(backend_uri, extra_env)
+
     with _init_server(
         backend_uri=backend_uri,
         root_artifact_uri=tmp_path.joinpath("artifacts").as_uri(),
         app="mlflow.server.auth:create_app",
-        extra_env={
-            MLFLOW_FLASK_SERVER_SECRET_KEY.name: "my-secret-key",
-            MLFLOW_AUTH_CONFIG_PATH.name: str(auth_config_path),
-        },
-        server_type="flask",
+        extra_env=extra_env,
+        server_type=server_type,
     ) as url:
         yield AuthServiceClient(url)
 
@@ -207,6 +212,10 @@ def _register_scorer(tracking_uri: str, experiment_id: str, name: str, auth) -> 
     resp.raise_for_status()
 
 
+@pytest.mark.skipif(
+    os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust",
+    reason="Rust server does not implement the scorer API yet",
+)
 def test_list_scorers_cross_experiment(client, monkeypatch):
     # ``ListScorers`` with no ``experiment_id`` returns scorers across every
     # experiment in the active workspace, populates ``experiment_name`` per
@@ -246,6 +255,10 @@ def test_list_scorers_cross_experiment(client, monkeypatch):
     assert tuples == sorted(tuples)
 
 
+@pytest.mark.skipif(
+    os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust",
+    reason="Rust server does not implement the scorer API yet",
+)
 def test_list_scorers_cross_experiment_pattern_round_trip(client, monkeypatch):
     # A scorer literally named ``*`` is the encoding edge case: Python's
     # ``quote(safe='')`` encodes it as ``%2A`` while JS ``encodeURIComponent``
