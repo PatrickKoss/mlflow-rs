@@ -45,7 +45,7 @@ pub use store::{
     LabelSchemaType, LabelSchemaUpdate, LabelSchemasPage, LoggedModel, LoggedModelInput,
     LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
     LoggedModelOutput, LoggedModelStatus, LoggedModelsPage, Metric, MetricAggregation,
-    MetricDataPoint, MetricInput, MetricViewType, MetricWithRunId, NewAssessment,
+    MetricDataPoint, MetricInput, MetricViewType, MetricWithRunId, NewAssessment, OnlineScorer,
     OnlineScoringConfig, Param, ReviewItemType, ReviewQueue, ReviewQueueItem, ReviewQueueItemsPage,
     ReviewQueueType, ReviewQueueUpdate, ReviewQueuesPage, ReviewStatus, Run, RunData, RunInfo,
     RunInputs, RunOutputs, RunStatus, RunTag, RunsPage, ScorerVersion, SpanInput, SpanMetricInput,
@@ -63,5 +63,5 @@ pub use store::{
     WorkspaceArtifactRoot, WorkspaceDeletionMode, WorkspaceNameValidator, WorkspaceStore,
     DEFAULT_WORKSPACE_NAME as WORKSPACE_DEFAULT_NAME, WORKSPACES,
 };
-pub use store::{Job, JobStatus, JobStore};
+pub use store::{Job, JobStatus, JobStore, PeriodicSchedulerLock};
 pub use uri::{ParsedUri, UriError};

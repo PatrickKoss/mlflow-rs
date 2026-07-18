@@ -44,6 +44,7 @@ mod params_tags;
 mod record_logged_model;
 mod review_queues;
 mod runs;
+mod scheduler_locks;
 mod scorers;
 mod search;
 mod search_experiments;
@@ -88,7 +89,8 @@ pub use review_queues::{
     ReviewItemType, ReviewQueue, ReviewQueueItem, ReviewQueueItemsPage, ReviewQueueType,
     ReviewQueueUpdate, ReviewQueuesPage, ReviewStatus,
 };
-pub use scorers::{OnlineScoringConfig, ScorerVersion};
+pub use scheduler_locks::PeriodicSchedulerLock;
+pub use scorers::{OnlineScorer, OnlineScoringConfig, ScorerVersion};
 pub use search::{RunsPage, SEARCH_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_THRESHOLD};
 pub use search_experiments::ExperimentsPage;
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};

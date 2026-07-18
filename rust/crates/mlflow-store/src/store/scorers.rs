@@ -1,6 +1,7 @@
 //! Registered scorer versions and online-scoring configurations.
 
 use mlflow_error::MlflowError;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ pub struct ScorerVersion {
     pub scorer_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OnlineScoringConfig {
     pub online_scoring_config_id: String,
     pub scorer_id: String,
@@ -32,7 +33,88 @@ pub struct OnlineScoringConfig {
     pub filter_string: Option<String>,
 }
 
+/// The latest serialized scorer version paired with an enabled online config.
+/// Field order intentionally matches Python's `OnlineScorer` dataclass so
+/// `python_json_dumps` produces submission parameters in the same order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OnlineScorer {
+    pub name: String,
+    pub serialized_scorer: String,
+    pub online_config: OnlineScoringConfig,
+}
+
 impl TrackingStore {
+    /// Return active online scorers in a workspace (`sample_rate > 0`) using
+    /// each scorer's latest registered version. Persisted gateway endpoint IDs
+    /// are resolved back to endpoint names, matching Python's
+    /// `SqlAlchemyStore.get_active_online_scorers`.
+    pub async fn get_active_online_scorers(
+        &self,
+        workspace: &str,
+    ) -> Result<Vec<OnlineScorer>, MlflowError> {
+        let dialect = self.db().dialect();
+        let sql = format!(
+            "SELECT c.online_scoring_config_id, c.scorer_id, c.sample_rate, \
+             c.experiment_id, c.filter_string, s.scorer_name, v.scorer_version, \
+             v.serialized_scorer, v.creation_time \
+             FROM {ONLINE_SCORING_CONFIGS} c \
+             JOIN experiments e ON e.experiment_id = c.experiment_id \
+             JOIN {SCORERS} s ON s.scorer_id = c.scorer_id \
+             JOIN {SCORER_VERSIONS} v ON v.scorer_id = s.scorer_id \
+              AND v.scorer_version = (SELECT MAX(v2.scorer_version) \
+               FROM {SCORER_VERSIONS} v2 WHERE v2.scorer_id = s.scorer_id) \
+             WHERE e.workspace = {} AND c.sample_rate > 0",
+            dialect.placeholder(1)
+        );
+        let rows = self
+            .db()
+            .fetch_all(&sql, &[Val::Text(workspace.to_string())], |row| {
+                Ok((
+                    OnlineScoringConfig {
+                        online_scoring_config_id: row.get_string("online_scoring_config_id")?,
+                        scorer_id: row.get_string("scorer_id")?,
+                        sample_rate: row.get_f64("sample_rate")?,
+                        experiment_id: row.get_int("experiment_id")?.to_string(),
+                        filter_string: row.get_opt_string("filter_string")?,
+                    },
+                    ScorerVersion {
+                        experiment_id: row.get_int("experiment_id")?.to_string(),
+                        scorer_name: row.get_string("scorer_name")?,
+                        scorer_version: row.get_int("scorer_version")? as i32,
+                        serialized_scorer: row.get_string("serialized_scorer")?,
+                        creation_time: row.get_opt_i64("creation_time")?,
+                        scorer_id: row.get_string("scorer_id")?,
+                    },
+                ))
+            })
+            .await
+            .map_err(internal)?;
+
+        let mut active = Vec::with_capacity(rows.len());
+        for (online_config, mut scorer) in rows {
+            // Python drops configs whose latest scorer version no longer uses
+            // a gateway model, even if an older version did.
+            let serialized: Value =
+                serde_json::from_str(&scorer.serialized_scorer).map_err(|error| {
+                    MlflowError::internal_error(format!("stored scorer is not valid JSON: {error}"))
+                })?;
+            if extract_model(&serialized)?
+                .as_deref()
+                .and_then(gateway_endpoint_ref)
+                .is_none()
+            {
+                continue;
+            }
+            self.resolve_scorer(workspace, &mut scorer).await?;
+            active.push(OnlineScorer {
+                name: scorer.scorer_name,
+                serialized_scorer: scorer.serialized_scorer,
+                online_config,
+            });
+        }
+        Ok(active)
+    }
+
     pub async fn register_scorer(
         &self,
         workspace: &str,
