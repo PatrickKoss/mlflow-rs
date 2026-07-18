@@ -753,15 +753,10 @@ async fn bad_max_results_is_invalid_parameter_value() {
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
     // A route-table RPC that `handler_for` does not yet wire up → 404 (no route
-    // match). Prompt optimization (§12.7) is a later phase, so `getJob`
-    // (`/api/3.0/mlflow/prompt-optimization/jobs/<job_id>`) falls through.
-    // This sentinel moves forward as later-phase route families land.
-    let res = get(
-        &server,
-        "/api/3.0",
-        "/mlflow/prompt-optimization/jobs/j-missing",
-    )
-    .await;
+    // match). Gateway CRUD (§12.8) is a later phase (T18.1), so
+    // `getGatewayEndpoint` (`/api/3.0/mlflow/gateway/endpoints/get`) falls
+    // through. This sentinel moves forward as later-phase route families land.
+    let res = get(&server, "/api/3.0", "/mlflow/gateway/endpoints/get").await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     // Route miss, not a JSON error body from a matched handler.
     assert!(res.body.is_empty(), "{}", res.body);
