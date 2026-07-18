@@ -1880,13 +1880,27 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
 
 ### Phase 13 — Schema evolution for 100 GB scale (after parity is proven)
 
-- [ ] **T13.1 Index migrations** (alembic): `runs(experiment_id, lifecycle_stage,
+- [x] **T13.1 Index migrations** (alembic): `runs(experiment_id, lifecycle_stage,
       start_time)`, `logged_models(experiment_id)`, `inputs(source_id)`,
       `model_versions(run_id)`, `model_versions(current_stage)`; fix the two
       empty `Index()` declarations (tracking models.py:832,863).
       **AC:** upgrade+downgrade clean on all dialects (`tests/db/check_migration.sh`);
       EXPLAIN shows index usage; no Python-suite regression.
       **VER:** migration CI + query plans on a seeded 10M-run dataset.
+      **DONE (2026-07-18):** alembic revision `a3f8c21d9b47` (off `b7e4c1a90f23`)
+      creates all five indexes; downgrade handles MySQL's FK-backed-index
+      consolidation (errno 1553) by dropping/recreating the FK around the index
+      drop. The two dead `Index()` declarations (trace tags/metadata) are now
+      real `request_id` indexes; all five indexes mirrored in ORM
+      `__table_args__` with migration-matching `index_<table>_<cols>` names;
+      `tests/store/dump_schema.py` now emits deterministic `CREATE INDEX`
+      lines so `tests/resources/db/latest_schema.sql` guards index parity;
+      Rust `EXPECTED_ALEMBIC_HEAD` bumped and the sqlite fixture regenerated.
+      Verified: schema suite 23 passed; sqlite upgrade→downgrade→upgrade walk
+      with PRAGMA assertions; EXPLAIN QUERY PLAN uses the runs index on a
+      10k-run DB; store core+runs 256 passed; cargo fmt/clippy/test-workspace
+      exit 0; T12.4 replay harness exit 0 post-merge. NOT run: postgres/mysql
+      `check_migration.sh` (no docker locally) — covered by migration CI.
 - [ ] **T13.2 `span_attributes` extraction table** (Q7): indexed key/value maintained on
       span ingest; span-content LIKE filters rewritten; shared alembic migration with a
       Python-compatible write path or capability-gated Rust-only (D7).
