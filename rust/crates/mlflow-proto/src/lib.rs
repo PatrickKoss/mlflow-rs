@@ -3,8 +3,12 @@
 //! Per `RUST_TRACKING_SERVER_PLAN.md` (§2.3, §4, Phase 1 T1.2/T1.3), this crate
 //! is the single source of truth for message types compiled from
 //! `service.proto`, `model_registry.proto`, `webhooks.proto`,
-//! `assessments.proto`, `databricks.proto`, `mlflow_artifacts.proto`, and the
-//! OTLP protos (via `prost`/`protox`, no system `protoc` dependency).
+//! `assessments.proto`, `databricks.proto`, `mlflow_artifacts.proto`,
+//! `datasets.proto`, `issues.proto`, `label_schemas.proto`,
+//! `review_queues.proto`, `prompt_optimization.proto`, and the OTLP protos
+//! (via `prost`/`protox`, no system `protoc` dependency). Prompt-optimization
+//! types are in this module's top-level [`mlflow`] package; the other Part II
+//! entity files use the package submodules below.
 //!
 //! It also exposes [`ROUTE_TABLE`], a build-time-generated list of every
 //! proto-backed HTTP endpoint (decoded from the `databricks.rpc` `MethodOptions`

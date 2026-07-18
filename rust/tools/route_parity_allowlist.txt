@@ -1,34 +1,10 @@
-# Route parity allowlist — Python-only endpoints NOT backed by a databricks.rpc
-# proto option, so they legitimately do not appear in the Rust ROUTE_TABLE
-# (which is generated purely from proto options). Format: `METHOD PATH`, one per
-# line, each with a one-line reason. See rust/tools/route_parity.py.
-#
-# Two categories:
-#   (A) genai / out-of-scope routes — stay on the Python server per the plan
-#       (§1 Non-Goals, §2.2 nginx routing table). Rust never serves these.
-#   (B) in-scope but hand-crafted Flask routes — Rust WILL serve these, but as
-#       hand-written handlers (not via the proto route table). Kept here so the
-#       proto-parity diff stays clean; their Rust implementations are covered by
-#       their own tests in later phases.
+# Implemented hand routes that look Python-only to this proto-table diff: they
+# are not backed by a databricks.rpc option and therefore do not appear in the
+# generated Rust ROUTE_TABLE even though the Rust server registers them live.
+# Format: `METHOD PATH`, one per line, each with a one-line reason. Part II's
+# not-yet-implemented routes live in route_parity.py's phase-tagged planned
+# inventory instead of this allowlist.
 
-# --- (A) genai / out-of-scope (Python-served, routed there by nginx) ---
-GET /ajax-api/3.0/mlflow/gateway/provider-config      # gateway (genai) — Non-Goals §1
-GET /ajax-api/3.0/mlflow/gateway/secrets/config       # gateway (genai) — Non-Goals §1
-GET /ajax-api/3.0/mlflow/gateway/supported-models     # gateway (genai) — Non-Goals §1
-GET /ajax-api/3.0/mlflow/gateway/supported-providers  # gateway (genai) — Non-Goals §1
-GET /ajax-api/3.0/mlflow/jobs/<job_id>                # jobs API (genai runner) — Non-Goals §1
-PATCH /ajax-api/3.0/mlflow/jobs/cancel/<job_id>       # jobs API (genai runner) — Non-Goals §1
-GET /ajax-api/3.0/mlflow/scorers/online-configs       # scorers (genai) — Non-Goals §1
-GET /api/3.0/mlflow/scorers/online-configs            # scorers (genai) — Non-Goals §1
-PUT /ajax-api/3.0/mlflow/scorers/online-config        # scorers (genai) — Non-Goals §1
-PUT /api/3.0/mlflow/scorers/online-config             # scorers (genai) — Non-Goals §1
-POST /ajax-api/3.0/mlflow/scorer/invoke               # scorer invoke (genai) — Non-Goals §1
-POST /ajax-api/3.0/mlflow/genai/evaluate/invoke       # genai evaluate — Non-Goals §1
-POST /ajax-api/3.0/mlflow/issues/invoke               # issues detection (genai) — Non-Goals §1
-POST /ajax-api/3.0/mlflow/demo/generate               # demo data (genai) — Non-Goals §1
-POST /ajax-api/3.0/mlflow/demo/delete                 # demo data (genai) — Non-Goals §1
-
-# --- (B) in-scope, hand-crafted Flask routes (Rust-served, non-proto) ---
 GET /graphql                                          # GraphQL (§3.12) — hand-written resolver, not a proto RPC
 POST /graphql                                         # GraphQL (§3.12) — hand-written resolver, not a proto RPC
 GET /ajax-api/3.0/mlflow/server-info                  # server-info (§3.13) — hand-registered via _get_paths, not a proto RPC
