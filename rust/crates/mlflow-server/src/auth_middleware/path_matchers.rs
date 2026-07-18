@@ -18,9 +18,10 @@
 //! `(service, method)` — exactly as Python keys `BEFORE_REQUEST_HANDLERS` on the
 //! proto request class — plus the hand-registered auth/artifact/trace routes.
 //! Only routes actually served by this Rust server are wired; unimplemented
-//! Python-only surfaces (gateway, review queues, prompt-optimization, workspaces)
-//! are intentionally absent (they never route here, so their validators would be
-//! dead code).
+//! Python-only surfaces (gateway, review queues, workspaces) are intentionally
+//! absent (they never route here, so their validators would be dead code).
+//! Prompt optimization is live and carries the same experiment-inherited
+//! validators as Python.
 
 use std::sync::OnceLock;
 
@@ -145,6 +146,12 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         ("MlflowService", "deleteTag") => UpdateRun,
         ("MlflowService", "logParam") => UpdateRun,
         ("MlflowService", "getMetricHistory") => ReadRun,
+        // ---- Prompt optimization jobs (inherit experiment) ----
+        ("MlflowService", "createPromptOptimizationJob") => UpdateExperiment,
+        ("MlflowService", "getPromptOptimizationJob") => ReadPromptOptimizationJob,
+        ("MlflowService", "searchPromptOptimizationJobs") => ReadExperiment,
+        ("MlflowService", "cancelPromptOptimizationJob") => UpdatePromptOptimizationJob,
+        ("MlflowService", "deletePromptOptimizationJob") => DeletePromptOptimizationJob,
         // ---- Model registry (shared with prompts) ----
         ("ModelRegistryService", "createRegisteredModel") => CanCreateRegisteredModel,
         ("ModelRegistryService", "getRegisteredModel") => ReadRegisteredModelOrPrompt,
@@ -775,6 +782,38 @@ mod tests {
         assert_eq!(
             validator_of(dispatch_request("/api/2.0/mlflow/runs/log-metric", "POST")),
             Validator::UpdateRun
+        );
+    }
+
+    #[test]
+    fn prompt_optimization_jobs_inherit_experiment() {
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/api/3.0/mlflow/prompt-optimization/jobs",
+                "POST"
+            )),
+            Validator::UpdateExperiment
+        );
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/ajax-api/3.0/mlflow/prompt-optimization/jobs/job-1",
+                "GET"
+            )),
+            Validator::ReadPromptOptimizationJob
+        );
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/api/3.0/mlflow/prompt-optimization/jobs/job-1/cancel",
+                "POST"
+            )),
+            Validator::UpdatePromptOptimizationJob
+        );
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/api/3.0/mlflow/prompt-optimization/jobs/job-1",
+                "DELETE"
+            )),
+            Validator::DeletePromptOptimizationJob
         );
     }
 

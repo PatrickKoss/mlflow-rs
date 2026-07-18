@@ -1,0 +1,84 @@
+# Plan §12.7 - prompt-optimization CRUD. The Python Flask process has job
+# execution enabled so submission accepts the request, but the compliance
+# harness does not launch its Huey consumer; both rows therefore remain queued
+# until the explicit cancel case.
+cases:
+  - name: prompt_optimization_create_queued
+    method: POST
+    path: /api/3.0/mlflow/prompt-optimization/jobs
+    body:
+      experiment_id: "0"
+      source_prompt_uri: prompts:/support-bot/3
+      config:
+        optimizer_type: OPTIMIZER_TYPE_METAPROMPT
+        scorers: []
+        optimizer_config_json: '{"reflection_model": "openai:/gpt-5", "guidelines": "Be concise"}'
+      tags: [{key: corpus, value: parity}]
+    bind:
+      - {bind: prompt_job_id, from: "$.job.job_id"}
+      - {bind: prompt_run_id, from: "$.job.run_id"}
+    expect_status: 200
+
+  - name: prompt_optimization_get_queued
+    method: GET
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs/${prompt_job_id}
+    expect_status: 200
+
+  - name: prompt_optimization_search_post
+    method: POST
+    path: /api/3.0/mlflow/prompt-optimization/jobs/search
+    body: {experiment_id: "0"}
+    expect_status: 200
+
+  - name: prompt_optimization_search_get
+    method: GET
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs/search
+    query: {experiment_id: "0"}
+    expect_status: 200
+
+  - name: prompt_optimization_cancel
+    method: POST
+    path: /api/3.0/mlflow/prompt-optimization/jobs/${prompt_job_id}/cancel
+    body: {}
+    expect_status: 200
+
+  - name: prompt_optimization_get_canceled
+    method: GET
+    path: /api/3.0/mlflow/prompt-optimization/jobs/${prompt_job_id}
+    expect_status: 200
+
+  - name: prompt_optimization_delete
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs/${prompt_job_id}
+    expect_status: 200
+
+  - name: prompt_optimization_get_deleted
+    method: GET
+    path: /api/3.0/mlflow/prompt-optimization/jobs/${prompt_job_id}
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404
+
+  - name: prompt_optimization_create_missing_source
+    method: POST
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs
+    body:
+      experiment_id: "0"
+      config: {optimizer_type: OPTIMIZER_TYPE_GEPA}
+    expect_status: 400
+
+  - name: prompt_optimization_search_missing_experiment
+    method: POST
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs/search
+    body: {}
+    expect_status: 400
+
+  - name: prompt_optimization_create_invalid_optimizer_json
+    method: POST
+    path: /api/3.0/mlflow/prompt-optimization/jobs
+    body:
+      experiment_id: "0"
+      source_prompt_uri: prompts:/support-bot/3
+      config:
+        optimizer_type: OPTIMIZER_TYPE_GEPA
+        optimizer_config_json: "invalid json {"
+    expect_status: 400
