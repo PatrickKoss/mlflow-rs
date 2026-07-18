@@ -3339,11 +3339,31 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       tracing so costs keep accruing.
       **AC:** REJECT/ALERT behaviors match Python on a seeded spend fixture.
       **VER:** budget differential test.
-- [ ] **T18.7 Guardrails execution** per D17: BEFORE/AFTER orchestration,
+- [x] **T18.7 Guardrails execution** per D17: BEFORE/AFTER orchestration,
       VALIDATION 400s, SANITIZATION via action endpoint with the bypass
       header, no-post-guardrails-on-streams rule.
       **AC:** guardrail matrix (stage × action × violation) parity.
       **VER:** mock-judge differential.
+      **DONE (2026-07-19, codex agent, merge 7e0224a61):** sequential
+      execution by execution_order ASC NULLS LAST then guardrail_id;
+      sanitized payload chains into next guardrail; first VALIDATION
+      violation short-circuits rest + provider call. BEFORE once before
+      routing/fallback, AFTER once after successful non-stream response;
+      chat runs both, unified embeddings neither, passthrough embeddings
+      BEFORE-only, raw proxy BEFORE + AFTER only on non-stream JSON/text.
+      VALIDATION → 400 `{"detail":"Guardrail '<name>' blocked:
+      <rationale>"}` byte-exact. SANITIZATION → POST
+      /gateway/{action_endpoint}/mlflow/invocations with
+      X-MLflow-Guardrail-Bypass: 1, only Authorization forwarded, payload
+      = sanitizer prompt + rationale + json.dumps(payload, indent=2) +
+      exact JSON-schema response format; choices[0].message.content parsed
+      and replaces payload. Streams: BEFORE applies (typed-stream
+      violation = HTTP 200 SSE GuardrailViolation; raw proxy stays 400),
+      AFTER never runs, no warning (Python emits none). Ordering pinned:
+      Python checks budgets BEFORE guardrails (T18.6 seam consistent). AC
+      met: all 8 stage×action×outcome cells byte-identical vs Python via
+      guardrail_oracle.py; sanitization internal payload matched exactly.
+      Gates all 0; corpus 188, zero non-allowlisted diffs.
 
 ### Phase 19 — Native GenAI execution parity (Tier C)
 
