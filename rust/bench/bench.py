@@ -483,6 +483,7 @@ def write_results(
     counts: dict[str, int] | None,
     seed_metadata: dict[str, Any] | None,
     backend: str,
+    database_bytes: int | None,
 ) -> None:
     lines: list[str] = []
     lines.append("# T13.3 Benchmark Results - Python vs Rust MLflow Server")
@@ -519,6 +520,8 @@ def write_results(
     lines.append(f"| deep-pagination pages | {deep_pages:,} |")
     if seed_metadata:
         lines.append(f"| seed total wall seconds | {seed_metadata['total_seconds']:.3f} |")
+    if database_bytes is not None:
+        lines.append(f"| SQLite seed file bytes | {database_bytes:,} |")
     lines.append("")
     if counts:
         lines.append("Seeded row counts:")
@@ -626,7 +629,7 @@ def write_results(
     lines.append(
         "Use fresh databases on a dedicated host (>=16 physical cores, >=64 GB RAM, NVMe). "
         "The following starts with a high-volume candidate scale; database size varies by "
-        "Postgres version and index/storage settings, so verify it with `pg_total_relation_size` "
+        "Postgres version and index/storage settings, so verify it with `pg_database_size` "
         "and adjust the scale instead of treating the flags as an exact byte estimate."
     )
     lines.append("")
@@ -638,12 +641,14 @@ def write_results(
     lines.append("    --traces 2000000 --spans-per-trace 5 --model-versions 100000 \\")
     lines.append("    --experiments 500 --seed 42 --metadata /tmp/t133-seed.json")
     lines.append('psql "$BENCH_SEED" -Atc \\')
-    lines.append("    \"SELECT pg_size_pretty(pg_total_relation_size('metrics'));\"")
+    lines.append("    \"SELECT pg_size_pretty(pg_database_size('mlflow_bench_seed'));\"")
     lines.append("createdb mlflow_bench_python")
     lines.append("createdb mlflow_bench_rust")
     lines.append('pg_dump --format=custom "$BENCH_SEED" --file=/tmp/mlflow-bench.dump')
     lines.append("pg_restore --dbname=mlflow_bench_python --jobs=8 /tmp/mlflow-bench.dump")
     lines.append("pg_restore --dbname=mlflow_bench_rust --jobs=8 /tmp/mlflow-bench.dump")
+    lines.append("psql postgresql://mlflow:mlflow@localhost/mlflow_bench_python -c 'ANALYZE;'")
+    lines.append("psql postgresql://mlflow:mlflow@localhost/mlflow_bench_rust -c 'ANALYZE;'")
     lines.append("cargo build --manifest-path rust/Cargo.toml --release")
     lines.append("uv run python rust/bench/bench.py \\")
     lines.append("    --python-db-uri postgresql://mlflow:mlflow@localhost/mlflow_bench_python \\")
@@ -662,15 +667,32 @@ def write_results(
     lines.append("")
     faster_rust = []
     faster_python = []
+    anomalies = []
     for name, by_server in results.items():
         py, rust = by_server.get("python"), by_server.get("rust")
         if not py or not rust:
             continue
         (faster_rust if rust.p95 < py.p95 else faster_python).append(name)
+        for timing in (py, rust):
+            tail_ratio = timing.p99 / timing.p50 if timing.p50 else 0
+            if tail_ratio >= 2:
+                anomalies.append(f"{timing.server} {name} p99/p50 was {tail_ratio:.2f}x")
+    otlp_py = results.get("otlp_ingest_throughput", {}).get("python")
+    otlp_rust = results.get("otlp_ingest_throughput", {}).get("rust")
+    otlp_note = ""
+    if otlp_py and otlp_rust:
+        otlp_ratio = otlp_rust.extra["spans_per_sec"] / otlp_py.extra["spans_per_sec"]
+        otlp_note = (
+            f"OTLP was {otlp_ratio:.2f}x faster in Rust, "
+            f"{'meeting' if otlp_ratio >= 5 else 'below'} the 5x target."
+        )
+    anomaly_note = "; ".join(anomalies) if anomalies else "none by the 2x p99/p50 rule"
     lines.append(
         f"Rust had the lower measured p95 in {', '.join(faster_rust) or 'no scenarios'}; "
         f"Python had the lower or equal p95 in {', '.join(faster_python) or 'no scenarios'}. "
+        f"{otlp_note} "
         "The deep-page table reports the observed curve independently for each server. "
+        f"Observed long-tail anomalies: {anomaly_note}. "
         "These SQLite/WSL2 results are sensitive to cache state and VM noise, and the OTLP "
         "measurement is sequential batch ingest rather than a concurrent saturation test."
     )
@@ -768,6 +790,7 @@ def main() -> int:
         counts,
         seed_metadata,
         "SQLite (byte-identical per-server copies)" if db_path else "Postgres (dump clones)",
+        db_path.stat().st_size if db_path else None,
     )
     return 0
 
