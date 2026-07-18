@@ -2972,11 +2972,26 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **AC:** scorer CRUD suites pass; serialized payloads written by either
       server read identically by the other.
       **VER:** Phase 22 runner `-k scorer`.
-- [ ] **T16.3 Issues + label schemas**: issues CRUD (4 RPCs, trace_count via
+- [x] **T16.3 Issues + label schemas**: issues CRUD (4 RPCs, trace_count via
       the assessments join) and label schemas (6 RPCs, immutable `type`,
       unique names).
       **AC/VER:** suites + differential sections; `include_trace_count`
       parity on a seeded fixture.
+      **DONE 2026-07-18** (codex gpt-5.6-sol, merge 8fbadb121): NO new
+      migration — `issues` + `label_schemas` pre-existed at head
+      `c4a9b7d3e812`. 10 logical routes under /api/3.0 + /ajax-api/3.0.
+      trace_count semantics: LEFT OUTER JOIN assessments ON name=issue_id
+      AND assessment_type='issue', COUNT(DISTINCT trace_id), NO valid
+      filter. Label-schema names unique PER EXPERIMENT (not global);
+      `type` wire-immutable (absent from UpdateLabelSchema, updates
+      preserve it); exact Python error strings ported. Issues D21
+      authenticated-only (`// AUTH GAP:`); label-schema perms inherit
+      from experiment. VER: Rust-backed REST slice 16 passed (12 issue +
+      3 label-schema + 1 differential), Python oracle suites 165/165 + 18
+      label-schema handlers, 5 new Rust integration tests; seeded
+      same-DB differential byte-identical with AND without
+      include_trace_count; route_parity §12.4=8, §12.5=12 implemented.
+      Post-merge gates fmt/clippy/test/route_parity/replay all exit 0.
 - [ ] **T16.4 Review queues**: 11 RPCs, 4 tables, name_key semantics, soft
       references, user-queue schema resolution, full auth validator set +
       integrity hook.
