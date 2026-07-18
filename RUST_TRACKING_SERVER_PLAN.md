@@ -16,10 +16,12 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
 **Open:**
-- **Part 2 (genai port)** — Phase 15 (foundations) COMPLETE 2026-07-18; Phase
-  16 (GenAI CRUD) COMPLETE 2026-07-18 (all six tasks; zero new migrations —
-  every table pre-existed at head `c4a9b7d3e812`; replay corpus grew to 144
-  cases). Next: Phase 17 (job runner + native worker).
+- **Part 2 (genai port)** — Phases 15, 16, AND 17 COMPLETE 2026-07-18.
+  Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
+  at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
+  invoke endpoints; jobs execute Python-free end to end (fixture mode for
+  Phase 19 semantics); replay corpus now 154 cases. Next: Phase 18
+  (gateway).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3171,13 +3173,31 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       deferred read→write tx) stranded finalizing jobs in RUNNING —
       finalization writes now retry with fresh transactions
       (7f9976748); flaky retry test 15/15 after.
-- [ ] **T17.4 Invoke endpoints**: evaluate-invoke, scorer-invoke,
+- [x] **T17.4 Invoke endpoints**: evaluate-invoke, scorer-invoke,
       issue-detection-invoke, prompt-opt submission wired to the runner with
       submission-side byte parity (pre-created runs, tags, response shapes,
       batching rules).
       **AC:** invoke responses + created runs/tags byte-match Python with the
       deterministic native worker fixture.
       **VER:** differential corpus (native fixture mode).
+      **DONE 2026-07-18** (codex gpt-5.6-sol, clean merge): invoke.rs
+      (559 lines). Evaluate: exact empty-list errors ("Please select at
+      least one trace/judge."), RUNNING run with user_id="unknown", no
+      end time, mlflow.runType=genai_evaluate,
+      mlflow.genaiEvaluate.jobId tag, {"job_id","run_id"} response.
+      Scorer: looser Python validation kept, batches of 100 via
+      MLFLOW_SERVER_SCORER_INVOKE_BATCH_SIZE, session scorers grouped by
+      mlflow.trace.session (first-session order, chronological within,
+      sessionless omitted), {"jobs":[...]} response, no pre-created run.
+      Issue detection: Python schema + endpoint/provider-model rule incl.
+      exact 500 text; run ended-as-RUNNING (non-null end time) matching
+      Python; secret IDs kept out of durable params (gateway resolution =
+      Phase 18). All three authenticated-only (D21). Prompt-opt PENDING
+      rows now claimed and dispatched through the native worker. §12.2/
+      12.3/12.4 all 0 planned. VER: invoke corpus 10/10 (batch pinned to
+      2), full corpus 154 cases/0 diffs, invoke_http 7/7, shared-DB
+      interop 3/3, Python oracle 12/12. Gates all exit 0.
+      PHASE 17 COMPLETE.
 
 ### Phase 18 — Gateway
 
