@@ -25,11 +25,9 @@
 //!
 //! ## Which hooks are ported (and which are seams)
 //!
-//! Python's `AFTER_REQUEST_PATH_HANDLERS` also carries scorer, gateway, and
-//! review-queue hooks. Those REST surfaces are **not served by this Rust
-//! binary** (see `path_matchers` — the before-request dispatch omits them for
-//! the same reason), so their after-request handlers would be dead code and are
-//! intentionally absent.
+//! Python's `AFTER_REQUEST_PATH_HANDLERS` also carries gateway hooks. That REST
+//! surface is not served by this Rust binary, so its handlers remain absent.
+//! Scorer and review-queue filtering are ported with their respective routes.
 //!
 //! The workspace hooks (T10.4) **are** served: `filter_list_workspaces` filters
 //! the ListWorkspaces response to accessible workspaces (admins see all);
@@ -57,6 +55,7 @@ use mlflow_auth::permissions::get_permission;
 use mlflow_auth::AuthStore;
 use mlflow_error::MlflowError;
 use mlflow_proto::mlflow as pb;
+use mlflow_proto::mlflow::review_queues as review_queue_pb;
 use mlflow_registry::RegisteredModelsPage;
 use mlflow_search::{create_page_token, parse_start_offset_from_page_token};
 use mlflow_store::{DatasetFilter, ExperimentsPage, LoggedModelOrderByInput, LoggedModelsPage};
@@ -97,6 +96,8 @@ pub enum AfterRequestHandler {
     FilterSearchLoggedModels,
     /// `filter_list_scorers`.
     FilterListScorers,
+    /// `filter_list_review_queues`.
+    FilterListReviewQueues,
     /// `filter_list_workspaces` — drop workspaces the caller can't access from a
     /// ListWorkspaces response (T10.4). Admins skip.
     FilterListWorkspaces,
@@ -132,7 +133,7 @@ impl AfterRequestHandler {
 /// `None` for RPCs with no after-request hook (the overwhelming majority).
 ///
 /// Only RPCs this Rust server actually serves are wired (see the module docs on
-/// the omitted scorer/gateway/review-queue surfaces).
+/// omitted surfaces).
 pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
     use AfterRequestHandler::*;
     let h = match (service, method) {
@@ -141,6 +142,7 @@ pub fn handler_for(service: &str, method: &str) -> Option<AfterRequestHandler> {
         ("MlflowService", "searchLoggedModels") => FilterSearchLoggedModels,
         ("MlflowService", "registerScorer") => CreatorGrantScorer,
         ("MlflowService", "listScorers") => FilterListScorers,
+        ("MlflowService", "listReviewQueues") => FilterListReviewQueues,
         ("MlflowService", "deleteScorer") => DeleteGrantsScorer,
         ("ModelRegistryService", "createRegisteredModel") => CreatorGrantRegisteredModel,
         ("ModelRegistryService", "deleteRegisteredModel") => DeleteGrantsRegisteredModel,
@@ -272,6 +274,7 @@ async fn run_inner(
         FilterSearchModelVersions => filter_search_model_versions(ctx, body_json(resp_body)?).await,
         FilterSearchLoggedModels => filter_search_logged_models(ctx, body_json(resp_body)?).await,
         FilterListScorers => filter_list_scorers(ctx, body_json(resp_body)?).await,
+        FilterListReviewQueues => filter_list_review_queues(ctx, body_json(resp_body)?).await,
         FilterListWorkspaces => filter_list_workspaces(ctx, body_json(resp_body)?).await,
         SeedDefaultWorkspaceRoles => {
             seed_default_workspace_roles(ctx, body_json(resp_body)?).await?;
@@ -433,6 +436,36 @@ async fn filter_list_scorers(
             ))
     });
     serialize_response(&resp, "mlflow.ListScorers.Response").map(Some)
+}
+
+async fn filter_list_review_queues(
+    ctx: &AfterCtx<'_>,
+    resp_json: serde_json::Value,
+) -> Result<Option<Vec<u8>>, MlflowError> {
+    if ctx.is_admin {
+        return Ok(None);
+    }
+    let request: review_queue_pb::ListReviewQueues =
+        ctx.parse_request("mlflow.review_queues.ListReviewQueues")?;
+    let experiment_id = request.experiment_id.unwrap_or_default();
+    let permission = super::validators::resolve_experiment_permission(
+        ctx.state.auth_store().expect("auth enabled"),
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        &experiment_id,
+    )
+    .await?;
+    if permission.can_update {
+        return Ok(None);
+    }
+    let target = ctx.username.trim().to_lowercase();
+    let mut response: review_queue_pb::list_review_queues::Response =
+        parse_response(&resp_json, "mlflow.review_queues.ListReviewQueues.Response")?;
+    response
+        .review_queues
+        .retain(|queue| queue.users.contains(&target));
+    serialize_response(&response, "mlflow.review_queues.ListReviewQueues.Response").map(Some)
 }
 
 // ---------------------------------------------------------------------------

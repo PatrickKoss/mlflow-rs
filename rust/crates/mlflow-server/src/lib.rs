@@ -29,6 +29,7 @@ pub mod metrics;
 pub mod otlp;
 pub mod proto_http;
 pub mod registry;
+pub mod review_queues;
 pub mod routes;
 pub mod runs;
 pub mod schema_validation;
@@ -591,6 +592,19 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("listLabelSchemas", "GET") => get(label_schemas::list_label_schemas),
         ("updateLabelSchema", "PATCH") => patch(label_schemas::update_label_schema),
         ("deleteLabelSchema", "DELETE") => delete(label_schemas::delete_label_schema),
+        ("createReviewQueue", "POST") => post(review_queues::create_review_queue),
+        ("getOrCreateUserQueue", "POST") => post(review_queues::get_or_create_user_queue),
+        ("getReviewQueue", "GET") => get(review_queues::get_review_queue),
+        ("getReviewQueueByName", "GET") => get(review_queues::get_review_queue_by_name),
+        ("listReviewQueues", "GET") => get(review_queues::list_review_queues),
+        ("updateReviewQueue", "POST") => post(review_queues::update_review_queue),
+        ("deleteReviewQueue", "POST") => post(review_queues::delete_review_queue),
+        ("addItemsToReviewQueue", "POST") => post(review_queues::add_items_to_review_queue),
+        ("removeItemsFromReviewQueue", "POST") => {
+            post(review_queues::remove_items_from_review_queue)
+        }
+        ("listReviewQueueItems", "GET") => get(review_queues::list_review_queue_items),
+        ("setReviewQueueItemStatus", "POST") => post(review_queues::set_review_queue_item_status),
         ("registerScorer", "POST") => post(scorers::register_scorer),
         ("listScorers", "GET") => get(scorers::list_scorers),
         ("listScorerVersions", "GET") => get(scorers::list_scorer_versions),
