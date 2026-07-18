@@ -101,6 +101,10 @@ PROTO_SECTIONS = {
     "12.8": ("/mlflow/gateway", "T18.1", 72),
 }
 
+# Proto sections that are live in `mlflow-server::handler_for`. Other Part II
+# routes are generated but deliberately fall through to not-implemented.
+IMPLEMENTED_PROTO_SECTIONS = {"12.1"}
+
 
 def planned(section: str, phase: str, source: str, *routes: Route) -> dict[Route, PlannedRoute]:
     return {route: PlannedRoute(section, phase, source) for route in routes}
@@ -290,18 +294,21 @@ def proto_section_routes(routes: list[dict[str, str]]) -> dict[str, set[Route]]:
 
 
 def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
-    print("§12 route accounting (live Rust routes remain unregistered):")
+    print("§12 route accounting:")
     all_non_proto = PLANNED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
     for section, title in SECTION_TITLES.items():
         generated = len(proto_routes.get(section, set()))
         hand = [info for info in all_non_proto.values() if info.section == section]
         phases = Counter(info.phase for info in hand)
-        if section in PROTO_SECTIONS:
+        proto_implemented = generated if section in IMPLEMENTED_PROTO_SECTIONS else 0
+        proto_planned = generated - proto_implemented
+        if section in PROTO_SECTIONS and proto_planned:
             phases[PROTO_SECTIONS[section][1]] += generated
         phase_text = ", ".join(f"{phase}={count}" for phase, count in sorted(phases.items()))
         suffix = f"; {phase_text}" if phase_text else ""
         print(
-            f"  §{section} {title}: implemented=0, planned={generated + len(hand)} "
+            f"  §{section} {title}: implemented={proto_implemented}, "
+            f"planned={proto_planned + len(hand)} "
             f"(proto metadata={generated}, hand-registered={len(hand)}{suffix})"
         )
     demo_count = sum(info.section == "demo" for info in PLANNED_GET_ENDPOINT_ROUTES.values())

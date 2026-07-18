@@ -184,6 +184,9 @@ fn proto_validator(service: &str, method: &str) -> Option<Validator> {
         ("MlflowService", "GetAssessment") => ReadTraceByTraceId,
         ("MlflowService", "updateAssessment") => UpdateTraceByTraceId,
         ("MlflowService", "deleteAssessment") => UpdateTraceByTraceId,
+        // AUTH GAP: datasets (D21) — all evaluation-dataset RPCs intentionally
+        // have no before-request validator in Python. Authentication still runs
+        // before this dispatch, so leaving them unmatched is exact parity.
         // ---- Logged models (LOGGED_MODEL_BEFORE_REQUEST_HANDLERS) ----
         ("MlflowService", "createLoggedModel") => UpdateExperiment,
         ("MlflowService", "getLoggedModel") => ReadLoggedModel,
