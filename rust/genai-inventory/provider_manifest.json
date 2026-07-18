@@ -1,9 +1,9 @@
 {
   "coverage": {
-    "explicit_native": 6,
+    "explicit_native": 8,
     "models": 2908,
     "openai_compatible": 6,
-    "pinned_litellm_transform": 179,
+    "pinned_litellm_transform": 177,
     "providers": 191,
     "unsupported": 0
   },
@@ -114,7 +114,7 @@
       "verification": "hermetic_matrix"
     },
     {
-      "adapter": "pinned_litellm_transform",
+      "adapter": "explicit_native",
       "capabilities": {
         "chat": true,
         "cost": false,
@@ -669,7 +669,7 @@
       "verification": "hermetic_matrix"
     },
     {
-      "adapter": "pinned_litellm_transform",
+      "adapter": "explicit_native",
       "capabilities": {
         "chat": true,
         "cost": false,

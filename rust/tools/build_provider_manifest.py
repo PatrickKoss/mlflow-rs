@@ -18,6 +18,14 @@ SOURCE = RUST_ROOT / "genai-inventory" / "providers.json"
 DESTINATION = RUST_ROOT / "genai-inventory" / "provider_manifest.json"
 
 EXPLICIT_ADAPTERS = {"openai", "azure", "anthropic", "gemini", "bedrock", "databricks"}
+# Aliases the Rust runtime folds onto explicit adapters (normalize_provider in
+# gateway_provider_matrix.rs); classify them the same so the manifest and
+# adapter_for() never disagree.
+EXPLICIT_ALIASES = {
+    "amazon-bedrock": "bedrock",
+    "databricks-model-serving": "databricks",
+    "azure-openai": "azure",
+}
 DIFFERENTIAL_ADAPTERS = {"openai", "azure", "anthropic", "gemini"}
 OPENAI_COMPATIBLE = {"groq", "deepseek", "xai", "openrouter", "ollama", "portkey"}
 CHAT_NATIVE = (
@@ -82,10 +90,11 @@ def main() -> None:
             or "embedding" in provider_modes
             or name in EMBEDDING_NATIVE
         )
-        if name in EXPLICIT_ADAPTERS:
+        normalized = EXPLICIT_ALIASES.get(name, name)
+        if normalized in EXPLICIT_ADAPTERS:
             adapter = "explicit_native"
             verification = (
-                "differential_fixture" if name in DIFFERENTIAL_ADAPTERS else "hermetic_matrix"
+                "differential_fixture" if normalized in DIFFERENTIAL_ADAPTERS else "hermetic_matrix"
             )
         elif name in OPENAI_COMPATIBLE:
             adapter = "openai_compatible"
