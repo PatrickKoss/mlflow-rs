@@ -17,10 +17,10 @@
 //! regex maps are derived once from the proto `ROUTE_TABLE` keyed on
 //! `(service, method)` — exactly as Python keys `BEFORE_REQUEST_HANDLERS` on the
 //! proto request class — plus the hand-registered auth/artifact/trace routes.
-//! Only routes actually served by this Rust server are wired; unimplemented
-//! Python-only surfaces (gateway) are intentionally absent (they never
-//! route here, so their validators would be dead code). Prompt optimization
-//! and review queues are live and carry the same validators as Python
+//! Only routes actually served by this Rust server are wired. Gateway discovery
+//! and `gateway-proxy` need no resource validator (Python authenticates them
+//! globally, with `validate_gateway_proxy` returning `True` for the bridge).
+//! Prompt optimization and review queues are live and carry the same validators as Python
 //! (experiment-inherited for prompt optimization; the full owner/member/
 //! manager rule set for review queues).
 

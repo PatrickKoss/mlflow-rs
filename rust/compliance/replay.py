@@ -638,6 +638,8 @@ Corpus sections map to plan section 3 as follows:
 - workspaces (separate boot) -> 3.17 (X-MLFLOW-WORKSPACE scoping)
 - prompt_optimization -> 12.7 (queued create/get/search/cancel/delete + errors)
 - invoke -> 12.2-12.4 (invoke handles, validation, batching, pre-created runs/tags)
+- gateway -> 12.8 (CRUD plus bundled discovery and empty-target bridge behavior)
+- gateway_proxy_validation -> 12.8 (GET/POST validation before a closed local target)
 
 Deliberately deferred to follow-up (documented, not covered here): assessments
 FieldMask update paths (3.9) beyond create/get; trace artifact fetch dispatch
@@ -669,11 +671,19 @@ def _run_sqlite_sections(
     results: list[CaseResult] = []
     creds: dict[str, tuple[str, str]] = {}
     submission_sections = {"prompt_optimization", "invoke"} & sections.keys()
-    extra_env = {}
+    # Discovery parity must use the checked-in catalog on both sides. Python's
+    # default points at a mutable GitHub release and would make a historical
+    # corpus depend on network availability and release timing.
+    extra_env = {
+        "MLFLOW_MODEL_CATALOG_URI": "",
+        "MLFLOW_DEPLOYMENTS_TARGET": "",
+        "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
+    }
     python_extra_env = {}
     rust_extra_env = {}
     if submission_sections:
         extra_env = {
+            **extra_env,
             "MLFLOW_SERVER_SCORER_INVOKE_BATCH_SIZE": "2",
             "MLFLOW_RUN_CONTEXT": json.dumps({
                 "mlflow.user": "corpus-user",
@@ -762,6 +772,7 @@ def _run_auth_section(
         # (CSRF); the Rust server owns its own per-process secret (plan D12)
         # and ignores this.
         "MLFLOW_FLASK_SERVER_SECRET_KEY": "t124-compliance-secret",
+        "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
     }
     results: list[CaseResult] = []
     try:
@@ -804,7 +815,10 @@ def _run_workspace_section(
     _seed_tracking_db(seed_db)
     artifact_root = workroot / "artifacts"
     artifact_root.mkdir(parents=True, exist_ok=True)
-    extra_env = {"MLFLOW_ENABLE_WORKSPACES": "true"}
+    extra_env = {
+        "MLFLOW_ENABLE_WORKSPACES": "true",
+        "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
+    }
     results: list[CaseResult] = []
     creds: dict[str, tuple[str, str]] = {}
     try:
@@ -818,6 +832,30 @@ def _run_workspace_section(
         skipped.append({"section": "workspaces", "reason": f"workspace-enabled boot failed: {exc}"})
         return []
     return results
+
+
+def _run_gateway_proxy_validation_section(
+    cases: list[Case],
+    allow: list[AllowEntry],
+    workroot: Path,
+) -> list[CaseResult]:
+    """Differentially exercise proxy validation without a live target."""
+    seed_db = workroot / "seed.db"
+    _seed_tracking_db(seed_db)
+    artifact_root = workroot / "artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    extra_env = {
+        "MLFLOW_DEPLOYMENTS_TARGET": "http://127.0.0.1:1",
+        "MLFLOW_MODEL_CATALOG_URI": "",
+        "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
+    }
+    creds: dict[str, tuple[str, str]] = {}
+    with DualServers(workroot, seed_db, artifact_root, extra_env=extra_env) as servers:
+        py_bindings: dict[str, Any] = {}
+        rust_bindings: dict[str, Any] = {}
+        return [
+            run_case(case, servers, py_bindings, rust_bindings, allow, creds) for case in cases
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -844,6 +882,7 @@ def main() -> int:
     auth_cases = sections.pop("auth", [])
     workspace_cases = sections.pop("workspaces", [])
     invoke_cases = sections.pop("invoke", [])
+    gateway_proxy_validation_cases = sections.pop("gateway_proxy_validation", [])
 
     all_results: list[CaseResult] = []
     if sections:
@@ -852,6 +891,13 @@ def main() -> int:
     if invoke_cases:
         with tempfile.TemporaryDirectory(prefix="t124-invoke-") as td:
             all_results.extend(_run_sqlite_sections({"invoke": invoke_cases}, allow, Path(td)))
+    if gateway_proxy_validation_cases:
+        with tempfile.TemporaryDirectory(prefix="t182-proxy-validation-") as td:
+            all_results.extend(
+                _run_gateway_proxy_validation_section(
+                    gateway_proxy_validation_cases, allow, Path(td)
+                )
+            )
 
     if auth_cases:
         with tempfile.TemporaryDirectory(prefix="t124-auth-") as td:

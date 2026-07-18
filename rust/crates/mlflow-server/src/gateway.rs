@@ -1,9 +1,14 @@
-//! AI Gateway CRUD handlers.
+//! AI Gateway CRUD, discovery, and legacy deployments-bridge handlers.
+
+use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::request::Parts;
-use axum::response::Response;
+use axum::http::{header, Method, StatusCode};
+use axum::response::{IntoResponse, Response};
 use mlflow_error::MlflowError;
 use mlflow_proto::mlflow as pb;
 use mlflow_store::{
@@ -15,6 +20,624 @@ use mlflow_store::{
 use crate::proto_http::{parse_request, proto_response};
 use crate::state::AppState;
 use crate::workspace::Workspace;
+
+include!(concat!(env!("OUT_DIR"), "/model_catalog.rs"));
+
+const MODEL_CATALOG_URI_ENV: &str = "MLFLOW_MODEL_CATALOG_URI";
+const MODEL_CATALOG_CACHE_TTL_ENV: &str = "MLFLOW_MODEL_CATALOG_CACHE_TTL";
+const DEFAULT_MODEL_CATALOG_URI: &str =
+    "https://github.com/mlflow/mlflow/releases/download/model-catalog%2Flatest";
+const ALLOWED_PROVIDERS_ENV: &str = "MLFLOW_GATEWAY_ALLOWED_PROVIDERS";
+const DEPLOYMENTS_TARGET_ENV: &str = "MLFLOW_DEPLOYMENTS_TARGET";
+const KEK_PASSPHRASE_ENV: &str = "MLFLOW_CRYPTO_KEK_PASSPHRASE";
+
+const BEDROCK_CONFIG: &str = r#"{"auth_modes":[{"config_fields":[{"description":"AWS Region","name":"aws_region_name","required":true,"type":"string"}],"description":"Use Amazon Bedrock API Key (bearer token)","display_name":"API Key","mode":"api_key","secret_fields":[{"description":"Amazon Bedrock API Key","name":"api_key","required":true,"type":"string"}]},{"config_fields":[{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":false,"type":"string"}],"description":"Use AWS Access Key ID and Secret Access Key","display_name":"Access Keys","mode":"access_keys","secret_fields":[{"description":"AWS Access Key ID","name":"aws_access_key_id","required":true,"type":"string"},{"description":"AWS Secret Access Key","name":"aws_secret_access_key","required":true,"type":"string"}]},{"config_fields":[{"description":"IAM Role ARN to assume","name":"aws_role_name","required":true,"type":"string"},{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":false,"type":"string"}],"description":"Assume an IAM role using the server's ambient credentials (instance profile, IRSA, ECS task role, ~/.aws/credentials, etc.)","display_name":"IAM Role Assumption","mode":"iam_role","secret_fields":[]},{"config_fields":[{"description":"IAM Role ARN to assume (optional, for cross-account access)","name":"aws_role_name","required":false,"type":"string"},{"description":"Session name for assumed role","name":"aws_session_name","required":false,"type":"string"},{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":false,"type":"string"}],"description":"Use the server's default AWS credentials (instance profile, IRSA, ECS task role, ~/.aws/credentials, etc.)","display_name":"Default Credential Chain","mode":"default_chain","secret_fields":[]}],"default_mode":"api_key"}"#;
+const AZURE_CONFIG: &str = r#"{"auth_modes":[{"config_fields":[{"description":"Azure OpenAI endpoint URL","name":"api_base","required":true,"type":"string"},{"description":"API version (e.g., 2024-02-01)","name":"api_version","required":true,"type":"string"}],"description":"Use Azure OpenAI API Key","display_name":"API Key","mode":"api_key","secret_fields":[{"description":"Azure OpenAI API Key","name":"api_key","required":true,"type":"string"}]}],"default_mode":"api_key"}"#;
+const VERTEX_AI_CONFIG: &str = r#"{"auth_modes":[{"config_fields":[{"description":"GCP Project ID","name":"vertex_project","required":true,"type":"string"},{"default":"us-central1","description":"GCP Region (e.g., us-central1)","name":"vertex_location","required":false,"type":"string"}],"description":"Use GCP Service Account credentials (JSON key file contents)","display_name":"Service Account JSON","mode":"service_account_json","secret_fields":[{"description":"Service Account JSON key file contents","name":"vertex_credentials","required":true,"type":"string"}]},{"config_fields":[{"description":"GCP Project ID","name":"vertex_project","required":true,"type":"string"},{"default":"us-central1","description":"GCP Region (e.g., us-central1)","name":"vertex_location","required":false,"type":"string"}],"description":"Use the server's Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS, gcloud auth application-default login, or attached GCE/GKE/Cloud Run service account)","display_name":"Application Default Credentials","mode":"default_chain","secret_fields":[]}],"default_mode":"service_account_json"}"#;
+const DATABRICKS_CONFIG: &str = r#"{"auth_modes":[{"config_fields":[{"description":"Databricks workspace URL","name":"api_base","required":true,"type":"string"}],"description":"Use Databricks Personal Access Token","display_name":"Personal Access Token","mode":"pat_token","secret_fields":[{"description":"Databricks Personal Access Token","name":"api_key","required":true,"type":"string"}]},{"config_fields":[{"description":"Databricks workspace URL","name":"api_base","required":true,"type":"string"},{"description":"OAuth Client ID","name":"client_id","required":true,"type":"string"}],"description":"Use OAuth machine-to-machine authentication","display_name":"OAuth M2M (Service Principal)","mode":"oauth_m2m","secret_fields":[{"description":"OAuth Client Secret","name":"client_secret","required":true,"type":"string"}]}],"default_mode":"pat_token"}"#;
+const SAGEMAKER_CONFIG: &str = r#"{"auth_modes":[{"config_fields":[{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":true,"type":"string"}],"description":"Use AWS Access Key ID and Secret Access Key","display_name":"Access Keys","mode":"access_keys","secret_fields":[{"description":"AWS Access Key ID","name":"aws_access_key_id","required":true,"type":"string"},{"description":"AWS Secret Access Key","name":"aws_secret_access_key","required":true,"type":"string"}]},{"config_fields":[{"description":"IAM Role ARN to assume","name":"aws_role_name","required":true,"type":"string"},{"description":"Session name for assumed role","name":"aws_session_name","required":false,"type":"string"},{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":true,"type":"string"}],"description":"Assume an IAM role using base credentials (for cross-account access)","display_name":"IAM Role Assumption","mode":"iam_role","secret_fields":[{"description":"AWS Access Key ID (for assuming role)","name":"aws_access_key_id","required":true,"type":"string"},{"description":"AWS Secret Access Key","name":"aws_secret_access_key","required":true,"type":"string"}]},{"config_fields":[{"description":"IAM Role ARN to assume (optional, for cross-account access)","name":"aws_role_name","required":false,"type":"string"},{"description":"Session name for assumed role","name":"aws_session_name","required":false,"type":"string"},{"description":"AWS Region (e.g., us-east-1)","name":"aws_region_name","required":false,"type":"string"}],"description":"Use the server's default AWS credentials (instance profile, IRSA, ECS task role, ~/.aws/credentials, etc.)","display_name":"Default Credential Chain","mode":"default_chain","secret_fields":[]}],"default_mode":"access_keys"}"#;
+
+type CatalogModels = serde_json::Map<String, serde_json::Value>;
+
+#[derive(Clone)]
+struct CachedCatalog {
+    inserted: Instant,
+    models: Option<CatalogModels>,
+}
+
+fn bundled_catalogs() -> &'static Vec<(&'static str, CatalogModels)> {
+    static CATALOGS: OnceLock<Vec<(&'static str, CatalogModels)>> = OnceLock::new();
+    CATALOGS.get_or_init(|| {
+        BUNDLED_MODEL_CATALOGS
+            .iter()
+            .map(|(provider, raw)| {
+                let value: serde_json::Value =
+                    serde_json::from_str(raw).expect("bundled model catalog is valid JSON");
+                let models = value
+                    .get("models")
+                    .and_then(serde_json::Value::as_object)
+                    .cloned()
+                    .unwrap_or_default();
+                (*provider, models)
+            })
+            .collect()
+    })
+}
+
+fn normalize_provider_alias(provider: &str) -> &str {
+    match provider {
+        "amazon-bedrock" => "bedrock",
+        "databricks-model-serving" => "databricks",
+        _ => provider,
+    }
+}
+
+fn consolidate_provider(provider: &str) -> &str {
+    if provider == "vertex_ai" || provider.starts_with("vertex_ai-") {
+        "vertex_ai"
+    } else {
+        provider
+    }
+}
+
+fn allowed_providers() -> Option<HashSet<String>> {
+    let raw = std::env::var(ALLOWED_PROVIDERS_ENV).ok()?;
+    let providers = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| normalize_provider_alias(&value.to_ascii_lowercase()).to_string())
+        .collect::<HashSet<_>>();
+    (!providers.is_empty()).then_some(providers)
+}
+
+fn is_provider_allowed(provider: &str) -> bool {
+    allowed_providers().is_none_or(|allowed| {
+        allowed.contains(normalize_provider_alias(&provider.to_ascii_lowercase()))
+    })
+}
+
+/// `GET /ajax-api/3.0/mlflow/gateway/supported-providers`.
+pub async fn supported_providers(_workspace: Workspace) -> Response {
+    let mut providers = bundled_catalogs()
+        .iter()
+        .filter_map(|(provider, _)| {
+            (*provider != "bedrock_converse")
+                .then(|| consolidate_provider(provider))
+                .filter(|provider| is_provider_allowed(provider))
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    providers.sort_unstable();
+    flask_json_response(&serde_json::json!({"providers": providers}))
+}
+
+/// `GET /ajax-api/3.0/mlflow/gateway/supported-models`.
+pub async fn supported_models(_workspace: Workspace, parts: Parts) -> Response {
+    let provider_filter = first_query_value(&parts, "provider");
+    match model_list(provider_filter.as_deref()).await {
+        Ok(models) => flask_json_response(&serde_json::json!({"models": models})),
+        Err(()) => generic_500_response(),
+    }
+}
+
+/// `GET /ajax-api/3.0/mlflow/gateway/provider-config`.
+pub async fn provider_config(_workspace: Workspace, parts: Parts) -> Result<Response, MlflowError> {
+    let provider = first_query_value(&parts, "provider").unwrap_or_default();
+    if provider.is_empty() {
+        return Err(MlflowError::invalid_parameter_value(
+            "Provider parameter is required",
+        ));
+    }
+    if !is_provider_allowed(&provider) {
+        return Err(MlflowError::invalid_parameter_value(format!(
+            "Provider '{provider}' is not allowed by the current gateway provider policy."
+        )));
+    }
+    let normalized = normalize_provider_alias(&provider.to_ascii_lowercase()).to_string();
+    let raw = match normalized.as_str() {
+        "bedrock" | "bedrock_converse" => Some(BEDROCK_CONFIG),
+        "azure" => Some(AZURE_CONFIG),
+        "vertex_ai" => Some(VERTEX_AI_CONFIG),
+        "databricks" => Some(DATABRICKS_CONFIG),
+        "sagemaker" => Some(SAGEMAKER_CONFIG),
+        _ => None,
+    };
+    let config = match raw {
+        Some(raw) => serde_json::from_str(raw).expect("static provider config is valid JSON"),
+        None => simple_provider_config(&normalized),
+    };
+    Ok(flask_json_response(&config))
+}
+
+/// `GET /ajax-api/3.0/mlflow/gateway/secrets/config`.
+pub async fn secrets_config(_workspace: Workspace) -> Response {
+    let using_default_passphrase = std::env::var(KEK_PASSPHRASE_ENV)
+        .ok()
+        .is_none_or(|value| value.is_empty());
+    flask_json_response(&serde_json::json!({
+        "secrets_available": true,
+        "using_default_passphrase": using_default_passphrase,
+    }))
+}
+
+/// GET/POST `/ajax-api/2.0/mlflow/gateway-proxy`.
+pub async fn gateway_proxy(_workspace: Workspace, parts: Parts, body: Bytes) -> Response {
+    let Some(target) = std::env::var(DEPLOYMENTS_TARGET_ENV)
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        // Python returns before reading request args/JSON or validating the path.
+        return flask_json_response(&serde_json::json!({"endpoints": []}));
+    };
+
+    let (gateway_path, json_data) = if parts.method == Method::GET {
+        (
+            first_query_value(&parts, "gateway_path").map(serde_json::Value::String),
+            first_query_value(&parts, "json_data").map(serde_json::Value::String),
+        )
+    } else {
+        let Some(content_type) = parts
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+        else {
+            return unsupported_media_type_response();
+        };
+        let media_type = content_type.split(';').next().unwrap_or_default().trim();
+        if media_type != "application/json"
+            && !(media_type.starts_with("application/") && media_type.ends_with("+json"))
+        {
+            return unsupported_media_type_response();
+        }
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(&body) else {
+            return bad_request_html_response();
+        };
+        let Some(object) = value.as_object() else {
+            return generic_500_response();
+        };
+        (
+            object.get("gateway_path").cloned(),
+            object.get("json_data").cloned(),
+        )
+    };
+
+    let gateway_path = match gateway_path {
+        None | Some(serde_json::Value::Null) => {
+            return MlflowError::invalid_parameter_value(
+                "Deployments proxy request must specify a gateway_path.",
+            )
+            .into_response();
+        }
+        Some(serde_json::Value::String(value)) if value.is_empty() => {
+            return MlflowError::invalid_parameter_value(
+                "Deployments proxy request must specify a gateway_path.",
+            )
+            .into_response();
+        }
+        Some(serde_json::Value::String(value)) => value,
+        Some(value) if !python_truthy(&value) => {
+            return MlflowError::invalid_parameter_value(
+                "Deployments proxy request must specify a gateway_path.",
+            )
+            .into_response();
+        }
+        Some(_) => return generic_500_response(),
+    };
+
+    if !valid_gateway_path(&parts.method, &gateway_path) {
+        return MlflowError::invalid_parameter_value(format!(
+            "Invalid gateway_path: {gateway_path} for method: {}",
+            parts.method
+        ))
+        .into_response();
+    }
+
+    let url = format!("{target}/{gateway_path}");
+    let mut request = reqwest::Client::new().request(parts.method.clone(), url);
+    if let Some(json_data) = json_data.filter(|value| !value.is_null()) {
+        request = request
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(python_json_dumps(&json_data, false, true));
+    }
+    let Ok(response) = request.send().await else {
+        return generic_500_response();
+    };
+    let status = response.status();
+    let Ok(text) = response.text().await else {
+        return generic_500_response();
+    };
+    if status != StatusCode::OK {
+        return MlflowError::internal_error(format!(
+            "Deployments proxy request failed with error code {}. Error message: {text}",
+            status.as_u16()
+        ))
+        .into_response();
+    }
+    match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(serde_json::Value::Object(value)) => {
+            flask_json_response(&serde_json::Value::Object(value))
+        }
+        Ok(serde_json::Value::Array(value)) => {
+            flask_json_response(&serde_json::Value::Array(value))
+        }
+        Ok(serde_json::Value::String(value)) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(axum::body::Body::from(value))
+            .expect("valid string response"),
+        Ok(_) => generic_500_response(),
+        Err(_) => generic_500_response(),
+    }
+}
+
+async fn model_list(provider_filter: Option<&str>) -> Result<Vec<serde_json::Value>, ()> {
+    let mut models = Vec::new();
+    let mut seen = HashSet::new();
+    for (file_provider, bundled) in bundled_catalogs() {
+        if *file_provider == "bedrock_converse" {
+            continue;
+        }
+        let normalized = consolidate_provider(file_provider);
+        if provider_filter.is_some_and(|filter| filter != normalized) {
+            continue;
+        }
+        let entries = load_provider(file_provider, bundled).await?;
+        for (raw_name, entry) in entries {
+            let mode = entry
+                .get("mode")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            if !matches!(mode.as_str(), Some("chat" | "completion" | "embedding"))
+                && !mode.is_null()
+            {
+                continue;
+            }
+            if !is_provider_allowed(normalized) {
+                continue;
+            }
+            let prefix = format!("{normalized}/");
+            let model_name = raw_name.strip_prefix(&prefix).unwrap_or(&raw_name);
+            if model_name.starts_with("ft:") {
+                continue;
+            }
+            if !seen.insert((normalized.to_string(), model_name.to_string())) {
+                continue;
+            }
+            models.push(model_response(model_name, normalized, &mode, &entry));
+        }
+    }
+    Ok(models)
+}
+
+fn model_response(
+    model_name: &str,
+    provider: &str,
+    mode: &serde_json::Value,
+    entry: &serde_json::Value,
+) -> serde_json::Value {
+    let context = entry
+        .get("context_window")
+        .and_then(serde_json::Value::as_object);
+    let pricing = entry.get("pricing").and_then(serde_json::Value::as_object);
+    let capabilities = entry
+        .get("capabilities")
+        .and_then(serde_json::Value::as_object);
+    let per_token = |field: &str| {
+        pricing
+            .and_then(|value| value.get(field))
+            .and_then(serde_json::Value::as_f64)
+            .and_then(|value| serde_json::Number::from_f64(value / 1_000_000.0))
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null)
+    };
+    let capability = |field: &str| {
+        capabilities
+            .and_then(|value| value.get(field))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    };
+    serde_json::json!({
+        "deprecation_date": entry.get("deprecation_date").cloned().unwrap_or(serde_json::Value::Null),
+        "input_cost_per_token": per_token("input_per_million_tokens"),
+        "last_updated_at": entry.get("last_updated_at").cloned().unwrap_or(serde_json::Value::Null),
+        "max_input_tokens": context.and_then(|value| value.get("max_input")).cloned().unwrap_or(serde_json::Value::Null),
+        "max_output_tokens": context.and_then(|value| value.get("max_output")).cloned().unwrap_or(serde_json::Value::Null),
+        "modality": pricing.and_then(|value| value.get("modality")).cloned().unwrap_or(serde_json::Value::Null),
+        "mode": mode,
+        "model": model_name,
+        "output_cost_per_token": per_token("output_per_million_tokens"),
+        "provider": provider,
+        "supports_function_calling": capability("function_calling"),
+        "supports_prompt_caching": capability("prompt_caching"),
+        "supports_reasoning": capability("reasoning"),
+        "supports_response_schema": capability("response_schema"),
+        "supports_vision": capability("vision"),
+    })
+}
+
+async fn load_provider(provider: &str, bundled: &CatalogModels) -> Result<CatalogModels, ()> {
+    let base = std::env::var(MODEL_CATALOG_URI_ENV)
+        .unwrap_or_else(|_| DEFAULT_MODEL_CATALOG_URI.to_string());
+    if base.is_empty() {
+        return Ok(bundled.clone());
+    }
+    if let Some(models) = cached_remote_provider(provider).await? {
+        if !models.is_empty() {
+            return Ok(models);
+        }
+    }
+    Ok(bundled.clone())
+}
+
+async fn cached_remote_provider(provider: &str) -> Result<Option<CatalogModels>, ()> {
+    static CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, CachedCatalog>>> = OnceLock::new();
+    static TTL: OnceLock<Result<Duration, ()>> = OnceLock::new();
+    let ttl = *TTL.get_or_init(|| {
+        let seconds = match std::env::var(MODEL_CATALOG_CACHE_TTL_ENV) {
+            Ok(value) => value.parse::<i64>().map_err(|_| ())?,
+            Err(_) => 86_400,
+        };
+        Ok(Duration::from_secs(seconds.max(0) as u64))
+    });
+    let ttl = ttl?;
+    let cache = CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    if let Some(entry) = cache.lock().await.get(provider).cloned() {
+        if entry.inserted.elapsed() < ttl {
+            return Ok(entry.models);
+        }
+    }
+    let models = fetch_remote_provider(provider).await?;
+    cache.lock().await.insert(
+        provider.to_string(),
+        CachedCatalog {
+            inserted: Instant::now(),
+            models: models.clone(),
+        },
+    );
+    Ok(models)
+}
+
+async fn fetch_remote_provider(provider: &str) -> Result<Option<CatalogModels>, ()> {
+    let base = std::env::var(MODEL_CATALOG_URI_ENV)
+        .unwrap_or_else(|_| DEFAULT_MODEL_CATALOG_URI.to_string());
+    let url = format!("{}/{provider}.json", base.trim_end_matches('/'));
+    let value = if let Some(path) = url.strip_prefix("file://") {
+        let path = percent_decode_path(path);
+        match tokio::fs::read_to_string(path).await {
+            Ok(raw) => serde_json::from_str(&raw).ok(),
+            Err(_) => None,
+        }
+    } else if url.starts_with("http://") || url.starts_with("https://") {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .map_err(|_| ())?;
+        let mut parsed = None;
+        for attempt in 0..=3 {
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    parsed = response.json::<serde_json::Value>().await.ok();
+                    break;
+                }
+                Ok(response)
+                    if matches!(
+                        response.status().as_u16(),
+                        404 | 408 | 429 | 500 | 502 | 503 | 504
+                    ) && attempt < 3 =>
+                {
+                    tokio::time::sleep(Duration::from_secs(1 << attempt)).await;
+                }
+                _ => break,
+            }
+        }
+        parsed
+    } else {
+        return Err(());
+    };
+    Ok(value
+        .and_then(|value| value.get("models").cloned())
+        .and_then(|value| value.as_object().cloned()))
+}
+
+fn first_query_value(parts: &Parts, name: &str) -> Option<String> {
+    parts
+        .uri
+        .query()
+        .map(crate::proto_http::parse_query_pairs)
+        .unwrap_or_default()
+        .into_iter()
+        .find_map(|(key, value)| (key == name).then_some(value))
+}
+
+fn simple_provider_config(provider: &str) -> serde_json::Value {
+    let display = python_title(provider);
+    serde_json::json!({
+        "auth_modes": [{
+            "config_fields": [{
+                "description": format!("{display} API Base URL"),
+                "name": "api_base",
+                "required": false,
+                "type": "string",
+            }],
+            "description": format!("Use {display} API Key"),
+            "display_name": "API Key",
+            "mode": "api_key",
+            "secret_fields": [{
+                "description": format!("{display} API Key"),
+                "name": "api_key",
+                "required": true,
+                "type": "string",
+            }],
+        }],
+        "default_mode": "api_key",
+    })
+}
+
+fn python_title(value: &str) -> String {
+    let mut start = true;
+    value
+        .chars()
+        .map(|ch| {
+            let out = if start {
+                ch.to_ascii_uppercase()
+            } else {
+                ch.to_ascii_lowercase()
+            };
+            start = !ch.is_alphanumeric();
+            out
+        })
+        .collect()
+}
+
+fn valid_gateway_path(method: &Method, path: &str) -> bool {
+    let stripped = path.trim_matches('/');
+    if *method == Method::GET {
+        return stripped == "api/2.0/endpoints";
+    }
+    if *method != Method::POST {
+        return true;
+    }
+    let Some(name) = stripped
+        .strip_prefix("gateway/")
+        .and_then(|value| value.strip_suffix("/invocations"))
+    else {
+        return false;
+    };
+    !name.is_empty() && !name.contains('/')
+}
+
+fn python_truthy(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(value) => *value,
+        serde_json::Value::Number(value) => value.as_f64() != Some(0.0),
+        serde_json::Value::String(value) => !value.is_empty(),
+        serde_json::Value::Array(value) => !value.is_empty(),
+        serde_json::Value::Object(value) => !value.is_empty(),
+    }
+}
+
+fn percent_decode_path(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = |value: u8| match value {
+                b'0'..=b'9' => Some(value - b'0'),
+                b'a'..=b'f' => Some(value - b'a' + 10),
+                b'A'..=b'F' => Some(value - b'A' + 10),
+                _ => None,
+            };
+            if let (Some(high), Some(low)) = (hex(bytes[index + 1]), hex(bytes[index + 2])) {
+                out.push(high << 4 | low);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn flask_json_response(value: &serde_json::Value) -> Response {
+    let mut body = python_json_dumps(value, true, false);
+    body.push('\n');
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(body))
+        .expect("valid JSON response")
+}
+
+fn python_json_dumps(value: &serde_json::Value, sort_keys: bool, spaces: bool) -> String {
+    fn write(out: &mut String, value: &serde_json::Value, sort_keys: bool, spaces: bool) {
+        match value {
+            serde_json::Value::Null => out.push_str("null"),
+            serde_json::Value::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+            serde_json::Value::Number(value) if value.is_f64() => {
+                out.push_str(&mlflow_proto::python_float_repr(
+                    value.as_f64().expect("f64 JSON number"),
+                ));
+            }
+            serde_json::Value::Number(value) => out.push_str(&value.to_string()),
+            serde_json::Value::String(value) => {
+                out.push_str(&mlflow_proto::quote_json_string(value));
+            }
+            serde_json::Value::Array(values) => {
+                out.push('[');
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                        if spaces {
+                            out.push(' ');
+                        }
+                    }
+                    write(out, value, sort_keys, spaces);
+                }
+                out.push(']');
+            }
+            serde_json::Value::Object(values) => {
+                out.push('{');
+                let mut entries = values.iter().collect::<Vec<_>>();
+                if sort_keys {
+                    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+                }
+                for (index, (key, value)) in entries.into_iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                        if spaces {
+                            out.push(' ');
+                        }
+                    }
+                    out.push_str(&mlflow_proto::quote_json_string(key));
+                    out.push(':');
+                    if spaces {
+                        out.push(' ');
+                    }
+                    write(out, value, sort_keys, spaces);
+                }
+                out.push('}');
+            }
+        }
+    }
+    let mut out = String::new();
+    write(&mut out, value, sort_keys, spaces);
+    out
+}
+
+fn generic_500_response() -> Response {
+    const BODY: &str = "<!doctype html>\n<html lang=en>\n<title>500 Internal Server Error</title>\n<h1>Internal Server Error</h1>\n<p>The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>\n";
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        BODY,
+    )
+        .into_response()
+}
+
+fn unsupported_media_type_response() -> Response {
+    const BODY: &str = "<!doctype html>\n<html lang=en>\n<title>415 Unsupported Media Type</title>\n<h1>Unsupported Media Type</h1>\n<p>Did not attempt to load JSON data because the request Content-Type was not &#39;application/json&#39;.</p>\n";
+    (
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        BODY,
+    )
+        .into_response()
+}
+
+fn bad_request_html_response() -> Response {
+    const BODY: &str = "<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n<h1>Bad Request</h1>\n<p>The browser (or proxy) sent a request that this server could not understand.</p>\n";
+    (
+        StatusCode::BAD_REQUEST,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        BODY,
+    )
+        .into_response()
+}
 
 macro_rules! parse {
     ($parts:expr, $body:expr, $ty:ty, $name:literal) => {
