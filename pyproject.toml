@@ -405,6 +405,7 @@ ignore = [
 # The Rust differential-replay harness (T12.4) is a dev/CI CLI that prints its
 # progress and section listing to stdout.
 "rust/compliance/*" = ["T201"]
+"rust/bench/*" = ["T201"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = false
