@@ -4,19 +4,25 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use mlflow_genai::{
-    execute_worker_request, WorkerRequest, WorkerResponse, NATIVE_WORKER_PROTOCOL_VERSION,
+    decode_worker_request, execute_worker_request, WorkerResponse, NATIVE_WORKER_PROTOCOL_VERSION,
 };
 
 const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
 #[cfg(debug_assertions)]
 const SPIKE_MODE_ENV: &str = "MLFLOW_GENAI_WORKER_SPIKE_MODE";
+#[cfg(debug_assertions)]
+const SPIKE_PID_FILE_ENV: &str = "MLFLOW_GENAI_WORKER_SPIKE_PID_FILE";
+#[cfg(debug_assertions)]
+const SPIKE_FD_ENV: &str = "MLFLOW_GENAI_WORKER_SPIKE_FD";
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Internal grandchild mode has no protocol input of its own. It is only
+    // reachable from the debug-only, already-validated parent fault hook.
     #[cfg(debug_assertions)]
-    {
-        if let Some(exit) = run_spike_hook() {
-            return exit;
+    if std::env::var(SPIKE_MODE_ENV).as_deref() == Ok("child-hang") {
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
         }
     }
 
@@ -39,20 +45,18 @@ async fn main() -> ExitCode {
         ));
     }
 
-    let request: WorkerRequest = match serde_json::from_slice(&request_bytes) {
+    let request = match decode_worker_request(&request_bytes) {
         Ok(request) => request,
-        Err(error) => {
-            let job_id = serde_json::from_slice::<serde_json::Value>(&request_bytes)
-                .ok()
-                .and_then(|value| value.get("job_id")?.as_str().map(str::to_string))
-                .unwrap_or_else(|| "<unknown>".to_string());
-            return write_response(WorkerResponse::failed(
-                job_id,
-                "INVALID_REQUEST_ENVELOPE",
-                error.to_string(),
-            ));
-        }
+        Err(response) => return write_response(response),
     };
+
+    // Fault injection runs only after the version and closed kind allowlist
+    // have been validated, proving negative envelopes cannot execute hooks.
+    #[cfg(debug_assertions)]
+    if let Some(exit) = run_spike_hook() {
+        return exit;
+    }
+
     write_response(execute_worker_request(&request).await)
 }
 
@@ -77,6 +81,26 @@ fn run_spike_hook() -> Option<ExitCode> {
             print!("not-a-{NATIVE_WORKER_PROTOCOL_VERSION}-envelope");
             Some(ExitCode::SUCCESS)
         }
+        Some("stdout-large") => {
+            print!("{}", "x".repeat(5 * 1024 * 1024));
+            Some(ExitCode::SUCCESS)
+        }
+        Some("stderr-large-nonzero") => {
+            eprint!("{}", "x".repeat(5 * 1024 * 1024));
+            Some(ExitCode::from(24))
+        }
+        Some("delay") => {
+            std::thread::sleep(Duration::from_millis(200));
+            None
+        }
+        Some("assert-fd-closed") => {
+            let fd = std::env::var(SPIKE_FD_ENV).expect("spike FD is configured");
+            if std::path::Path::new(&format!("/proc/self/fd/{fd}")).exists() {
+                eprintln!("inherited_fd={fd}");
+                return Some(ExitCode::FAILURE);
+            }
+            None
+        }
         Some("spawn-child-and-hang") => {
             let mut child = std::process::Command::new(
                 std::env::current_exe().expect("current worker executable has a path"),
@@ -85,12 +109,13 @@ fn run_spike_hook() -> Option<ExitCode> {
             .spawn()
             .expect("spike child worker starts");
             eprintln!("child_pid={}", child.id());
+            if let Some(path) = std::env::var_os(SPIKE_PID_FILE_ENV) {
+                std::fs::write(path, child.id().to_string()).expect("spike child PID file writes");
+            }
             let _ = child.wait();
             Some(ExitCode::FAILURE)
         }
-        Some("child-hang") => loop {
-            std::thread::sleep(Duration::from_secs(60));
-        },
+        Some("child-hang") => unreachable!("child mode is handled before protocol input"),
         Some(mode) => {
             eprintln!("unknown {SPIKE_MODE_ENV} value {mode:?}");
             Some(ExitCode::FAILURE)

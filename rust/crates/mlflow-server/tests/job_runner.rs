@@ -40,6 +40,7 @@ impl JobExecutor for TestRegistry {
                 JobExecutionResult::Failed {
                     error: format!("Invalid job name: {}", request.job_name),
                     transient: false,
+                    details: None,
                 }
             }),
         }
@@ -81,11 +82,16 @@ async fn wait_for_status(store: &JobStore, workspace: &str, job_id: &str, status
 async fn wait_finalized(store: &JobStore, workspace: &str, job_id: &str) -> JobStatus {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let status = store.get_job(workspace, job_id).await.unwrap().status;
+        let row = store.get_job(workspace, job_id).await.unwrap();
+        let status = row.status;
         if status.is_finalized() {
             return status;
         }
-        assert!(Instant::now() < deadline, "job {job_id} did not finalize");
+        assert!(
+            Instant::now() < deadline,
+            "job {job_id} ({}) stayed in {status}",
+            row.job_name
+        );
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }
@@ -111,6 +117,7 @@ async fn succeeds_fails_propagates_row_context_and_creates_no_queue_files() {
             JobExecutionResult::Failed {
                 error: "RuntimeError()".to_string(),
                 transient: false,
+                details: None,
             }
         })
     });
@@ -296,6 +303,7 @@ async fn transient_retries_use_python_counter_and_backoff_policy() {
                 JobExecutionResult::Failed {
                     error: "RuntimeError('transient')".to_string(),
                     transient: true,
+                    details: None,
                 }
             } else {
                 JobExecutionResult::Succeeded(json!(100))
@@ -307,6 +315,7 @@ async fn transient_retries_use_python_counter_and_backoff_policy() {
             JobExecutionResult::Failed {
                 error: "RuntimeError('always')".to_string(),
                 transient: true,
+                details: None,
             }
         })
     });

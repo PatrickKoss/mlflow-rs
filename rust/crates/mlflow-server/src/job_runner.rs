@@ -48,7 +48,12 @@ pub struct JobExecutionRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub enum JobExecutionResult {
     Succeeded(Value),
-    Failed { error: String, transient: bool },
+    Failed {
+        error: String,
+        transient: bool,
+        /// Structured native-worker diagnostics merged into status_details.
+        details: Option<Value>,
+    },
 }
 
 pub type JobExecutionFuture = Pin<Box<dyn Future<Output = JobExecutionResult> + Send + 'static>>;
@@ -436,6 +441,16 @@ async fn execute_claimed(
                 }
                 if let Some(timeout) = job.timeout {
                     if started.elapsed().as_secs_f64() >= timeout {
+                        let details = serde_json::json!({
+                            "failure_type": "timeout",
+                            "timeout_ms": (timeout * 1000.0) as u64,
+                        });
+                        if let Err(error) = store
+                            .update_status_details(&job.workspace, &job.job_id, &details)
+                            .await
+                        {
+                            tracing::error!(job_id = %job.job_id, %error, "failed to record timeout details");
+                        }
                         if let Err(error) = store.mark_job_timed_out(&job.workspace, &job.job_id).await {
                             tracing::error!(job_id = %job.job_id, %error, "failed to mark timed-out job");
                         }
@@ -464,26 +479,32 @@ async fn finish_execution(
         Ok(JobExecutionResult::Failed {
             error,
             transient: true,
-        }) => match store
-            .retry_or_fail_job(&job.workspace, &job.job_id, &error, config.max_retries)
-            .await
-        {
-            Ok(Some(retry_count)) => JobCompletion {
-                retry: Some((
-                    job.job_id.clone(),
-                    Instant::now() + retry_delay(config, retry_count),
-                )),
-            },
-            Ok(None) => JobCompletion { retry: None },
-            Err(store_error) => {
-                tracing::error!(job_id = %job.job_id, error = %store_error, "failed to retry job");
-                JobCompletion { retry: None }
+            details,
+        }) => {
+            record_execution_details(store, job, details.as_ref()).await;
+            match store
+                .retry_or_fail_job(&job.workspace, &job.job_id, &error, config.max_retries)
+                .await
+            {
+                Ok(Some(retry_count)) => JobCompletion {
+                    retry: Some((
+                        job.job_id.clone(),
+                        Instant::now() + retry_delay(config, retry_count),
+                    )),
+                },
+                Ok(None) => JobCompletion { retry: None },
+                Err(store_error) => {
+                    tracing::error!(job_id = %job.job_id, error = %store_error, "failed to retry job");
+                    JobCompletion { retry: None }
+                }
             }
-        },
+        }
         Ok(JobExecutionResult::Failed {
             error,
             transient: false,
+            details,
         }) => {
+            record_execution_details(store, job, details.as_ref()).await;
             fail_unless_finalized(store, job, &error).await;
             JobCompletion { retry: None }
         }
@@ -492,6 +513,18 @@ async fn finish_execution(
             fail_unless_finalized(store, job, &error).await;
             JobCompletion { retry: None }
         }
+    }
+}
+
+async fn record_execution_details(store: &JobStore, job: &Job, details: Option<&Value>) {
+    let Some(details) = details else {
+        return;
+    };
+    if let Err(error) = store
+        .update_status_details(&job.workspace, &job.job_id, details)
+        .await
+    {
+        tracing::error!(job_id = %job.job_id, %error, "failed to record execution details");
     }
 }
 
