@@ -3307,9 +3307,32 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       implemented=10, planned=0 — ALL §12 route families now fully
       accounted. Workspace 1,288+ tests. Gates all 0; corpus 188, zero
       non-allowlisted diffs.
-- [ ] **T18.5 Traffic split + fallback**: weighted routing and sequential
+- [x] **T18.5 Traffic split + fallback**: weighted routing and sequential
       fallback incl. status propagation and attempt accounting.
       **AC/VER:** statistical + deterministic tests on mock providers.
+      **DONE (2026-07-19, codex agent, merge 305d6bd9e):** weights use
+      Python's `int(weight*100)` truncation + float32 normalization;
+      mixed zero-weights never selected; all-zero reproduces Python's
+      `ValueError: probabilities contain NaN`; endpoint-model order
+      preserved, categorical cumulative selection. RNG deviation
+      documented (thread-local vs NumPy MT19937 — distribution-equivalent,
+      order-only; T17.3 precedent). Fallbacks stably sorted by
+      fallback_order (missing last); max_attempts = Python's
+      primary+fallback accounting with zero→default and provider-count
+      cap; every normal provider exception falls back, pre-routing
+      validation/config errors propagate immediately; final recognized
+      status propagates, generic→500, "All N fallback attempts failed.
+      Last error: ..." byte-exact. No attempt-count header (Python exposes
+      none — asserted via recorder call counts). Streaming fallback active
+      MID-STREAM (partial chunks from failed provider followed by next
+      provider's; terminal failure = SSE error frame at HTTP 200).
+      Verified: deterministic 0/100+single-target, scripted fallback
+      chains, 100k-selection statistical (±1% of truncated 69/31), Python
+      differential oracle incl. partial-stream fallback. Merge surgery:
+      stream_response kept T18.5's lazy ProviderStream (drops eager
+      connect); restored primary_model helper for T18.4's raw-proxy path
+      (raw proxy bypasses split/fallback, per differential). Gates all 0;
+      corpus 188, zero non-allowlisted diffs.
 - [ ] **T18.6 Budget enforcement**: policy CRUD already in T18.1; tracker
       (in-memory + Redis), spend query over span `total_cost`, 429 message
       byte-parity, ALERT webhooks through the Part I dispatcher, gateway-call
