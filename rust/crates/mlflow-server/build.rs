@@ -31,6 +31,43 @@ fn main() {
     });
 
     println!("cargo::rustc-env=MLFLOW_VERSION={version}");
+
+    generate_model_catalog(repo_root);
+}
+
+/// Generate an ordered table of bundled provider catalogs. Python's
+/// `importlib.resources.glob("*.json")` preserves the directory iteration
+/// order, and `get_models()` uses that order when no provider filter is given.
+/// Keeping the same `read_dir` order here makes the compiled-in, Python-free
+/// catalog reproduce that observable ordering.
+fn generate_model_catalog(repo_root: &Path) {
+    let catalog_dir = repo_root.join("mlflow/utils/model_catalog");
+    println!("cargo::rerun-if-changed={}", catalog_dir.display());
+
+    let mut generated = String::from("pub static BUNDLED_MODEL_CATALOGS: &[(&str, &str)] = &[\n");
+    for entry in fs::read_dir(&catalog_dir)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", catalog_dir.display()))
+    {
+        let path = entry.expect("model catalog directory entry").path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let provider = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .expect("model catalog filename is UTF-8");
+        println!("cargo::rerun-if-changed={}", path.display());
+        generated.push_str(&format!(
+            "    ({provider:?}, include_str!({:?})),\n",
+            path.to_string_lossy()
+        ));
+    }
+    generated.push_str("];\n");
+
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+    let output = out_dir.join("model_catalog.rs");
+    fs::write(&output, generated)
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", output.display()));
 }
 
 /// Parses the `VERSION = "3.14.1.dev0"` line out of `mlflow/version.py`'s

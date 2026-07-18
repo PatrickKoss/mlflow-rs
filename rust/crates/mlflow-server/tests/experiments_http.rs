@@ -752,11 +752,10 @@ async fn bad_max_results_is_invalid_parameter_value() {
 #[tokio::test]
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
-    // A route-table RPC that `handler_for` does not yet wire up → 404 (no route
-    // match). Gateway discovery (§12.8) is a later phase (T18.2), so the
-    // hand-registered `supported-models` route still falls through. This
-    // sentinel moves forward as later-phase route families land.
-    let res = get(&server, "/ajax-api/3.0", "/mlflow/gateway/supported-models").await;
+    // An unimplemented hand-registered family still falls through with no route
+    // match. Assistant routes (§12.10) remain planned for T20.1, so this
+    // sentinel moves forward from gateway discovery now that T18.2 has landed.
+    let res = get(&server, "/ajax-api/3.0", "/mlflow/assistant/config").await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     // Route miss, not a JSON error body from a matched handler.
     assert!(res.body.is_empty(), "{}", res.body);

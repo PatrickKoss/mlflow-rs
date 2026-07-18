@@ -276,6 +276,13 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
             axum::extract::DefaultBodyLimit::max(artifacts::MAX_UPLOAD_ARTIFACT_BYTES + 1024),
         ),
     );
+    // Legacy deployments bridge (`server/__init__.py:146-148`). Unlike the
+    // discovery handlers below, Python does not decorate this route with
+    // `_disable_if_artifacts_only`, so keep it on the artifacts-only surface.
+    router = router.route(
+        "/ajax-api/2.0/mlflow/gateway-proxy",
+        get(gateway::gateway_proxy).post(gateway::gateway_proxy),
+    );
     if artifacts_only {
         return register_role_and_auth_layers(router, state);
     }
@@ -338,6 +345,29 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         get(server_info::server_info),
     );
     // ---- end server-info (T11.5) ----
+
+    // ---- AI Gateway discovery (T18.2, §12.8) ----
+    // AUTH GAP (D21 posture): Python's basic-auth app authenticates these
+    // ajax-only routes globally but gives them no resource-specific validator.
+    // Workspace resolution still runs first, while the catalog/config payload
+    // itself is intentionally workspace-independent just like Python.
+    router = router.route(
+        "/ajax-api/3.0/mlflow/gateway/supported-providers",
+        get(gateway::supported_providers),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/gateway/supported-models",
+        get(gateway::supported_models),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/gateway/provider-config",
+        get(gateway::provider_config),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/gateway/secrets/config",
+        get(gateway::secrets_config),
+    );
+    // ---- end AI Gateway discovery ----
 
     // ---- generic jobs (T16.5, §12.2/§12.13) ----
     // Python serves BOTH families. These `/mlflow/jobs` paths fall through the

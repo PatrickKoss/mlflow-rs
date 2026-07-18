@@ -1,0 +1,31 @@
+# Plan §12.8 - gateway-proxy validation. The target is a deliberately closed
+# localhost port; every case is rejected before any connection is attempted.
+cases:
+  - name: gateway_proxy_get_missing_path
+    method: GET
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    expect_status: 400
+
+  - name: gateway_proxy_get_invalid_path
+    method: GET
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    query: {gateway_path: not-a-gateway-path}
+    expect_status: 400
+
+  - name: gateway_proxy_post_missing_path
+    method: POST
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    body: {}
+    expect_status: 400
+
+  - name: gateway_proxy_post_invalid_nested_path
+    method: POST
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    body: {gateway_path: gateway/name/extra/invocations}
+    expect_status: 400
+
+  - name: gateway_proxy_post_non_json_content_type
+    method: POST
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    raw_body: '{}'
+    expect_status: 415

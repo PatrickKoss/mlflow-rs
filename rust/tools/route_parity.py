@@ -138,6 +138,17 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
 )
 IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
     route_info(
+        "12.8",
+        "T18.2",
+        "get_endpoints",
+        ("GET", "/ajax-api/3.0/mlflow/gateway/provider-config"),
+        ("GET", "/ajax-api/3.0/mlflow/gateway/secrets/config"),
+        ("GET", "/ajax-api/3.0/mlflow/gateway/supported-models"),
+        ("GET", "/ajax-api/3.0/mlflow/gateway/supported-providers"),
+    )
+)
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
         "12.2",
         "T17.4",
         "get_endpoints",
@@ -167,15 +178,6 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
 # Two demo-data routes are adjacent GenAI UI surface but are not listed in §12.
 PLANNED_GET_ENDPOINT_ROUTES = {
     **planned(
-        "12.8",
-        "T18.2",
-        "get_endpoints",
-        ("GET", "/ajax-api/3.0/mlflow/gateway/provider-config"),
-        ("GET", "/ajax-api/3.0/mlflow/gateway/secrets/config"),
-        ("GET", "/ajax-api/3.0/mlflow/gateway/supported-models"),
-        ("GET", "/ajax-api/3.0/mlflow/gateway/supported-providers"),
-    ),
-    **planned(
         "demo",
         "T20.4",
         "get_endpoints",
@@ -184,19 +186,20 @@ PLANNED_GET_ENDPOINT_ROUTES = {
     ),
 }
 
+IMPLEMENTED_EXTERNAL_ROUTES = route_info(
+    "12.8",
+    "T18.2",
+    "server/__init__.py",
+    ("GET", "/ajax-api/2.0/mlflow/gateway-proxy"),
+    ("POST", "/ajax-api/2.0/mlflow/gateway-proxy"),
+)
+
 # §12 routes mounted outside handlers.get_endpoints(): two Flask routes in
 # server/__init__.py and the FastAPI gateway/assistant routers. They cannot
 # participate in that function's parity diff, but keeping the concrete
 # (method, path) inventory here prevents them from disappearing from T15.2's
 # accounting.
 PLANNED_EXTERNAL_ROUTES = {
-    **planned(
-        "12.8",
-        "T18.2",
-        "server/__init__.py",
-        ("GET", "/ajax-api/2.0/mlflow/gateway-proxy"),
-        ("POST", "/ajax-api/2.0/mlflow/gateway-proxy"),
-    ),
     **planned(
         "12.9",
         "T18.3",
@@ -313,7 +316,10 @@ def proto_section_routes(routes: list[dict[str, str]]) -> dict[str, set[Route]]:
 def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
     print("§12 route accounting (proto metadata plus classified hand routes):")
     all_non_proto = (
-        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+        PLANNED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_GET_ENDPOINT_ROUTES
+        | PLANNED_EXTERNAL_ROUTES
+        | IMPLEMENTED_EXTERNAL_ROUTES
     )
     for section, title in SECTION_TITLES.items():
         generated = len(proto_routes.get(section, set()))
@@ -327,7 +333,7 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
         suffix = f"; {phase_text}" if phase_text else ""
         implemented = sum(
             info.section == section for info in IMPLEMENTED_GET_ENDPOINT_ROUTES.values()
-        )
+        ) + sum(info.section == section for info in IMPLEMENTED_EXTERNAL_ROUTES.values())
         print(
             f"  §{section} {title}: implemented={proto_implemented + implemented}, "
             f"planned={proto_planned + len(hand) - implemented} "
@@ -339,7 +345,10 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
 
 def section_route_counts(proto_routes: dict[str, set[Route]]) -> dict[str, int]:
     all_non_proto = (
-        PLANNED_GET_ENDPOINT_ROUTES | IMPLEMENTED_GET_ENDPOINT_ROUTES | PLANNED_EXTERNAL_ROUTES
+        PLANNED_GET_ENDPOINT_ROUTES
+        | IMPLEMENTED_GET_ENDPOINT_ROUTES
+        | PLANNED_EXTERNAL_ROUTES
+        | IMPLEMENTED_EXTERNAL_ROUTES
     )
     return {
         section: len(proto_routes.get(section, set()))
@@ -382,7 +391,7 @@ def compare() -> int:
         for section, expected in EXPECTED_SECTION_ROUTE_COUNTS.items()
         if actual_section_counts[section] != expected
     ]
-    bad_planned_get_count = len(planned_get) != 6
+    bad_planned_get_count = len(planned_get) != 2
 
     ok = True
     if rust_only:
@@ -437,7 +446,7 @@ def compare() -> int:
     if bad_planned_get_count:
         ok = False
         print(
-            "FAILURE: expected exactly 6 phase-tagged non-proto get_endpoints routes, "
+            "FAILURE: expected exactly 2 phase-tagged non-proto get_endpoints routes, "
             f"found {len(planned_get)}"
         )
 

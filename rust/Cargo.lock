@@ -1886,6 +1886,7 @@ dependencies = [
  "mlflow-webhooks",
  "prost",
  "prost-types",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2",

@@ -1,6 +1,53 @@
 # Plan §12.8 - AI Gateway CRUD. Secret read responses contain only Python's
 # masked value shape; encrypted/plaintext bytes are never recorded.
 cases:
+  - name: gateway_supported_providers
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-providers
+    expect_status: 200
+
+  - name: gateway_supported_models_openai
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-models
+    query: {provider: openai}
+    expect_status: 200
+
+  - name: gateway_supported_models_empty_filter
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-models
+    query: {provider: does-not-exist}
+    expect_status: 200
+
+  - name: gateway_provider_config
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/provider-config
+    query: {provider: openai}
+    expect_status: 200
+
+  - name: gateway_provider_config_missing_provider
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/provider-config
+    expect_status: 400
+
+  - name: gateway_secrets_config
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/secrets/config
+    expect_status: 200
+
+  # With MLFLOW_DEPLOYMENTS_TARGET unset, Python returns the empty service
+  # before reading or validating either request shape.
+  - name: gateway_proxy_empty_target_get
+    method: GET
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    query: {gateway_path: deliberately-invalid}
+    expect_status: 200
+
+  - name: gateway_proxy_empty_target_post
+    method: POST
+    path: /ajax-api/2.0/mlflow/gateway-proxy
+    raw_body: deliberately-not-json
+    expect_status: 200
+
   - name: gateway_create_secret_masked
     method: POST
     path: /api/3.0/mlflow/gateway/secrets/create
