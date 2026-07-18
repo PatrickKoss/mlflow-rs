@@ -69,10 +69,6 @@ _skip_if_rust_gateway_unimplemented = pytest.mark.skipif(
     _RUN_AGAINST_RUST,
     reason="Rust server does not implement the gateway API yet",
 )
-_skip_if_rust_prompt_optimization_unimplemented = pytest.mark.skipif(
-    _RUN_AGAINST_RUST,
-    reason="Rust server does not implement the prompt-optimization API yet",
-)
 
 
 def _isolate_auth_config(extra_env: dict[str, str], tmp_path: Path) -> dict[str, str]:
@@ -2918,7 +2914,6 @@ def test_gateway_endpoint_requires_fallback_model_definition_use_permission(clie
     [{"MLFLOW_AUTH_CONFIG_PATH": "fixtures/no_permission_auth.ini"}],
     indirect=True,
 )
-@_skip_if_rust_prompt_optimization_unimplemented
 def test_prompt_optimization_job_search_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)
@@ -2962,7 +2957,6 @@ def test_prompt_optimization_job_search_permissions(client, monkeypatch):
     assert response.status_code != 403
 
 
-@_skip_if_rust_prompt_optimization_unimplemented
 def test_prompt_optimization_job_create_permissions(client, monkeypatch):
     user1, password1 = create_user(client.tracking_uri)
     user2, password2 = create_user(client.tracking_uri)

@@ -118,6 +118,7 @@ ID_FIELDS = frozenset({
     "delivery_id",
     "eval_id",
     "dataset_id",
+    "job_id",
 })
 
 TOKEN_FIELDS = frozenset({

@@ -27,6 +27,7 @@ pub mod logged_models;
 pub mod metric_history;
 pub mod metrics;
 pub mod otlp;
+pub mod prompt_optimization;
 pub mod proto_http;
 pub mod registry;
 pub mod routes;
@@ -507,6 +508,32 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
             ("testWebhook", "POST") => post(webhooks::test_webhook),
             _ => return None,
         });
+    }
+    if service == "MlflowService" {
+        let prompt_optimization = match (method, http_method) {
+            ("createPromptOptimizationJob", "POST") => {
+                Some(post(prompt_optimization::create_prompt_optimization_job))
+            }
+            ("getPromptOptimizationJob", "GET") => {
+                Some(get(prompt_optimization::get_prompt_optimization_job))
+            }
+            ("searchPromptOptimizationJobs", "POST") => {
+                Some(post(prompt_optimization::search_prompt_optimization_jobs))
+            }
+            ("searchPromptOptimizationJobs", "GET") => {
+                Some(get(prompt_optimization::search_prompt_optimization_jobs))
+            }
+            ("cancelPromptOptimizationJob", "POST") => {
+                Some(post(prompt_optimization::cancel_prompt_optimization_job))
+            }
+            ("deletePromptOptimizationJob", "DELETE") => {
+                Some(delete(prompt_optimization::delete_prompt_optimization_job))
+            }
+            _ => None,
+        };
+        if prompt_optimization.is_some() {
+            return prompt_optimization;
+        }
     }
     // `ModelRegistryService` (plan T7.4, §3.14) — the 21 model-registry RPCs
     // under `/(api|ajax-api)/2.0/mlflow/{registered-models,model-versions}/...`.

@@ -107,6 +107,11 @@ async fn wait_for_port(port: u16) {
 }
 
 async fn request(method: Method, url: &str) -> (StatusCode, Value) {
+    let (status, body) = request_bytes(method, url).await;
+    (status, serde_json::from_slice(&body).unwrap())
+}
+
+async fn request_bytes(method: Method, url: &str) -> (StatusCode, Vec<u8>) {
     let client = Client::builder(TokioExecutor::new()).build_http();
     let response = client
         .request(
@@ -120,7 +125,7 @@ async fn request(method: Method, url: &str) -> (StatusCode, Value) {
         .unwrap();
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&body).unwrap())
+    (status, body.to_vec())
 }
 
 async fn post_json(url: &str, value: &Value) -> (StatusCode, Value) {
@@ -236,6 +241,104 @@ async fn python_and_rust_create_read_and_cancel_each_others_rows() {
         jobs.get_job(WS, &rust_job.job_id).await.unwrap().status,
         JobStatus::Canceled
     );
+
+    shutdown_tx.send(()).unwrap();
+    rust_server.await.unwrap();
+}
+
+#[tokio::test]
+async fn prompt_optimization_rows_created_by_either_server_have_identical_get_bytes() {
+    let directory = tempfile::tempdir().unwrap();
+    let db_path = directory.path().join("shared-prompt-optimization.db");
+    std::fs::copy(fixture_path(), &db_path).unwrap();
+    let uri = format!("sqlite:///{}", db_path.display());
+    let db = Db::connect(&uri, PoolConfig::default()).await.unwrap();
+    let tracking = TrackingStore::new(
+        db.clone(),
+        directory.path().join("artifacts").display().to_string(),
+    );
+    let experiment_id = tracking
+        .create_experiment(WS, "cross-server-prompt-optimization", None, &[])
+        .await
+        .unwrap();
+    let jobs = JobStore::new(db);
+
+    let recorder = PrometheusBuilder::new().build_recorder().handle();
+    let app = build_app_with_recorder(
+        &ServerConfig {
+            disable_security_middleware: true,
+            ..Default::default()
+        },
+        recorder,
+        Some(AppState::new(tracking)),
+    );
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let rust_address = listener.local_addr().unwrap();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let rust_server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+            .unwrap();
+    });
+    let rust_base = format!("http://{rust_address}");
+    let python = PythonServer::start(&uri, directory.path()).await;
+    let request = serde_json::json!({
+        "experiment_id": experiment_id,
+        "source_prompt_uri": "prompts:/cross-server/1",
+        "config": {
+            "optimizer_type": "OPTIMIZER_TYPE_METAPROMPT",
+            "scorers": [],
+            "optimizer_config_json": "{\"reflection_model\": \"openai:/gpt-5\"}"
+        }
+    });
+
+    let (status, rust_created) = post_json(
+        &format!("{rust_base}/api/3.0/mlflow/prompt-optimization/jobs"),
+        &request,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(rust_created["job"]["state"]["status"], "JOB_STATUS_PENDING");
+    let rust_job_id = rust_created["job"]["job_id"].as_str().unwrap();
+
+    let (status, python_created) = post_json(
+        &format!("{}/api/3.0/mlflow/prompt-optimization/jobs", python.base),
+        &request,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        python_created["job"]["state"]["status"],
+        "JOB_STATUS_PENDING"
+    );
+    let python_job_id = python_created["job"]["job_id"].as_str().unwrap();
+
+    for job_id in [rust_job_id, python_job_id] {
+        let rust_url = format!("{rust_base}/ajax-api/3.0/mlflow/prompt-optimization/jobs/{job_id}");
+        let python_url = format!(
+            "{}/ajax-api/3.0/mlflow/prompt-optimization/jobs/{job_id}",
+            python.base
+        );
+        let (rust_status, rust_body) = request_bytes(Method::GET, &rust_url).await;
+        let (python_status, python_body) = request_bytes(Method::GET, &python_url).await;
+        assert_eq!(rust_status, StatusCode::OK);
+        assert_eq!(python_status, StatusCode::OK);
+        assert_eq!(rust_body, python_body);
+
+        let row = jobs.get_job(WS, job_id).await.unwrap();
+        assert_eq!(row.job_name, "optimize_prompts");
+        assert_eq!(row.status, JobStatus::Pending);
+        let params: Value = serde_json::from_str(&row.params).unwrap();
+        assert_eq!(params["experiment_id"], experiment_id);
+        assert_eq!(params["optimizer_type"], "metaprompt");
+        assert_eq!(
+            params["optimizer_config"]["reflection_model"],
+            "openai:/gpt-5"
+        );
+    }
 
     shutdown_tx.send(()).unwrap();
     rust_server.await.unwrap();

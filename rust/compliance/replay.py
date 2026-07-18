@@ -625,6 +625,7 @@ Corpus sections map to plan section 3 as follows:
 - artifacts -> 3.11 (upload/list/download via proxy)
 - auth (separate boot) -> 3.16 (401/403/admin/non-admin)
 - workspaces (separate boot) -> 3.17 (X-MLFLOW-WORKSPACE scoping)
+- prompt_optimization -> 12.7 (queued create/get/search/cancel/delete + errors)
 
 Deliberately deferred to follow-up (documented, not covered here): assessments
 FieldMask update paths (3.9) beyond create/get; trace artifact fetch dispatch
@@ -655,7 +656,13 @@ def _run_sqlite_sections(
 
     results: list[CaseResult] = []
     creds: dict[str, tuple[str, str]] = {}
-    with DualServers(workroot, seed_db, artifact_root) as servers:
+    extra_env = {}
+    if "prompt_optimization" in sections:
+        extra_env = {
+            "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "true",
+            "_MLFLOW_HUEY_STORAGE_PATH": str(workroot),
+        }
+    with DualServers(workroot, seed_db, artifact_root, extra_env=extra_env) as servers:
         py_bindings: dict[str, Any] = {}
         rust_bindings: dict[str, Any] = {}
         for section, cases in sections.items():

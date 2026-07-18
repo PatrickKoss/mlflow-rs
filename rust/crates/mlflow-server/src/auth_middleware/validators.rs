@@ -161,6 +161,10 @@ pub enum Validator {
     ReadRun,
     UpdateRun,
     DeleteRun,
+    // ---- Prompt optimization jobs (inherit experiment through job params) ----
+    ReadPromptOptimizationJob,
+    UpdatePromptOptimizationJob,
+    DeletePromptOptimizationJob,
     // ---- Logged models (inherit experiment) ----
     ReadLoggedModel,
     UpdateLoggedModel,
@@ -253,6 +257,15 @@ impl Validator {
             ReadRun => Ok(experiment_perm_from_run(ctx).await?.can_read),
             UpdateRun => Ok(experiment_perm_from_run(ctx).await?.can_update),
             DeleteRun => Ok(experiment_perm_from_run(ctx).await?.can_delete),
+            ReadPromptOptimizationJob => Ok(experiment_perm_from_prompt_optimization_job(ctx)
+                .await?
+                .can_read),
+            UpdatePromptOptimizationJob => Ok(experiment_perm_from_prompt_optimization_job(ctx)
+                .await?
+                .can_update),
+            DeletePromptOptimizationJob => Ok(experiment_perm_from_prompt_optimization_job(ctx)
+                .await?
+                .can_delete),
             // Logged models inherit experiment.
             ReadLoggedModel => Ok(experiment_perm_from_model(ctx).await?.can_read),
             UpdateLoggedModel => Ok(experiment_perm_from_model(ctx).await?.can_update),
@@ -701,6 +714,30 @@ async fn experiment_perm_from_run(
     let run_id = require_param(ctx, "run_id")?;
     let run = ctx.tracking_store.get_run(ctx.workspace, &run_id).await?;
     experiment_permission(ctx, &run.info.experiment_id).await
+}
+
+/// `_get_permission_from_prompt_optimization_job_id` (`auth/__init__.py:868`):
+/// prompt-optimization jobs inherit permission from the `experiment_id` stored
+/// in their generic job params. The lookup stays workspace-scoped on both the
+/// job and experiment sides.
+async fn experiment_perm_from_prompt_optimization_job(
+    ctx: &RequestCtx<'_>,
+) -> Result<&'static Permission, MlflowError> {
+    let job_id = require_param(ctx, "job_id")?;
+    let job = mlflow_store::JobStore::new(ctx.tracking_store.db().clone())
+        .get_job(ctx.workspace, &job_id)
+        .await?;
+    let params: Value = serde_json::from_str(&job.params)
+        .map_err(|error| MlflowError::internal_error(error.to_string()))?;
+    let experiment_id = params
+        .get("experiment_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            MlflowError::internal_error(format!(
+                "Prompt optimization job {job_id} has no experiment_id parameter"
+            ))
+        })?;
+    experiment_permission(ctx, experiment_id).await
 }
 
 async fn experiment_perm_from_model(
