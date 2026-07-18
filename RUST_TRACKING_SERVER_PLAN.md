@@ -2,14 +2,15 @@
 
 **Part I** (§1–§10, Phases 0–14): everything except genai. **Part II** (§11–§18,
 Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app parity
-in Rust, retiring the Python server plane entirely.
+in a Python-free Rust deployment, retiring both the Python server plane and the
+Python job-execution runtime.
 
 Status: **in progress — Phases 2–8 and 10 complete; Phase 9 complete except
 T9.9 (admin UI validation); Phase 11 complete except T11.6 (UI smoke);
 Phase 12 complete except T12.3 (client-suite conformance, now unblocked) —
 the T12.4 differential corpus is GREEN (133 cases, 0 non-allowlisted diffs)
 and the compliance CI job is a required gate.** · Branch:
-`feature/rust-tracking-server` · Last updated: 2026-07-17
+`feature/rust-tracking-server` · Last updated: 2026-07-18
 
 **Resume notes (2026-07-17):** Phase 9 (auth/RBAC) is complete through T9.8.
 T12.4's differential harness was salvaged and landed as foundation, and the two
@@ -45,8 +46,8 @@ webhooks, auth/RBAC (incl. the admin/account UI backend), and workspaces** — f
 nginx, with full wire-level feature parity against the Python implementation. GenAI
 features (gateway, scorers, evaluation, issues, label schemas, review queues, prompt
 optimization, assistant, jobs) stay on the Python server **during Part I only** —
-Part II (§11 onward) plans their port; its end state keeps Python solely as an
-internal job-worker runtime (D14), not a server.
+Part II (§11 onward) ports their wire, storage, orchestration, and execution paths;
+its end state contains no Python runtime in the server deployment (D14).
 
 It is written so that individual tasks can be picked up by other contributors/models:
 every task has a checkbox, acceptance criteria (AC), and a verification method (VER).
@@ -2091,11 +2092,15 @@ decision IDs continue Part I's sequences.
   assistant, promptlab, and trace archival.
 - The Python *server plane* (uvicorn workers) is retired; the genai rows in
   §2.2's nginx table are deleted one phase at a time (T22.4).
-- Python remains only as an **internal execution runtime**: per-job worker
-  subprocesses spawned by the Rust job runner to execute genai payloads
-  (evaluation harness, scorer runs, issue detection, prompt optimization) —
-  see D14. The assistant keeps spawning external CLIs (`claude`, `codex`)
-  exactly as Python does today.
+- The production image contains **no Python interpreter, standard library,
+  site-packages, Python shared library, or `.py` payloads**. GenAI jobs execute
+  in a per-job Rust worker linked to the same native GenAI engine as the server
+  (D14). The assistant keeps spawning external CLIs (`claude`, `codex`)
+  exactly as the Python reference does today.
+- The public Python `mlflow.genai` SDK remains supported as a client: it keeps
+  constructing the existing scorer JSON and calling the unchanged HTTP API.
+  Python may run in development/CI as the differential oracle, never in the
+  production server deployment.
 
 ```
             ┌──────────────────────────────────────────────┐
@@ -2107,52 +2112,61 @@ decision IDs continue Part I's sequences.
                     │         Rust server          │
                     │  Part I surface + gateway,   │
                     │  genai CRUD, jobs runner,    │
+                    │  native scorer/judge engine │
                     │  assistant SSE, archival     │
                     └──┬─────────┬─────────┬───────┘
         spawns per job │         │ HTTPS   │ spawns per assistant turn
                        ▼         ▼         ▼
             ┌────────────────┐ ┌────────┐ ┌──────────────────┐
-            │ Python worker  │ │ LLM    │ │ claude / codex   │
-            │ (mlflow.genai  │ │ provi- │ │ CLIs (NDJSON     │
-            │ job payloads)  │ │ ders   │ │ streaming)       │
+            │ Rust GenAI     │ │ LLM    │ │ claude / codex   │
+            │ worker (same   │ │ provi- │ │ CLIs (NDJSON     │
+            │ native crates) │ │ ders   │ │ streaming)       │
             └────────────────┘ └────────┘ └──────────────────┘
 ```
 
-### 11.2 The one hard boundary: arbitrary Python execution
+### 11.2 Native execution boundary and compatibility contract
 
 The genai surface splits cleanly into three tiers:
 
 | Tier | What | Port strategy |
 |---|---|---|
 | **A — CRUD/wire** | eval datasets, scorers CRUD + online configs, issues CRUD, label schemas, review queues, prompt-opt job CRUD, jobs API, gateway CRUD (secrets/endpoints/model-defs/bindings/tags/budgets/guardrail configs) | native Rust, byte parity — same discipline as Part I |
-| **B — network runtime** | gateway proxying + SSE, budget enforcement, assistant SSE + CLI subprocesses + tool loop, trace archival, periodic schedulers | native Rust (tokio); no Python involved |
-| **C — Python payloads** | evaluation harness, scorer execution, issue-detection LLM pipeline, prompt optimization (`gepa`/litellm), decorator-scorer `exec` | Rust orchestrates (queue, states, retries, timeouts); the payload runs in a Python worker subprocess executing the existing `mlflow.genai` code |
+| **B — network/runtime** | gateway proxying + SSE, budget enforcement, assistant SSE + CLI subprocesses + tool loop, trace archival, periodic schedulers | native Rust (`tokio`); no Python involved |
+| **C — semantic execution** | scorer deserialization/execution, evaluation harness, issue discovery, online scoring, prompt optimization, inline judge guardrails | native `mlflow-genai` engine; async jobs run in the isolated Rust worker from D14 |
 
-Tier C is not a bolted-on compromise — it mirrors what Python already does.
-The current runner is three layers: Huey consumers → `_exec_job` → **a fresh
-`python -m mlflow.server.jobs._job_subproc_entry` subprocess per job**
-(`mlflow/server/jobs/utils.py:169,300`; `_job_subproc_entry.py:76` calls
-`function(**params)`). Rust replaces the first two layers (queue + dispatch)
-and keeps the third: the per-job subprocess boundary is already the contract.
-Consequence: deployments wanting scorer/eval/issue/prompt-opt execution need a
-Python env with `mlflow` installed next to the Rust binary (same container
-image); pure tracking/registry/gateway deployments don't.
+The Tier C contract is the behavior reachable from the OSS server at the
+pinned MLflow release, not every client-only helper exported by the Python SDK.
+The compatibility inventory is:
 
-Facts that make full-native Tier C impossible today (all verified):
+- `SerializedScorer` JSON: all concrete built-ins, `InstructionsJudge`,
+  `Guidelines`, and `MemoryAugmentedJudge`, including unknown-field tolerance,
+  version metadata, exact validation errors, aggregations, structured feedback,
+  and single-turn/session classification (`scorers/base.py`).
+- The four server-allowlisted third-party module families — DeepEval, Ragas,
+  TruLens, and Phoenix — including every metric present in the pinned compatible
+  package versions, their input mapping, deterministic algorithms, prompt
+  templates, threshold/rationale/metadata semantics, embeddings, and model calls
+  (`THIRD_PARTY_SCORER_ALLOWED_MODULES`, `scorer_utils.py:46`). Rust uses a
+  generated compatibility manifest rather than runtime dynamic imports.
+- Evaluation and online scoring: result standardization, `SCORER_ERROR`
+  capture, rate limits/retries, concurrency, trace/session grouping, expectation
+  and tag logging, assessment metadata, aggregate metrics, trace/run links,
+  sampling, and checkpoints (`evaluation/`, `scorers/job.py`, `scorers/online/`).
+- Issue discovery's sampling → triage → session analysis → LLM clustering/
+  resplitting/dedup → issue creation/annotation pipeline (`discovery/`).
+- The server's constrained single-prompt optimization job: native MetaPrompt
+  plus a port of the pinned GEPA algorithm and accepted `gepa_kwargs`, with the
+  same prompt registration, metrics, candidate artifacts, and result URI
+  (`optimize/job.py`, `optimize/optimizers/`).
 
-- Decorator scorers store raw Python source and are reconstructed via `exec()`
-  (`mlflow/genai/scorers/scorer_utils.py:179`). Python itself blocks them on
-  OSS backends (`base.py:574-585`) and blocks registration server-side
-  (`handlers.py:5461-5464`) — Rust replicates both blocks.
-- Third-party scorers dynamically `importlib.import_module` + instantiate
-  (`base.py:485-519`).
-- The eval harness calls each scorer as a Python callable
-  (`mlflow/genai/evaluation/harness.py:907-939`), capturing exceptions into
-  `Feedback` with `error_code="SCORER_ERROR"` (`harness.py:942-953`).
-- Issue detection is a 4-phase LLM pipeline over `mlflow.genai.evaluate` +
-  `make_judge` + LLM clustering (`mlflow/genai/discovery/pipeline.py:586`).
-- Prompt optimization imports the external `gepa` package and litellm
-  (`mlflow/genai/optimize/optimizers/gepa_optimizer.py:13`, `job.py:217,241`).
+Decorator scorers remain rejected on OSS exactly as Python rejects them: their
+payload contains raw Python source reconstructed by `exec()`, and therefore is
+not a capability of the OSS server (`base.py:574-585`, `handlers.py:5461-5464`).
+Client-only scorer integrations (for example Google ADK and Guardrails scorers)
+remain usable through the Python SDK; if their payload is sent to an OSS server,
+Rust reproduces Python's current unsupported-module behavior rather than
+silently expanding the wire contract. T15.5 accounts for every `mlflow/genai`
+module and test so no server-reachable Python behavior is missed.
 
 ### 11.3 Permanently out of scope (unchanged)
 
@@ -2215,7 +2229,7 @@ unique `(dataset_id, input_hash)`; recomputes schema/profile/digest
   `:5082-5089`).
 - The job (`mlflow/genai/evaluation/job.py:24`) links traces to the run,
   deserializes scorers via pydantic `Scorer.model_validate_json`, and runs
-  `mlflow.genai.evaluate` — Tier C. Results land as run metrics + trace
+  `mlflow.genai.evaluate` — native Tier C in Rust. Results land as run metrics + trace
   assessments + trace-run links (`harness.py:765-766,1015-1039`); there is no
   separate results table.
 
@@ -2253,7 +2267,7 @@ latest version per name (`:2737-2749`).
   `trace_count`).
 - `POST /ajax-api/3.0/mlflow/issues/invoke` (`handlers.py:6842-6849`, handler
   `:4925`): creates a detection run, submits `invoke_issue_detection_job` —
-  Tier C (LLM pipeline, `discovery/pipeline.py:586`).
+  native Tier C (LLM pipeline, `discovery/pipeline.py:586`).
 - Issue↔trace linkage is an **assessment** (`assessment_type="issue"`,
   `name=issue_id`, via `mlflow.log_issue`, `tracing/assessment.py:332-401`);
   `trace_count` = distinct trace_ids of those assessments
@@ -2294,7 +2308,7 @@ an MLflow run holding config as params (`:7429-7456`); proto responses are
 rebuilt from the job entity (`_build_prompt_optimization_job_from_entity`
 `:7477`), optimized-prompt URI read from the job result (`:7520-7524`).
 Execution (`optimize_prompts_job`, `mlflow/genai/optimize/job.py:250-321`) is
-Tier C.
+native Tier C.
 
 ### 12.8 Gateway CRUD (36 proto endpoints + 5 hand-rolled)
 
@@ -2538,23 +2552,80 @@ runner polls/claims from the table directly; the SqliteHuey queue files
 - Gating: `MLFLOW_SERVER_ENABLE_JOB_EXECUTION`, requires DB-backed store,
   rejects Windows (`utils.py:713-727`).
 
-### 14.2 Python worker protocol — D14
+### 14.2 Native Rust GenAI worker protocol — D14
 
-Per job, spawn a subprocess equivalent to
-`python -m mlflow.server.jobs._job_subproc_entry` with the function path +
-JSON params, restricted to the 6-function allowlist
-(`jobs/__init__.py:20-42`): `invoke_scorer_job`,
-`run_online_trace_scorer_job`, `run_online_session_scorer_job`,
-`optimize_prompts_job`, `invoke_issue_detection_job`,
-`invoke_genai_evaluate_job`. Env propagation: `MLFLOW_TRACKING_URI` →
-the Rust server, `MLFLOW_TRACKING_USERNAME`/`PASSWORD` (submitting user),
-`_MLFLOW_INTERNAL_GATEWAY_AUTH_TOKEN`, `MLFLOW_GATEWAY_URI`
-(`genai/scorers/job.py:168-171`, `server/__init__.py:466,511`). Optional
-per-job uv venvs from `pip_requirements` (`utils.py:196-228`) are v2 (D14
-consequence: worker jobs call BACK into the Rust server over HTTP for all
-store access — which Part I's parity work makes safe).
+Add a workspace crate `mlflow-genai` containing the semantic execution engine
+and a small `mlflow-genai-worker` binary linked to that exact crate version.
+The server spawns one worker subprocess per claimed job, preserving Python's
+hard timeout/cancel boundary and containing panics or runaway memory without
+embedding an interpreter.
 
-### 14.3 Gateway execution engine
+The protocol is versioned JSON: the server writes one request to stdin and the
+worker writes one success/result or structured failure envelope to stdout;
+logs go to stderr. Requests contain `{protocol_version, job_id, job_kind,
+params, workspace, subject}`. `job_kind` is a closed Rust enum matching the
+existing six-function allowlist (`jobs/__init__.py:20-42`):
+`invoke_scorer`, `run_online_trace_scorer`, `run_online_session_scorer`,
+`optimize_prompts`, `invoke_issue_detection`, `invoke_genai_evaluate`.
+Unknown versions/kinds fail before executing user-controlled data. Results and
+status details keep the existing jobs-table JSON shapes.
+
+Workers call back to the Rust server over its existing HTTP APIs for store and
+gateway access. The launcher propagates the submitting subject, workspace,
+`MLFLOW_TRACKING_URI`, `MLFLOW_GATEWAY_URI`, and the existing internal gateway
+credential so gateway RBAC is evaluated as the submitting user
+(`genai/scorers/job.py:168-171`, `server/__init__.py:466,511`). The launcher
+uses bounded stdin/stdout/stderr buffers, closes inherited file descriptors,
+kills the complete process group on cancel/timeout, and treats malformed
+output, signals, and non-zero exits as the same structured job failures as the
+Python reference. There is no `python -m` entrypoint, Python package handshake,
+`pip_requirements`, uv environment, or Python fallback.
+
+`mlflow-genai` is also linked into `mlflow-server` for low-latency inline
+execution (gateway guardrail judges and request validation); async evaluation,
+scoring, discovery, and optimization always use the worker boundary.
+
+### 14.3 Native GenAI semantic engine
+
+`mlflow-genai` is split by stable internal interfaces rather than Python module
+layout:
+
+- `SerializedScorer` is an untagged compatibility enum over the five mutually
+  exclusive payload forms (builtin, decorator, instructions, memory-augmented,
+  third-party). It retains unknown JSON fields for forward diagnostics and
+  reproduces Python's validation/error-class behavior. Decorator execution is
+  an explicit OSS rejection variant, never an evaluator.
+- `ScorerExecutor` accepts canonical `EvalItem`/session inputs and emits
+  canonical `Feedback` values or `SCORER_ERROR`; implementations cover every
+  concrete builtin, instructions/trace-tool judges, memory retrieval, and the
+  pinned third-party compatibility manifest.
+- `JudgeRuntime` owns prompt rendering, response JSON Schema, native provider
+  dispatch, retries/context pruning, tool loops, token/cost accounting, and
+  conversion to assessment sources/metadata. Gateway, issue discovery,
+  MetaPrompt, GEPA reflection, and third-party LLM metrics reuse it.
+- `EvaluationEngine` owns bounded prediction/scorer concurrency, rate limiting,
+  single-turn/session grouping, trace creation/linking, expectation/tag and
+  assessment writes, aggregate metrics, evaluator tracing, and cleanup.
+- `DiscoveryEngine` and `OptimizationEngine` implement the reference pipelines
+  as deterministic state machines whose external LLM/embedding calls are
+  injectable for differential tests.
+
+The third-party manifest is generated for pinned DeepEval/Ragas/TruLens/Phoenix
+versions and records every accepted module/class/metric, constructor schema,
+session level, deterministic-vs-LLM execution, prompt/version fingerprint, and
+model/embedding requirements. Deterministic algorithms and approved prompt/
+parser assets are ported with provenance and license metadata. A missing or
+license-incompatible implementation blocks the compatibility phase; it cannot
+be hidden behind an unsupported-provider allowlist.
+
+GEPA is likewise pinned and ported as a native algorithm: candidate state,
+Pareto/frontier selection, reflective batches, randomness/seed handling,
+metric-call budget, advanced `gepa_kwargs`, result selection, and artifact
+logging must match the reference snapshot. MetaPrompt ports its templates,
+baseline/final evaluation, variable-preservation validation, JSON cleanup, and
+fallback behavior directly.
+
+### 14.4 Gateway execution engine
 
 Native tokio/hyper: provider adapter trait mirroring `BaseProvider`
 (chat/chat_stream/completions/embeddings/passthrough/proxy +
@@ -2565,7 +2636,15 @@ passthrough without buffering (Part I's T5.2 discipline); secret TTL cache
 tracing of gateway calls into the (Rust) tracking store mirroring
 `maybe_traced_gateway_call` so `total_cost` span metrics keep feeding budgets.
 
-### 14.4 Assistant engine
+The pinned LiteLLM compatibility manifest includes every fallback provider,
+request/auth transform, response/stream normalization, retry classification,
+tokenizer/model limits, and cost entry reachable in the Python reference
+release. Rust implements that manifest natively; generic OpenAI-compatible
+providers share one adapter, while provider-specific transforms remain explicit.
+Unknown future providers fail exactly as the pinned reference does—there is no
+Python fallback.
+
+### 14.5 Assistant engine
 
 Tokio subprocess management (spawn/kill/PID files), NDJSON→SSE translation
 with the exact event vocabulary, session JSON files with atomic replace +
@@ -2574,7 +2653,7 @@ sandbox ported exactly (resolve-then-`relative_to` checks,
 `tool_executor.py:32-73` — security-critical, needs adversarial tests), and
 the permission pause/resume protocol.
 
-### 14.5 Periodic scheduler
+### 14.6 Periodic scheduler
 
 Replaces Huey `periodic_task(crontab)` + `lock_task`: a tokio interval
 scheduler running (a) the online-scoring scheduler every minute
@@ -2596,11 +2675,16 @@ runner uses.
    queues, prompt-opt CRUD, gateway CRUD, jobs API — all Tier A surfaces are
    replayable exactly like Part I endpoints. Job-dispatching endpoints
    (invoke routes) replay with the runner disabled (submission-side parity:
-   response shape, run/tag creation) and separately with a stub worker.
-2. **Existing Python suites** re-pointed at Rust via the Part I
+   response shape, run/tag creation) and separately with a deterministic native
+   worker/provider fixture.
+2. **Existing Python suites + reachability ledger**: suites re-point at Rust
+   via the Part I
    `MLFLOW_SERVER_TYPE=rust` switch — the genai suites under `tests/genai/`,
    `tests/server/jobs/`, gateway tests, and the store-level dataset/scorer/
-   issue/review-queue suites; exact inventory is T15.5's deliverable.
+   issue/review-queue suites. T15.5 classifies every `mlflow/genai` module,
+   public entry point, job-reachable function, and test as server-native,
+   client-only, Databricks-only, or intentionally rejected; no unclassified
+   row can pass CI.
 3. **SSE differential**: a recorder that captures full event streams
    (gateway + assistant) from both servers against a scripted mock provider /
    the `dev/dev_stubs` fake `claude`, diffing frame-by-frame — same spirit as
@@ -2611,6 +2695,17 @@ runner uses.
    hermetically.
 5. **Crypto interop**: secrets written by Python decrypt in Rust and vice
    versa on a shared DB (T15.3 fixtures, like Part I's Fernet/werkzeug tests).
+6. **Semantic differential corpus**: the pinned Python reference and Rust
+   engine receive identical scorer JSON, traces/datasets, clock, randomness,
+   and scripted LLM/embedding responses. Compare exact outbound provider
+   requests/tool transcripts and final assessments, metadata, metrics,
+   checkpoints, issues, prompt versions, job results, and artifacts.
+   Deterministic third-party metrics compare exact values; floating-point
+   tolerances require an individually documented numerical reason.
+7. **Python-free production gate**: build the final image with no Python
+   executable, stdlib, site-packages, `.py` files, or Python shared library;
+   scan the Rust sources/binary invocation trace for attempted Python launches,
+   then run every GenAI API/UI/job smoke with that image.
 
 ---
 
@@ -2641,18 +2736,24 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       directions, incl. AAD binding, masking rules, and kek_version rotation.
       **AC:** cross-language fixtures round-trip; wrong-AAD fails closed.
       **VER:** `rust/spikes/` tests green (Part I T0.4 pattern).
-- [ ] **T15.4 Worker-protocol spike**: Rust spawns a Python subprocess running
-      a trivial allowlisted job function end-to-end (params in, result JSON
-      out, exit-code/error propagation, kill-on-timeout).
-      **AC:** job lifecycle observable in the `jobs` table driven purely from
-      Rust.
-      **VER:** spike test green against a real Python env.
-- [ ] **T15.5 Test + corpus inventory**: enumerate the exact Python suites
-      covering each §12 area (genai, gateway, jobs, assistant, archival) and
-      which are launcher-parametrizable; define the genai differential-corpus
-      sections and the SSE-recorder design.
-      **AC:** written inventory appended to §15 with file paths.
-      **VER:** review.
+- [ ] **T15.4 Native engine + worker spike**: add skeleton `mlflow-genai` and
+      `mlflow-genai-worker`; parse a real builtin-scorer payload and execute
+      one deterministic scorer plus one instructions judge through the mock
+      gateway inside a spawned Rust worker (params/result envelopes,
+      non-zero/signal/malformed-output propagation, process-group timeout).
+      **AC:** job lifecycle is observable in the `jobs` table, outputs match
+      the Python fixtures, and the test environment has no Python executable.
+      **VER:** spike tests + production-image-style PATH isolation green.
+- [ ] **T15.5 Reachability, test, and corpus inventory**: enumerate every
+      `mlflow/genai` module/function/test plus §12 gateway/jobs/assistant/
+      archival suites; classify server reachability, record the native owner
+      and fixture, generate the pinned scorer/provider/GEPA compatibility
+      manifests, audit vendored algorithm/prompt licenses and provenance, and
+      define semantic/SSE corpus recorders.
+      **AC:** ledger has zero unclassified server paths and every accepted
+      third-party metric/provider in the pinned reference has an implementation
+      and test owner; a missing or license-blocked port blocks Part II.
+      **VER:** checked-in machine-readable manifest + generated Markdown report.
 
 ### Phase 16 — GenAI CRUD (Tier A)
 
@@ -2699,11 +2800,15 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **AC:** job-lifecycle suite parity incl. the CANCELED-when-locked and
       TIMEOUT paths; no queue files on disk.
       **VER:** `rust/tests/job_runner.rs` + Python jobs suites via launcher.
-- [ ] **T17.2 Worker protocol** per §14.2: allowlisted function spawn, env
-      propagation, result/error JSON capture, kill-on-timeout, back-pressure.
-      **AC:** all 6 job functions launch and report through the Rust runner
-      against a real Python env.
-      **VER:** integration test matrix (stub LLM).
+- [ ] **T17.2 Native worker protocol** per §14.2: versioned request/result
+      envelopes, closed six-kind dispatch enum, subject/workspace propagation,
+      bounded output, process-group kill-on-timeout/cancel, crash/malformed-
+      output mapping, and back-pressure.
+      **AC:** all six native job kinds launch and report through the Rust
+      runner with Python absent; protocol-version and unknown-kind negatives
+      fail before execution.
+      **VER:** integration matrix using the deterministic `mlflow-genai`
+      fixture + production-image-style PATH isolation.
 - [ ] **T17.3 Periodic scheduler + online-scoring scheduler**: tokio-based
       cron with DB locking; port the scheduler logic (config scan, grouping,
       shuffle, sampler waterfall, checkpoint tags, per-job caps).
@@ -2715,8 +2820,8 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       submission-side byte parity (pre-created runs, tags, response shapes,
       batching rules).
       **AC:** invoke responses + created runs/tags byte-match Python with the
-      worker stubbed.
-      **VER:** differential corpus (runner-stub mode).
+      deterministic native worker fixture.
+      **VER:** differential corpus (native fixture mode).
 
 ### Phase 18 — Gateway
 
@@ -2735,11 +2840,13 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **VER:** SSE recorder (T15.5 design) + adapter unit tests.
 - [ ] **T18.4 Full provider matrix**: passthrough + raw-proxy routes;
       bedrock/databricks auth modes; openai-compatible family
-      (groq/deepseek/xai/openrouter/ollama/portkey); litellm-fallback
-      behavior per D16; provider allowlist.
-      **AC:** every provider reachable in Python is reachable in Rust or
-      returns the D16-documented error.
-      **VER:** provider conformance table + mock tests.
+      (groq/deepseek/xai/openrouter/ollama/portkey); every pinned LiteLLM
+      fallback provider/request transform, model/token/cost entry, retry
+      classification, and provider allowlist behavior per D16.
+      **AC:** every provider reachable in the pinned Python reference is
+      reachable natively with request/response/stream/cost parity; zero
+      Python fallback and zero unsupported-provider allowlist entries.
+      **VER:** generated provider manifest + hermetic conformance matrix.
 - [ ] **T18.5 Traffic split + fallback**: weighted routing and sequential
       fallback incl. status propagation and attempt accounting.
       **AC/VER:** statistical + deterministic tests on mock providers.
@@ -2755,24 +2862,55 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **AC:** guardrail matrix (stage × action × violation) parity.
       **VER:** mock-judge differential.
 
-### Phase 19 — Execution parity (Tier C through the worker)
+### Phase 19 — Native GenAI execution parity (Tier C)
 
-- [ ] **T19.1 GenAI evaluate end-to-end**: invoke → worker →
-      assessments/metrics/trace-links identical to Python for builtin +
-      judge scorers (LLM stubbed via the gateway mock).
-      **AC:** run + trace state after evaluation diff-clean vs Python.
-      **VER:** end-to-end differential on a seeded trace corpus.
-- [ ] **T19.2 Scorer invoke + online scoring end-to-end**: batch jobs,
-      SCORER_ERROR capture semantics, checkpoint advancement, sampling.
-      **AC/VER:** same-seed scheduler+scorer run produces identical
-      assessments/checkpoints.
-- [ ] **T19.3 Issue detection end-to-end**: detection run, issue rows,
-      issue-assessments on traces (LLM stubbed).
-      **AC/VER:** issue set + trace annotations diff-clean.
-- [ ] **T19.4 Prompt optimization end-to-end**: GEPA + MetaPrompt paths
-      (optimizer LLM stubbed), run params, optimized-prompt registration,
-      job result URI.
-      **AC/VER:** job + run + prompt-registry state diff-clean.
+- [ ] **T19.1 Scorer model + native judges** per §14.3: exact
+      `SerializedScorer` parsing/round-trip/errors; all concrete deterministic
+      and LLM builtins; `InstructionsJudge`, `Guidelines`, trace tools and
+      structured output; `MemoryAugmentedJudge` embedding retrieval; explicit
+      OSS decorator rejection.
+      **AC:** every server-accepted non-third-party payload in T15.5's manifest
+      executes natively and produces request/feedback parity; every rejected
+      form returns Python's status/error class/message.
+      **VER:** scorer serialization corpus + scripted judge/tool/embedding
+      differential suites.
+- [ ] **T19.2 Evaluation, invoke, and online scoring**: native bounded
+      concurrency/rate limiting/retries, scorer-result standardization,
+      `SCORER_ERROR`, evaluator traces, single-turn/session grouping,
+      expectations/tags/assessments, aggregate metrics, batching, dense
+      sampling, checkpoints, cleanup, and all three scoring job kinds.
+      **AC:** evaluate-invoke, scorer-invoke, and same-seed online scoring
+      produce identical jobs, runs, traces, assessments, metrics, and
+      checkpoints with Python absent.
+      **VER:** seeded end-to-end semantic differential corpus.
+- [ ] **T19.3 Third-party scorer compatibility**: port every DeepEval,
+      Ragas, TruLens, and Phoenix metric in the pinned manifest, including
+      deterministic algorithms, prompts/parsers, input/session mapping,
+      thresholds, rationales, metadata, model/embedding calls, and dynamic-
+      metric error behavior.
+      **AC:** manifest coverage is 100%; deterministic values are exact and
+      scripted LLM request/feedback transcripts are diff-clean. No Python or
+      external Python package is installed in the execution image.
+      **VER:** per-family version matrix + license/provenance audit + golden
+      corpus generated from the pinned reference environments.
+- [ ] **T19.4 Native issue discovery**: sampling, scorer verification,
+      triage evaluation, session/error/execution-path extraction, latency
+      statistics, LLM clustering/summarization/resplitting/dedup, severity/
+      category filtering, issue rows, annotations, costs, progress, summary,
+      and run terminal state.
+      **AC:** scripted-model runs yield diff-clean issues, affected trace IDs,
+      assessments, summary artifact, cost tag, status details, and job result.
+      **VER:** phase-by-phase and end-to-end discovery differentials.
+- [ ] **T19.5 Native prompt optimization**: server-constrained prediction
+      from prompt model config, scorer aggregation, native MetaPrompt, pinned
+      GEPA algorithm/`gepa_kwargs`, seeded candidate selection, reflective
+      datasets, metric-call budget, candidate artifacts/metrics, prompt
+      registration/linkage, and job result URI.
+      **AC:** fixed-seed/scripted-model GEPA and MetaPrompt runs produce
+      identical candidate sequence, scores, artifacts, registered prompt,
+      run/job state, and failure behavior.
+      **VER:** optimizer state-machine differential + artifact byte/semantic
+      fixtures where reference formatting is intentionally nondeterministic.
 
 ### Phase 20 — Assistant + promptlab
 
@@ -2825,37 +2963,42 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       Python-written payloads both directions.
       **AC/VER:** cross-language payload fixtures.
 - [ ] **T21.4 Scheduler task**: minute tick + interval gate + workspace
-      fairness + per-pass budget on the §14.5 scheduler.
+      fairness + per-pass budget on the §14.6 scheduler.
       **AC/VER:** same-seed scheduling decisions match Python.
 
 ### Phase 22 — Compliance & cutover
 
-- [ ] **T22.1 Differential corpus genai sections** for every Tier A surface +
-      invoke submission parity; compliance CI stays a required gate.
-      **AC:** zero non-allowlisted diffs incl. genai sections.
+- [ ] **T22.1 Differential corpus genai sections** for every Tier A surface,
+      invoke submission, and §15 semantic-engine category; compliance CI stays
+      a required gate.
+      **AC:** zero non-allowlisted wire/state/semantic diffs including all
+      pinned scorer/provider/optimizer manifest entries.
       **VER:** CI artifact.
-- [ ] **T22.2 Python-suite conformance**: T15.5's inventoried suites green
-      against Rust via the launcher switch on the DB matrix.
-      **AC/VER:** CI logs.
+- [ ] **T22.2 Python-suite + reachability conformance**: T15.5's server-
+      reachable suites green against Rust via the launcher switch on the DB
+      matrix; ledger generator reports zero unclassified/missing native owners.
+      Client-only SDK suites remain green against the Rust HTTP server.
+      **AC/VER:** CI logs + generated coverage report.
 - [ ] **T22.3 SSE/streaming differential** (gateway + assistant) green
       frame-by-frame against mocks/stubs.
       **AC/VER:** recorder CI job.
 - [ ] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
       phase; final state removes the Python server container from
-      `rust/deploy/docker-compose.yml` (the image remains solely as the
-      worker runtime baked into the Rust container); `smoke.sh` asserts
-      zero `X-MLflow-Backend: python` responses.
+      `rust/deploy/docker-compose.yml` and removes Python from every production
+      image; `smoke.sh` asserts zero `X-MLflow-Backend: python` responses.
       **AC:** full-stack compose serves everything from Rust; genai UI pages
-      work.
-      **VER:** `smoke.sh` + `smoke_frontend.sh` extended.
+      and all six native job kinds work with `python`, libpython,
+      site-packages, and `.py` payloads absent.
+      **VER:** `smoke.sh` + `smoke_frontend.sh` + image-content/runtime-launch
+      audit extended.
 - [ ] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
       budgets/guardrails), scorers + evaluation runs pages, datasets, issues,
       review queues, labeling, prompt optimization, assistant panel.
       **AC/VER:** T11.6-style recorded checklist.
 - [ ] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
-      rotation, worker-runtime deployment (Python env alongside the binary),
-      Redis budget tracker option, assistant CLI prerequisites, archival
-      runbook.
+      rotation, native worker concurrency/memory/process supervision, pinned
+      scorer/provider/GEPA manifest upgrades, Redis budget tracker option,
+      assistant CLI prerequisites, and the archival runbook.
       **AC/VER:** fresh-operator walkthrough.
 
 ---
@@ -2864,20 +3007,21 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 | ID | Decision/Risk | Notes | Status |
 |---|---|---|---|
-| D14 | **Execution model**: Rust owns wire + storage + queue + scheduling; Tier C payloads execute in per-job Python worker subprocesses running the existing `mlflow.genai` code (the subprocess boundary Python already has). Workers talk back to the Rust server over HTTP. Native-Rust reimplementation of judges/harness is a possible v2, never a v1 gate. | Consequence: the deployment image bundles a Python env with `mlflow` for execution features; without it, invoke/online-scoring/detection/optimization return a clear "job execution disabled" error (mirroring `MLFLOW_SERVER_ENABLE_JOB_EXECUTION` off). | proposed |
+| D14 | **Python-free execution model**: Rust owns wire, storage, queueing, scheduling, and all GenAI semantics. Each async job runs in a per-job `mlflow-genai-worker` Rust subprocess linked to the same `mlflow-genai` crate as the server; workers use the existing Rust HTTP APIs for store/gateway access. No Python interpreter, package, venv, sidecar, or fallback is permitted in production. The Python `mlflow.genai` SDK remains a compatible client/test oracle; OSS decorator-scorer rejection is preserved. | Keeps hard cancel/timeout/crash isolation while eliminating Python. `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=0` still disables execution explicitly; a missing native worker is a startup/deployment error, not a reduced-function fallback mode. | decided |
 | D15 | **Legacy standalone YAML gateway** (`mlflow gateway start`) stays Python and deprecated; only the DB-backed embedded gateway is ported. | The `gateway-proxy` bridge route IS ported. | proposed |
-| D16 | **litellm coverage**: native adapters for the explicitly-implemented providers; the litellm-fallback path and litellm cost tables need a strategy — (a) vendor a pinned litellm model-price snapshot for cost + return a clear unsupported-provider error for fallback-only providers, or (b) route fallback provider calls through the Python worker. | Cost accuracy feeds budget enforcement — snapshot staleness is user-visible. Lean (a) for v1. | open |
-| D17 | **Guardrail execution**: JudgeGuardrail wraps a Scorer and runs inline in the request path — worker dispatch would add subprocess latency per request. Options: (a) native Rust judge execution for builtin/instructions judges (one templated LLM call via the gateway engine), decorator/third-party scorers as guardrails unsupported (matches OSS scorer restrictions); (b) a persistent (not per-call) Python sidecar for judge evaluation. | Lean (a). | open |
+| D16 | **Full native LiteLLM compatibility**: vendor a pinned, generated manifest of every fallback provider transform, model/token limit, retry rule, tokenizer mapping, and price entry reachable in the reference release; implement it in Rust alongside the explicit gateway adapters. | No Python fallback and no fallback-only-provider exception. Manifest regeneration + semantic conformance is mandatory on upgrades because cost accuracy feeds budgets. | decided |
+| D17 | **Guardrail execution**: JudgeGuardrail executes builtin/instructions judges inline through the native `ScorerExecutor`/`JudgeRuntime`; decorator and unsupported serialized scorer kinds retain Python OSS rejection behavior. | Avoids per-request worker startup while sharing identical prompt/provider/feedback logic with async jobs; no sidecar. | decided |
 | D18 | **Assistant `/message` stream_url bug** (`api.py:154` returns `/stream/{id}`, route is `/sessions/{id}/stream`): the frontend builds its own URL, so both forms are dead letters. Propose: emit the correct form, document the deviation, and verify the UI never consumes the field. | Trivial but wire-visible. | proposed |
-| D19 | **Promptlab pyfunc artifact writer**: the MLmodel/requirements/`parameters.yaml` layout must stay loadable by Python. Options: (a) Rust writes the artifact files byte-compatibly (they're static YAML/JSON templated with version + signature); (b) delegate to the Python worker. | Lean (a) — no dynamic Python needed to *write* the layout; add a cross-language load test either way. | open |
-| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. Consequence: the Python job runner and the Rust runner must never run simultaneously against the same DB (double execution) — cutover runbook item; recovery semantics arguably improve (no queue/DB divergence). | | proposed |
+| D19 | **Promptlab pyfunc artifact writer**: Rust writes the MLmodel/requirements/`parameters.yaml` and `eval_results_table.json` layout directly and byte-compatibly; the artifact remains loadable by the Python client. | No runtime code execution is needed to write the static layout; cross-language load/predict is a required test. | decided |
+| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. During migration the Python and Rust runners must never run simultaneously against the same DB (double execution); after cutover only native Rust workers exist. | Recovery improves because queue and lifecycle state cannot diverge. | proposed |
 | D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | proposed |
 | D22 | **FastAPI-vs-Flask error-shape split**: gateway/assistant routes emit FastAPI-style errors (`{"detail": ...}`, 422 validation shape) while Flask routes emit MLflow proto-style errors. Rust must keep the per-route split (Part I already did this for OTLP's 422). | | accepted |
-| R4 | **Provider API drift**: 23 provider adapters chase moving upstream APIs. | Mock-provider conformance suite pins today's behavior; pin the supported MLflow version per Rust release (extends D8). | mitigated |
+| R4 | **Provider API drift**: the explicit gateway adapters plus the pinned LiteLLM compatibility manifest chase moving upstream APIs. | Hermetic request/stream/cost conformance pins today's behavior; manifest regeneration is required with each supported MLflow/provider snapshot (extends D8). | mitigated |
 | R5 | **SSE byte-parity is fragile** across providers/chunk boundaries. | Frame-level recorder + recorded fixtures (T15.5/T22.3); allowlist only documented deviations. | mitigated |
 | R6 | **KEK/secret ops**: AAD immutability means renames brick secrets; wrong passphrase = silent unusable gateway. | Startup probe decrypts a sentinel; runbook coverage (T22.6). | open |
-| R7 | **Worker version skew**: Rust server vs installed `mlflow` Python package must be compatible (job function signatures, serialized-scorer schema). | Worker handshake reports mlflow version; Rust refuses mismatched majors; pin in the image. | open |
+| R7 | **Native compatibility-manifest drift**: scorer JSON, third-party algorithms/prompts, LiteLLM transforms/costs, and GEPA behavior can change independently upstream. | Server and worker link the same crate version; manifests carry source versions/fingerprints and upgrades cannot merge until the complete semantic corpus is regenerated and green. | mitigated |
 | R8 | **Tool-executor sandbox parity** is security-critical (LLM-driven shell + file ops). | Port confinement checks exactly + adversarial escape suite (T20.3); restricted-mode allowlist default. | mitigated |
+| R9 | **Third-party port scope and licensing**: DeepEval/Ragas/TruLens/Phoenix and GEPA contain substantial external algorithms and prompt assets. | T15.5 records provenance/license per implementation; missing or incompatible ports block release rather than silently reducing parity. Differential fixtures pin observable behavior without copying unapproved code. | open |
 
 ---
 
@@ -2894,13 +3038,21 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
   `mlflow/server/jobs/{__init__,utils,_job_runner,_job_subproc_entry}.py`;
   job store `mlflow/store/jobs/sqlalchemy_store.py`; online scoring
   `mlflow/genai/scorers/online/*`, `mlflow/genai/scorers/job.py`.
+- Native semantic-engine inventory: evaluation pipeline/result normalization/
+  aggregation/session handling in `mlflow/genai/evaluation/*` and
+  `mlflow/genai/scorers/aggregation.py`; all concrete builtins in
+  `scorers/builtin_scorers.py`; instructions and trace-tool judges in
+  `judges/{instructions_judge,adapters,tools,utils}/*`; memory execution in
+  `judges/optimizers/memalign/*`; third-party serialization, registries,
+  mappings, and execution in `scorers/{deepeval,ragas,trulens,phoenix}/*`.
 - Issues/labels/review-queues/prompt-opt: protos
   `{issues,label_schemas,review_queues,prompt_optimization}.proto` +
   `service.proto:1377-1590,2633-3010`; handlers
   `handlers.py:4428-4771,4925,7359-7647,7763-7784,7854-7858`; models
   `models.py:1154,3232,3389-3691`; detection
-  `mlflow/genai/discovery/{job,pipeline}.py`; optimization
-  `mlflow/genai/optimize/{job,optimize}.py` + `optimizers/`.
+  `mlflow/genai/discovery/{job,pipeline,clustering,extraction,sampling,utils}.py`;
+  optimization `mlflow/genai/optimize/{job,optimize,types,util}.py` +
+  `optimizers/{base,gepa_optimizer,metaprompt_optimizer}.py`.
 - Gateway: `mlflow/server/gateway_api.py`, `mlflow/server/fastapi_app.py`;
   providers `mlflow/gateway/providers/*` (`base.py`, `utils.py`,
   `provider_registry.py`); schemas `mlflow/gateway/schemas/*`,
