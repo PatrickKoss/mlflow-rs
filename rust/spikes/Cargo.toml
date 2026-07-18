@@ -19,10 +19,9 @@ hex = "0.4"
 subtle = "2.6"       # constant-time comparison
 rand = "0.8"         # salt generation
 base64 = "0.22"      # (fernet fixtures / general use)
+aes-gcm = "0.10"     # gateway-secret AES-256-GCM envelope (T15.3)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # Fernet webhook-secret compatibility
 fernet = "0.2"
-
-[dev-dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"

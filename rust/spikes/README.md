@@ -1,4 +1,4 @@
-# T0.4 Crypto Spike — Werkzeug + Fernet Rust/Python Interop
+# Crypto Spikes — Rust/Python Interop
 
 Proves two hard blockers for the Rust MLflow tracking-server reimplementation
 (plan §4.13, D13) are feasible:
@@ -118,6 +118,35 @@ check_password_hash` / `cryptography.fernet` verify them:
 All Python-side verifications passed.   (exit 0)
 ```
 
+## T15.3 gateway-secret envelope
+
+`gen_secrets_fixtures.py` calls the implementation in
+`mlflow/utils/crypto.py` directly. Its checked-in `secrets_python.json`
+contains 32 Python envelopes (4 plaintexts × 2 passphrases × 2 AAD pairs × 2
+KEK versions), two Python KEK rotations, and 19 masking fixtures. The
+plaintexts cover empty, ASCII, Unicode, and a 4 KiB value.
+
+`src/secrets.rs` reproduces the database representation:
+
+- A fresh random 32-byte DEK encrypts each value with AES-256-GCM.
+- `encrypted_value` is `nonce(12) || ciphertext || tag(16)`.
+- The KEK wraps the 32-byte DEK without AAD, so `wrapped_dek` is always 60
+  bytes with the same nonce/ciphertext/tag layout.
+- The KEK is PBKDF2-HMAC-SHA256(passphrase UTF-8, 600,000 iterations, 32-byte
+  output). Its salt is `b"mlflow-secrets-kek-v1-2025"` followed by
+  `kek_version` encoded as an unsigned four-byte big-endian integer.
+- Value AAD is UTF-8 `secret_id + "|" + secret_name`; it is authenticated and
+  is not stored in either encrypted byte field.
+- Rotation unwraps the DEK with the old KEK and wraps it with the new KEK. It
+  leaves `encrypted_value` byte-for-byte unchanged.
+
+`emit_secrets_artifacts` produces the reverse 32-case matrix in
+`secrets_rust.json`, plus two Rust rotations. `verify_secrets.py` decrypts all
+of them through Python's `_decrypt_secret`. Rust tests decrypt every Python
+fixture, compare masking output, and verify wrong AAD, wrong KEK, truncated
+value/wrapped-DEK, and corrupted value/wrapped-DEK errors fail closed with a
+constant message that contains no plaintext.
+
 ## Reproduce
 
 ```bash
@@ -130,6 +159,15 @@ cd rust/spikes && cargo test
 # 3. Direction 2: emit Rust artifacts, Python verifies them
 cargo run --release --bin emit_artifacts -- /tmp/rust_artifacts.json
 cd ../.. && uv run --frozen python rust/spikes/verify.py /tmp/rust_artifacts.json
+
+# 4. T15.3 Python -> Rust fixtures and spike tests
+uv run --frozen python rust/spikes/gen_secrets_fixtures.py
+cargo test --manifest-path rust/spikes/Cargo.toml
+
+# 5. T15.3 Rust -> Python fixture and verification
+cargo run --release --manifest-path rust/spikes/Cargo.toml \
+  --bin emit_secrets_artifacts -- rust/spikes/fixtures/secrets_rust.json
+uv run --frozen python rust/spikes/verify_secrets.py
 ```
 
 ## Risks / not-yet-covered variants

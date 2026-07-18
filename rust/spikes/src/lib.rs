@@ -6,13 +6,15 @@
 //! 1. Werkzeug password hashes (auth DB stores `method$salt$hexdigest`).
 //!    - `scrypt:<N>:<r>:<p>$<salt>$<hexdigest>`  (werkzeug default, dklen=64)
 //!    - `pbkdf2:sha256:<iterations>$<salt>$<hexdigest>`  (dklen=32)
-//!    The salt is raw ASCII; werkzeug feeds `salt.encode()` straight into the
-//!    KDF (it does NOT base64-decode it). The digest is lowercase hex.
+//!      The salt is raw ASCII; werkzeug feeds `salt.encode()` straight into the
+//!      KDF (it does NOT base64-decode it). The digest is lowercase hex.
 //!
 //! 2. Fernet tokens (webhook secret encryption, `MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`).
 //!
 //! The functions here are deliberately small and dependency-light so they can
 //! be lifted into the real server crate later.
+
+pub mod secrets;
 
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
