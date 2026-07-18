@@ -548,6 +548,23 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("setExperimentTag", "POST") => post(experiments::set_experiment_tag),
         ("deleteExperimentTag", "POST") => post(experiments::delete_experiment_tag),
         ("searchDatasets", "POST") => post(datasets::search_datasets),
+        ("createDataset", "POST") => post(datasets::create_evaluation_dataset),
+        ("getDataset", "GET") => get(datasets::get_evaluation_dataset),
+        ("deleteDataset", "DELETE") => delete(datasets::delete_evaluation_dataset),
+        ("searchEvaluationDatasets", "POST") => post(datasets::search_evaluation_datasets),
+        ("searchEvaluationDatasets", "GET") => get(datasets::search_evaluation_datasets),
+        ("setDatasetTags", "PATCH") => patch(datasets::set_evaluation_dataset_tags),
+        ("deleteDatasetTag", "DELETE") => delete(datasets::delete_evaluation_dataset_tag),
+        ("upsertDatasetRecords", "POST") => post(datasets::upsert_evaluation_dataset_records),
+        ("getDatasetExperimentIds", "GET") => get(datasets::get_evaluation_dataset_experiment_ids),
+        ("getDatasetRecords", "GET") => get(datasets::get_evaluation_dataset_records),
+        ("deleteDatasetRecords", "DELETE") => delete(datasets::delete_evaluation_dataset_records),
+        ("addDatasetToExperiments", "POST") => {
+            post(datasets::add_evaluation_dataset_to_experiments)
+        }
+        ("removeDatasetFromExperiments", "POST") => {
+            post(datasets::remove_evaluation_dataset_from_experiments)
+        }
         ("createLoggedModel", "POST") => post(logged_models::create_logged_model),
         ("finalizeLoggedModel", "PATCH") => patch(logged_models::finalize_logged_model),
         ("getLoggedModel", "GET") => get(logged_models::get_logged_model),

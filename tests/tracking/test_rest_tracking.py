@@ -68,11 +68,6 @@ from mlflow.environment_variables import (
     MLFLOW_TRACE_ARCHIVAL_CONFIG,
 )
 from mlflow.exceptions import MlflowException, RestException
-from mlflow.genai.datasets import (
-    add_dataset_to_experiments,
-    create_dataset,
-    remove_dataset_from_experiments,
-)
 from mlflow.models import Model
 from mlflow.protos.databricks_pb2 import RESOURCE_DOES_NOT_EXIST, ErrorCode
 from mlflow.server import handlers
@@ -3735,7 +3730,6 @@ def test_graphql_nan_metric_handling(mlflow_client):
 
 
 def test_create_and_get_evaluation_dataset(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3760,7 +3754,6 @@ def test_create_and_get_evaluation_dataset(mlflow_client, store_type):
 
 
 def test_search_evaluation_datasets(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3799,9 +3792,14 @@ def test_search_evaluation_datasets(mlflow_client, store_type):
     names = [d.name for d in ordered_datasets]
     assert names == sorted(names)
 
+    response = requests.post(
+        f"{mlflow_client.tracking_uri}/api/3.0/mlflow/datasets/search",
+        json={"max_results": 0},
+    )
+    assert response.status_code == 200
+
 
 def test_evaluation_dataset_tag_operations(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3828,7 +3826,6 @@ def test_evaluation_dataset_tag_operations(mlflow_client, store_type):
 
 
 def test_evaluation_dataset_delete(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3848,7 +3845,6 @@ def test_evaluation_dataset_delete(mlflow_client, store_type):
 
 
 def test_evaluation_dataset_upsert_records(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("evaluation-datasets API")
     if store_type == "file":
         pytest.skip("Evaluation datasets not supported for FileStore")
 
@@ -3913,15 +3909,132 @@ def test_evaluation_dataset_upsert_records(mlflow_client, store_type):
     assert response.status_code != 200
 
 
+@pytest.mark.skipif(not _RUN_AGAINST_RUST, reason="requires both Python and Rust servers")
+def test_evaluation_dataset_pagination_tokens_interoperate(db_uri, tmp_path):
+    artifact_root = tmp_path.as_uri()
+
+    def create_dataset_with_records(base_url, name):
+        response = requests.post(
+            f"{base_url}/api/3.0/mlflow/datasets/create",
+            json={"name": name},
+        )
+        assert response.status_code == 200, response.text
+        dataset_id = response.json()["dataset"]["dataset_id"]
+        records = [{"inputs": {"index": index}} for index in range(3)]
+        response = requests.post(
+            f"{base_url}/api/3.0/mlflow/datasets/{dataset_id}/records",
+            json={"records": json.dumps(records)},
+        )
+        assert response.status_code == 200, response.text
+        return dataset_id
+
+    def records_page(base_url, dataset_id, page_token=None):
+        params = {"max_results": 1}
+        if page_token is not None:
+            params["page_token"] = page_token
+        response = requests.get(
+            f"{base_url}/api/3.0/mlflow/datasets/{dataset_id}/records",
+            params=params,
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        return json.loads(payload["records"]), payload.get("next_page_token")
+
+    def search_page(base_url, page_token=None):
+        body = {
+            "filter_string": "name LIKE 'interop-search-%'",
+            "max_results": 1,
+            "order_by": ["name ASC"],
+        }
+        if page_token is not None:
+            body["page_token"] = page_token
+        response = requests.post(
+            f"{base_url}/api/3.0/mlflow/datasets/search",
+            json=body,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    with _init_server(
+        backend_uri=db_uri,
+        root_artifact_uri=artifact_root,
+        server_type="rust",
+    ) as rust_url:
+        rust_dataset_id = create_dataset_with_records(rust_url, "interop-rust-records")
+        rust_first, rust_cursor = records_page(rust_url, rust_dataset_id)
+        assert rust_cursor
+        for suffix in ["a", "b", "c"]:
+            response = requests.post(
+                f"{rust_url}/api/3.0/mlflow/datasets/create",
+                json={"name": f"interop-search-{suffix}"},
+            )
+            assert response.status_code == 200, response.text
+        rust_search = search_page(rust_url)
+        assert rust_search["datasets"][0]["name"] == "interop-search-a"
+        rust_offset = rust_search["next_page_token"]
+
+    with _init_server(
+        backend_uri=db_uri,
+        root_artifact_uri=artifact_root,
+        server_type="fastapi",
+    ) as python_url:
+        python_reads_rust, _ = records_page(python_url, rust_dataset_id, rust_cursor)
+        python_legacy, _ = records_page(python_url, rust_dataset_id, "1")
+        assert python_reads_rust == python_legacy
+        assert python_reads_rust[0]["dataset_record_id"] != rust_first[0]["dataset_record_id"]
+
+        python_reads_rust_search = search_page(python_url, rust_offset)
+        assert python_reads_rust_search["datasets"][0]["name"] == "interop-search-b"
+
+        python_dataset_id = create_dataset_with_records(python_url, "interop-python-records")
+        python_first, python_cursor = records_page(python_url, python_dataset_id)
+        assert python_cursor
+        python_offset = search_page(python_url)["next_page_token"]
+
+    with _init_server(
+        backend_uri=db_uri,
+        root_artifact_uri=artifact_root,
+        server_type="rust",
+    ) as rust_url:
+        rust_reads_python, _ = records_page(rust_url, python_dataset_id, python_cursor)
+        rust_legacy, _ = records_page(rust_url, python_dataset_id, "1")
+        assert rust_reads_python == rust_legacy
+        assert rust_reads_python[0]["dataset_record_id"] != python_first[0]["dataset_record_id"]
+
+        response = requests.delete(
+            f"{rust_url}/api/3.0/mlflow/datasets/{python_dataset_id}/records",
+            json={"dataset_record_ids": [rust_reads_python[0]["dataset_record_id"]]},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["deleted_count"] == 1
+
+        rust_reads_python_search = search_page(rust_url, python_offset)
+        assert rust_reads_python_search["datasets"][0]["name"] == "interop-search-b"
+
+        response = requests.get(
+            f"{rust_url}/api/3.0/mlflow/datasets/search",
+            params=[
+                ("filter_string", "name LIKE 'interop-search-%'"),
+                ("max_results", 1),
+                ("order_by", "name ASC"),
+            ],
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["datasets"][0]["name"] == "interop-search-a"
+
+
+def _get_dataset_experiment_ids(mlflow_client, dataset_id):
+    return mlflow_client._tracking_client.store.get_dataset_experiment_ids(dataset_id)
+
+
 def test_add_dataset_to_experiments_rest_tracking(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("dataset_exp_1")
     exp2 = mlflow_client.create_experiment("dataset_exp_2")
     exp3 = mlflow_client.create_experiment("dataset_exp_3")
 
-    dataset = create_dataset(
+    dataset = mlflow_client.create_dataset(
         name="test_multi_exp_dataset",
         experiment_id=[exp1],
         tags={"test": "multi_exp"},
@@ -3930,32 +4043,29 @@ def test_add_dataset_to_experiments_rest_tracking(mlflow_client, store_type):
     assert len(dataset.experiment_ids) == 1
     assert exp1 in dataset.experiment_ids
 
-    updated_dataset = add_dataset_to_experiments(
+    mlflow_client.add_dataset_to_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp2, exp3],
     )
 
-    assert len(updated_dataset.experiment_ids) == 3
-    assert exp1 in updated_dataset.experiment_ids
-    assert exp2 in updated_dataset.experiment_ids
-    assert exp3 in updated_dataset.experiment_ids
+    updated_ids = _get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)
+    assert set(updated_ids) == {exp1, exp2, exp3}
 
-    retrieved = mlflow_client.get_dataset(dataset.dataset_id)
-    assert len(retrieved.experiment_ids) == 3
-    assert exp1 in retrieved.experiment_ids
-    assert exp2 in retrieved.experiment_ids
-    assert exp3 in retrieved.experiment_ids
+    assert set(_get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)) == {
+        exp1,
+        exp2,
+        exp3,
+    }
 
 
 def test_remove_dataset_from_experiments_rest_tracking(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("dataset_remove_exp_1")
     exp2 = mlflow_client.create_experiment("dataset_remove_exp_2")
     exp3 = mlflow_client.create_experiment("dataset_remove_exp_3")
 
-    dataset = create_dataset(
+    dataset = mlflow_client.create_dataset(
         name="test_remove_exp_dataset",
         experiment_id=[exp1, exp2, exp3],
         tags={"test": "remove_exp"},
@@ -3963,50 +4073,44 @@ def test_remove_dataset_from_experiments_rest_tracking(mlflow_client, store_type
 
     assert len(dataset.experiment_ids) == 3
 
-    updated_dataset = remove_dataset_from_experiments(
+    mlflow_client.remove_dataset_from_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp2],
     )
 
-    assert len(updated_dataset.experiment_ids) == 2
-    assert exp1 in updated_dataset.experiment_ids
-    assert exp2 not in updated_dataset.experiment_ids
-    assert exp3 in updated_dataset.experiment_ids
+    updated_ids = _get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)
+    assert set(updated_ids) == {exp1, exp3}
 
-    retrieved = mlflow_client.get_dataset(dataset.dataset_id)
-    assert len(retrieved.experiment_ids) == 2
+    assert len(_get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)) == 2
 
-    updated_dataset = remove_dataset_from_experiments(
+    mlflow_client.remove_dataset_from_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp1, exp3],
     )
 
-    assert len(updated_dataset.experiment_ids) == 0
-
-    retrieved = mlflow_client.get_dataset(dataset.dataset_id)
-    assert len(retrieved.experiment_ids) == 0
+    assert _get_dataset_experiment_ids(mlflow_client, dataset.dataset_id) == []
 
 
 def test_add_multiple_experiments_at_once_rest_tracking(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exps = [mlflow_client.create_experiment(f"bulk_add_exp_{i}") for i in range(5)]
 
-    dataset = create_dataset(
+    dataset = mlflow_client.create_dataset(
         name="test_bulk_add_dataset",
         experiment_id=[exps[0]],
         tags={"test": "bulk_add"},
     )
 
-    updated_dataset = add_dataset_to_experiments(
+    mlflow_client.add_dataset_to_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=exps[1:],
     )
 
-    assert len(updated_dataset.experiment_ids) == 5
+    updated_ids = _get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)
+    assert len(updated_ids) == 5
     for exp in exps:
-        assert exp in updated_dataset.experiment_ids
+        assert exp in updated_ids
 
 
 def test_dataset_experiment_association_error_cases_rest_tracking(mlflow_client, store_type):
@@ -4015,26 +4119,25 @@ def test_dataset_experiment_association_error_cases_rest_tracking(mlflow_client,
     exp1 = mlflow_client.create_experiment("error_test_exp")
 
     with pytest.raises(MlflowException, match="not found"):
-        add_dataset_to_experiments(
+        mlflow_client.add_dataset_to_experiments(
             dataset_id="d-nonexistent1234567890abcdef1234",
             experiment_ids=[exp1],
         )
 
     with pytest.raises(MlflowException, match="not found"):
-        remove_dataset_from_experiments(
+        mlflow_client.remove_dataset_from_experiments(
             dataset_id="d-nonexistent1234567890abcdef1234",
             experiment_ids=[exp1],
         )
 
 
 def test_idempotent_add_experiments_rest_tracking(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("idempotent_test_exp_1")
     exp2 = mlflow_client.create_experiment("idempotent_test_exp_2")
 
-    dataset = create_dataset(
+    dataset = mlflow_client.create_dataset(
         name="test_idempotent_dataset",
         experiment_id=[exp1, exp2],
         tags={"test": "idempotent"},
@@ -4042,14 +4145,12 @@ def test_idempotent_add_experiments_rest_tracking(mlflow_client, store_type):
 
     assert len(dataset.experiment_ids) == 2
 
-    updated_dataset = add_dataset_to_experiments(
+    mlflow_client.add_dataset_to_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp1],
     )
 
-    assert len(updated_dataset.experiment_ids) == 2
-    assert exp1 in updated_dataset.experiment_ids
-    assert exp2 in updated_dataset.experiment_ids
+    assert set(_get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)) == {exp1, exp2}
 
 
 def test_idempotent_remove_experiments_rest_tracking(mlflow_client, store_type):
@@ -4058,7 +4159,7 @@ def test_idempotent_remove_experiments_rest_tracking(mlflow_client, store_type):
     exp1 = mlflow_client.create_experiment("remove_idempotent_test_exp_1")
     exp2 = mlflow_client.create_experiment("remove_idempotent_test_exp_2")
 
-    dataset = create_dataset(
+    dataset = mlflow_client.create_dataset(
         name="test_remove_idempotent_dataset",
         experiment_id=[exp1],
         tags={"test": "remove_idempotent"},
@@ -4066,17 +4167,15 @@ def test_idempotent_remove_experiments_rest_tracking(mlflow_client, store_type):
 
     assert len(dataset.experiment_ids) == 1
 
-    updated_dataset = remove_dataset_from_experiments(
+    mlflow_client.remove_dataset_from_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp2],
     )
 
-    assert len(updated_dataset.experiment_ids) == 1
-    assert exp1 in updated_dataset.experiment_ids
+    assert _get_dataset_experiment_ids(mlflow_client, dataset.dataset_id) == [exp1]
 
 
 def test_client_api_add_remove_experiments_rest_tracking(mlflow_client, store_type):
-    _skip_if_rust_endpoint_unimplemented("dataset<->experiment association API")
     if store_type == "file":
         pytest.skip("File store doesn't support dataset operations")
     exp1 = mlflow_client.create_experiment("client_api_exp_1")
@@ -4089,22 +4188,23 @@ def test_client_api_add_remove_experiments_rest_tracking(mlflow_client, store_ty
         tags={"test": "client_api"},
     )
 
-    updated_dataset = mlflow_client.add_dataset_to_experiments(
+    mlflow_client.add_dataset_to_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp2, exp3],
     )
 
-    assert len(updated_dataset.experiment_ids) == 3
+    assert set(_get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)) == {
+        exp1,
+        exp2,
+        exp3,
+    }
 
-    updated_dataset = mlflow_client.remove_dataset_from_experiments(
+    mlflow_client.remove_dataset_from_experiments(
         dataset_id=dataset.dataset_id,
         experiment_ids=[exp2],
     )
 
-    assert len(updated_dataset.experiment_ids) == 2
-    assert exp1 in updated_dataset.experiment_ids
-    assert exp2 not in updated_dataset.experiment_ids
-    assert exp3 in updated_dataset.experiment_ids
+    assert set(_get_dataset_experiment_ids(mlflow_client, dataset.dataset_id)) == {exp1, exp3}
 
 
 def test_scorer_CRUD(mlflow_client, store_type):
