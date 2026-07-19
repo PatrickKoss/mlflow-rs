@@ -58,10 +58,14 @@ md5 = { workspace = true }
 subtle = { workspace = true }
 rand = { workspace = true }
 libc = "0.2"
+shlex = "2.0.1"
 # Distributed gateway budget windows. 0.27.6 predates the repository's
 # seven-day package cooldown and provides the Tokio multiplexed connection and
 # Lua-script APIs used by Python's RedisBudgetTracker equivalent.
-redis = { version = "0.27.6", default-features = false, features = ["tokio-comp", "script"] }
+redis = { version = "0.27.6", default-features = false, features = [
+  "tokio-comp",
+  "script",
+] }
 
 # GraphQL (T6.1/T6.2, §3.12): `graphql-parser` gives us the query AST for the
 # no-batching/query-safety guard and hand-written resolution against the fixed,
@@ -79,7 +83,12 @@ metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 hyper = { workspace = true, features = ["server", "client", "http1"] }
-hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
+hyper-util = { version = "0.1", features = [
+  "client",
+  "client-legacy",
+  "http1",
+  "tokio",
+] }
 http-body-util = "0.1"
 mlflow-store = { workspace = true }
 mlflow-error = { workspace = true }

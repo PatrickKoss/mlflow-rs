@@ -1,13 +1,3 @@
-"""T20.2 frame recorder for the native Assistant CLI providers.
-
-Run from the repository root after (or while) building the Rust example:
-
-  uv run --frozen pytest -q rust/compliance/recorders/test_assistant_cli_provider_differential.py
-
-Every child is either ``dev/dev_stubs/claude_cli.py`` or a local transcript
-player. No provider hostname, API key, credential store, or real CLI is used.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -17,13 +7,20 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+import requests
+import uvicorn
+from fastapi import FastAPI
 
 from mlflow.assistant.providers import ClaudeCodeProvider, CodexProvider, MlflowGatewayProvider
 from mlflow.assistant.providers.base import (
@@ -31,6 +28,7 @@ from mlflow.assistant.providers.base import (
     NotAuthenticatedError,
     clear_config_cache,
 )
+from mlflow.server.assistant.api import assistant_router
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUST_ROOT = REPO_ROOT / "rust"
@@ -105,11 +103,116 @@ for entry in json.loads(os.environ.get("MLFLOW_SCRIPTED_TRANSCRIPT", "[]")):
 @pytest.fixture(scope="module", autouse=True)
 def build_rust_recorder():
     subprocess.run(
-        ["cargo", "build", "-p", "mlflow-server", "--example", "assistant_provider_recorder"],
+        [
+            "cargo",
+            "build",
+            "-p",
+            "mlflow-server",
+            "--bin",
+            "mlflow-server",
+            "--example",
+            "assistant_provider_recorder",
+        ],
         cwd=RUST_ROOT,
         check=True,
     )
     assert RUST_RECORDER.exists()
+
+
+def _free_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_http(url, process=None):
+    for _ in range(100):
+        if process is not None and process.poll() is not None:
+            raise AssertionError(process.stderr.read())
+        try:
+            requests.get(url, timeout=0.1)
+            return
+        except requests.RequestException:
+            time.sleep(0.05)
+    raise AssertionError(f"server did not start: {url}")
+
+
+@contextmanager
+def _rust_http_server(tmp_path, environment, config):
+    binary = RUST_ROOT / "target" / "debug" / "mlflow-server"
+    database = tmp_path / "route-rust.db"
+    shutil.copy(REPO_ROOT / "rust/crates/mlflow-server/tests/fixtures/tracking.db", database)
+    home = tmp_path / "route-rust-home"
+    config_path = home / ".mlflow/assistant/config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(json.dumps({"providers": {"claude_code": config}}))
+    temp = tmp_path / "route-rust-tmp"
+    temp.mkdir()
+    port = _free_port()
+    process = subprocess.Popen(
+        [
+            str(binary),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--backend-store-uri",
+            f"sqlite:///{database}",
+        ],
+        cwd=RUST_ROOT,
+        env={
+            **environment,
+            "HOME": str(home),
+            "TMPDIR": str(temp),
+            "MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE": "true",
+            "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    base = f"http://127.0.0.1:{port}"
+    try:
+        _wait_http(f"{base}/health", process)
+        yield base
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+@contextmanager
+def _python_http_server(tmp_path, environment, config):
+    import mlflow.assistant.config as config_module
+    import mlflow.server.assistant.session as session_module
+
+    config_path = tmp_path / "route-python-config.json"
+    config_path.write_text(json.dumps({"providers": {"claude_code": config}}))
+    port = _free_port()
+    app = FastAPI()
+    app.include_router(assistant_router)
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
+    )
+    with (
+        patch.object(config_module, "CONFIG_PATH", config_path),
+        patch.object(session_module, "SESSION_DIR", tmp_path / "route-python-sessions"),
+        patch.dict(os.environ, environment, clear=True),
+    ):
+        clear_config_cache()
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{port}"
+        try:
+            _wait_http(f"{base}/ajax-api/3.0/mlflow/assistant/config")
+            yield base
+        finally:
+            server.should_exit = True
+            thread.join(timeout=5)
+            clear_config_cache()
 
 
 def _provider(provider: str):
@@ -120,7 +223,9 @@ def _provider_module(provider: str):
     return CLAUDE_MODULE if provider == "claude_code" else CODEX_MODULE
 
 
-def _config(provider: str, *, model: str = "default", permissions: dict | None = None) -> dict:
+def _config(
+    provider: str, *, model: str = "default", permissions: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {
         "model": model,
         "permissions": permissions
@@ -132,7 +237,7 @@ def _config(provider: str, *, model: str = "default", permissions: dict | None =
     }
 
 
-def _stream_request(tmp_path: Path, *, session_id: str | None = None) -> dict:
+def _stream_request(tmp_path: Path, *, session_id: str | None = None) -> dict[str, Any]:
     return {
         "prompt": "Explain café traces 😀",
         "tracking_uri": TRACKING_URI,
@@ -153,7 +258,7 @@ def _scripted_path(tmp_path: Path, provider: str):
     yield bin_dir
 
 
-def _write_python_config(tmp_path: Path, provider: str, config: dict) -> Path:
+def _write_python_config(tmp_path: Path, provider: str, config: dict[str, Any]) -> Path:
     path = tmp_path / "assistant-config.json"
     path.write_text(json.dumps({"providers": {provider: config}}))
     return path
@@ -161,8 +266,8 @@ def _write_python_config(tmp_path: Path, provider: str, config: dict) -> Path:
 
 async def _python_stream_async(
     provider_name: str,
-    config: dict,
-    request: dict,
+    config: dict[str, Any],
+    request: dict[str, Any],
     environment: dict[str, str],
     cancel_after_events: int | None,
 ) -> list[str]:
@@ -203,8 +308,8 @@ async def _python_stream_async(
 
 def _python_stream(
     provider: str,
-    config: dict,
-    request: dict,
+    config: dict[str, Any],
+    request: dict[str, Any],
     environment: dict[str, str],
     cancel_after_events: int | None = None,
 ) -> list[str]:
@@ -213,7 +318,7 @@ def _python_stream(
     )
 
 
-def _rust_record(payload: dict, environment: dict[str, str]) -> dict:
+def _rust_record(payload: dict[str, Any], environment: dict[str, str]) -> dict[str, Any]:
     result = subprocess.run(
         [str(RUST_RECORDER)],
         cwd=REPO_ROOT,
@@ -229,8 +334,8 @@ def _rust_record(payload: dict, environment: dict[str, str]) -> dict:
 
 def _rust_stream(
     provider: str,
-    config: dict,
-    request: dict,
+    config: dict[str, Any],
+    request: dict[str, Any],
     environment: dict[str, str],
     cancel_after_events: int | None = None,
 ) -> list[str]:
@@ -244,16 +349,16 @@ def _rust_stream(
     return _rust_record(payload, environment)["frames"]
 
 
-def _read_invocations(path: Path) -> list[dict]:
+def _read_invocations(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
 def _assert_scripted_stream_parity(
     tmp_path: Path,
     provider: str,
-    transcript: list,
+    transcript: list[Any],
     *,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     session_id: str | None = None,
     cancel_after_events: int | None = None,
 ) -> list[str]:
@@ -464,7 +569,7 @@ def test_sigkill_frames_are_identical_and_end_interrupted(tmp_path, provider):
     ]
 
 
-def _python_health(provider: str, environment: dict[str, str]) -> dict:
+def _python_health(provider: str, environment: dict[str, str]) -> dict[str, Any]:
     try:
         with patch.dict(os.environ, environment, clear=True):
             _provider(provider).check_connection()
@@ -475,7 +580,7 @@ def _python_health(provider: str, environment: dict[str, str]) -> dict:
     return {"status": 200, "body": {"status": "ok"}}
 
 
-def _rust_health(provider: str, environment: dict[str, str]) -> dict:
+def _rust_health(provider: str, environment: dict[str, str]) -> dict[str, Any]:
     return _rust_record({"action": "health", "provider": provider}, environment)
 
 
@@ -533,3 +638,46 @@ def test_health_not_implemented_501_body_is_identical():
         dict(os.environ),
     )
     assert rust == {"status": 501, "body": {"detail": detail}}
+
+
+def test_full_stub_cli_chat_is_frame_identical_through_real_http_routes(tmp_path):
+    config = _config("claude_code", model="claude-fixture-model")
+    config["selected"] = True
+    log = tmp_path / "route-invocations.jsonl"
+    with _scripted_path(tmp_path, "claude_code") as bin_dir:
+        environment = {
+            **os.environ,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+            "MLFLOW_SCRIPTED_CLI_LOG": str(log),
+            "MLFLOW_SCRIPTED_TRANSCRIPT": json.dumps(CLAUDE_TRANSCRIPT),
+        }
+
+        def chat(base):
+            response = requests.post(
+                f"{base}/ajax-api/3.0/mlflow/assistant/message",
+                json={"message": "Explain café traces 😀", "context": {"experimentId": "20"}},
+                timeout=10,
+            )
+            response.raise_for_status()
+            session_id = response.json()["session_id"]
+            stream = requests.get(
+                f"{base}/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/stream",
+                timeout=10,
+            )
+            stream.raise_for_status()
+            return stream.content
+
+        with _python_http_server(tmp_path, environment, config) as python_base:
+            python_frames = chat(python_base)
+        with _rust_http_server(tmp_path, environment, config) as rust_base:
+            rust_frames = chat(rust_base)
+
+    assert rust_frames == python_frames
+    assert [line for line in rust_frames.splitlines() if line.startswith(b"event: ")] == [
+        b"event: message",
+        b"event: stream_event",
+        b"event: message",
+        b"event: message",
+        b"event: stream_event",
+        b"event: done",
+    ]

@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
+use crate::assistant_providers::{self, ProviderKind};
+use crate::openai_compatible::{self, Preset};
 use crate::state::AppState;
 
 const PREFIX: &str = "/ajax-api/3.0/mlflow/assistant";
@@ -251,6 +253,7 @@ pub struct AssistantProviderRequest {
     pub mlflow_session_id: String,
     pub cwd: Option<PathBuf>,
     pub context: Map<String, Value>,
+    pub config: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -316,6 +319,7 @@ impl AssistantRuntime {
     pub fn from_env() -> Self {
         let home = home_dir();
         let session_root = std::env::temp_dir().join("mlflow-assistant-sessions");
+        let sessions = SessionStore::new(session_root.clone());
         let config_path = home.join(".mlflow/assistant/config.json");
         let skills_source =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../mlflow/assistant/skills");
@@ -328,9 +332,10 @@ impl AssistantRuntime {
             if stub_claude {
                 Arc::new(DevClaudeProvider) as Arc<dyn AssistantProvider>
             } else {
-                Arc::new(BuiltinProvider::claude()) as Arc<dyn AssistantProvider>
+                Arc::new(CliProvider::new(ProviderKind::ClaudeCode, sessions.clone()))
+                    as Arc<dyn AssistantProvider>
             },
-            Arc::new(BuiltinProvider::codex()),
+            Arc::new(CliProvider::new(ProviderKind::Codex, sessions)),
             Arc::new(BuiltinProvider::gateway()),
             Arc::new(BuiltinProvider::ollama()),
         ];
@@ -443,8 +448,6 @@ impl AssistantConfig {
 
 #[derive(Debug, Clone, Copy)]
 enum BuiltinKind {
-    Claude,
-    Codex,
     Gateway,
     Ollama,
 }
@@ -457,22 +460,6 @@ struct BuiltinProvider {
 }
 
 impl BuiltinProvider {
-    fn claude() -> Self {
-        Self {
-            name: "claude_code",
-            skills_dir: ".claude",
-            kind: BuiltinKind::Claude,
-        }
-    }
-
-    fn codex() -> Self {
-        Self {
-            name: "codex",
-            skills_dir: ".codex",
-            kind: BuiltinKind::Codex,
-        }
-    }
-
     fn gateway() -> Self {
         Self {
             name: "mlflow_gateway",
@@ -506,12 +493,6 @@ impl AssistantProvider for BuiltinProvider {
         let kind = self.kind;
         async move {
             match kind {
-                BuiltinKind::Claude => Err(AssistantProviderError::CliNotInstalled(
-                    "Claude Code CLI is not installed. Install it with: npm install -g @anthropic-ai/claude-code".to_string(),
-                )),
-                BuiltinKind::Codex => Err(AssistantProviderError::CliNotInstalled(
-                    "OpenAI Codex CLI is not installed. Install it with: npm install -g @openai/codex".to_string(),
-                )),
                 BuiltinKind::Gateway => Err(AssistantProviderError::NotImplemented(
                     "MLflow AI Gateway connection is verified by the frontend; the assistant backend has no probe to run.".to_string(),
                 )),
@@ -592,18 +573,140 @@ impl AssistantProvider for BuiltinProvider {
         .boxed()
     }
 
-    fn stream(&self, _request: AssistantProviderRequest) -> BoxStream<'static, AssistantEvent> {
-        let error = match self.kind {
-            BuiltinKind::Claude => {
-                "Claude CLI not found. Please install Claude Code CLI and ensure it's in your PATH."
-            }
-            BuiltinKind::Codex => {
-                "codex CLI not found. Please install the OpenAI Codex CLI and ensure it's in your PATH."
-            }
-            BuiltinKind::Gateway => "MLflow AI Gateway provider execution is not installed.",
-            BuiltinKind::Ollama => "Ollama provider execution is not installed.",
+    fn stream(&self, request: AssistantProviderRequest) -> BoxStream<'static, AssistantEvent> {
+        let value = request.config.as_ref();
+        let permissions = value
+            .and_then(|value| value.get("permissions"))
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default();
+        let config = openai_compatible::Config {
+            preset: match self.kind {
+                BuiltinKind::Gateway => Preset::MlflowGateway,
+                BuiltinKind::Ollama => Preset::Ollama,
+            },
+            model: value
+                .and_then(|value| value.get("model"))
+                .and_then(Value::as_str)
+                .unwrap_or("default")
+                .to_string(),
+            base_url: value
+                .and_then(|value| value.get("base_url"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            api_key: value
+                .and_then(|value| value.get("api_key"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            permissions,
         };
-        stream::once(async move { AssistantEvent::error(error) }).boxed()
+        openai_compatible::stream(config, request)
+    }
+}
+
+#[derive(Debug)]
+struct CliProvider {
+    kind: ProviderKind,
+    sessions: SessionStore,
+}
+
+impl CliProvider {
+    fn new(kind: ProviderKind, sessions: SessionStore) -> Self {
+        Self { kind, sessions }
+    }
+
+    fn config(value: Option<Value>) -> assistant_providers::ProviderConfig {
+        value
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default()
+    }
+}
+
+impl AssistantProvider for CliProvider {
+    fn name(&self) -> &str {
+        self.kind.name()
+    }
+
+    fn resolve_skills_path(&self, base_directory: &FsPath) -> PathBuf {
+        let directory = match self.kind {
+            ProviderKind::ClaudeCode => ".claude",
+            ProviderKind::Codex => ".codex",
+        };
+        base_directory.join(directory).join("skills")
+    }
+
+    fn check_connection(
+        &self,
+        _config: Option<Value>,
+    ) -> BoxFuture<'static, Result<(), AssistantProviderError>> {
+        let kind = self.kind;
+        async move {
+            assistant_providers::health(kind)
+                .await
+                .map_err(|error| match error {
+                    assistant_providers::HealthError::NotImplemented(detail) => {
+                        AssistantProviderError::NotImplemented(detail)
+                    }
+                    assistant_providers::HealthError::CliNotInstalled(detail) => {
+                        AssistantProviderError::CliNotInstalled(detail)
+                    }
+                    assistant_providers::HealthError::NotAuthenticated(detail) => {
+                        AssistantProviderError::NotAuthenticated(detail)
+                    }
+                })
+        }
+        .boxed()
+    }
+
+    fn list_models(
+        &self,
+        _base_url: Option<String>,
+        _api_key: Option<String>,
+        _config: Option<Value>,
+    ) -> BoxFuture<'static, Result<Vec<String>, AssistantProviderError>> {
+        let name = self.kind.name();
+        async move {
+            Err(AssistantProviderError::NotImplemented(format!(
+                "Model listing is not supported for provider '{name}'"
+            )))
+        }
+        .boxed()
+    }
+
+    fn stream(&self, request: AssistantProviderRequest) -> BoxStream<'static, AssistantEvent> {
+        let kind = self.kind;
+        let sessions = self.sessions.clone();
+        let session_id = request.mlflow_session_id.clone();
+        let provider_config = Self::config(request.config);
+        let provider_request = assistant_providers::StreamRequest {
+            prompt: request.prompt,
+            tracking_uri: request.tracking_uri,
+            session_id: request.session_id,
+            cwd: request.cwd,
+            context: Some(request.context),
+        };
+        let (sender, receiver) = tokio::sync::mpsc::channel(32);
+        tokio::spawn(async move {
+            match assistant_providers::spawn(kind, provider_config, provider_request).await {
+                Ok(mut spawned) => {
+                    let _ = sessions.save_process_pid(&session_id, spawned.handle.pid() as i32);
+                    while let Some(event) = spawned.events.next().await {
+                        let mapped = AssistantEvent::new(event.event_type.as_str(), event.data);
+                        if sender.send(mapped).await.is_err() {
+                            break;
+                        }
+                    }
+                    let _ = sessions.clear_process_pid(&session_id);
+                }
+                Err(error) => {
+                    let _ = sender.send(AssistantEvent::error(error.to_string())).await;
+                }
+            }
+        });
+        stream::unfold(receiver, |mut receiver| async move {
+            receiver.recv().await.map(|event| (event, receiver))
+        })
+        .boxed()
     }
 }
 
@@ -801,14 +904,18 @@ async fn stream_response(
     let provider = runtime.selected_provider(&config);
     let tracking_uri = tracking_uri(&headers);
     let source: BoxStream<'static, AssistantEvent> = match provider {
-        Some(provider) => provider.stream(AssistantProviderRequest {
-            prompt,
-            tracking_uri,
-            session_id: session.provider_session_id.clone(),
-            mlflow_session_id: session_id.clone(),
-            cwd: session.working_dir.clone(),
-            context,
-        }),
+        Some(provider) => {
+            let provider_config = config.providers.get(provider.name()).cloned();
+            provider.stream(AssistantProviderRequest {
+                prompt,
+                tracking_uri,
+                session_id: session.provider_session_id.clone(),
+                mlflow_session_id: session_id.clone(),
+                cwd: session.working_dir.clone(),
+                context,
+                config: provider_config,
+            })
+        }
         None => stream::once(async { AssistantEvent::error(NO_PROVIDER_DETAIL) }).boxed(),
     };
     let output = source.then(move |event| {

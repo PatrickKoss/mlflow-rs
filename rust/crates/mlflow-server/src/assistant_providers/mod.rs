@@ -580,7 +580,7 @@ fn message_with_context(prompt: &str, context: Option<&Map<String, Value>>) -> S
     }
 }
 
-fn format_system_prompt(template: &str, tracking_uri: &str) -> String {
+pub(crate) fn format_system_prompt(template: &str, tracking_uri: &str) -> String {
     // Both Python constants are passed through `str.format`. In addition to
     // replacing the named field, that turns literal `{{` / `}}` examples back
     // into single braces.
@@ -1119,7 +1119,7 @@ fn python_string(value: &Value) -> String {
 
 /// Serialize the JSON subset used by Assistant events like Python's
 /// `json.dumps` defaults (`ensure_ascii=True`, `separators=(", ", ": ")`).
-fn python_json(value: &Value) -> String {
+pub(crate) fn python_json(value: &Value) -> String {
     let mut output = String::new();
     write_python_json(value, &mut output);
     output
