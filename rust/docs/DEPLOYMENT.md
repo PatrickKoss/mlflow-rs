@@ -757,8 +757,9 @@ flags are listed because deploy scripts commonly carry them forward.
 | `--app-name basic-auth` | `MLFLOW_AUTH_CONFIG_PATH` also enables auth | Other app names are rejected |
 | `--workspace-store-uri` | `MLFLOW_WORKSPACE_STORE_URI` | Backend URI; used only with workspaces |
 | `--enable-workspaces` / `--disable-workspaces` | `MLFLOW_ENABLE_WORKSPACES` | `false`; flags override env |
+| `--trace-archival-config` | `MLFLOW_TRACE_ARCHIVAL_CONFIG` | Unset; CLI wins over env; Python-compatible YAML validation; incompatible with `--artifacts-only`; runtime config reloads on a 5s TTL and keeps the last valid value after refresh errors |
 | `--gunicorn-opts`, `--waitress-opts`, `--uvicorn-opts`, `--dev` | corresponding Python env where applicable | Unknown/rejected; exit 2 |
-| `--trace-archival-config`, `--secrets-cache-ttl`, `--secrets-cache-max-size` | `MLFLOW_TRACE_ARCHIVAL_CONFIG` where applicable | Not ported; unknown/rejected, exit 2 |
+| `--secrets-cache-ttl`, `--secrets-cache-max-size` | none | Not ported; unknown/rejected, exit 2 |
 
 SQL pool environment mapping:
 

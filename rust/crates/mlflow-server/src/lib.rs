@@ -53,6 +53,7 @@ pub mod scorers;
 pub mod security;
 pub mod server_info;
 pub mod state;
+pub mod trace_archival_config;
 pub mod trace_artifact;
 pub mod traces;
 pub mod traces_v2;
@@ -71,6 +72,11 @@ use tracing::info_span;
 
 pub use config::{Cli, ServerConfig, StaticPrefixError};
 pub use state::AppState;
+pub use trace_archival_config::{
+    load_trace_archival_server_config, SystemMonotonicClock, TraceArchivalConfigClock,
+    TraceArchivalConfigError, TraceArchivalConfigProvider, TraceArchivalServerConfig,
+    TRACE_ARCHIVAL_CONFIG_CACHE_TTL,
+};
 
 /// Builds the full application `Router` (ops endpoints only — no store).
 /// Retained for the ops/skeleton tests that don't need a backend store.
@@ -887,6 +893,7 @@ mod tests {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_only: false,
+            trace_archival_config: TraceArchivalConfigProvider::default(),
             artifacts_destination: None,
             // These ops/routing unit tests issue raw axum requests without a
             // `Host` header (real HTTP clients always send one). Disable host

@@ -42,7 +42,7 @@ Precedence matches click: the CLI flag wins over its env var (clap `env = ...`).
 | `--waitress-opts` | (none) | `None` | fail-loud | Waitress-specific (Windows WSGI); N/A. Unknown flag → exit 2. |
 | `--uvicorn-opts` | `MLFLOW_UVICORN_OPTS` | `None` | fail-loud | Uvicorn-specific; N/A. Unknown flag → exit 2. |
 | `--dev` | (none) | `False` | fail-loud | Python dev auto-reload; N/A. Unknown flag → exit 2. |
-| `--trace-archival-config` | `MLFLOW_TRACE_ARCHIVAL_CONFIG` | `None` | fail-loud | Server-owned trace archival not ported. Unknown flag → exit 2. |
+| `--trace-archival-config` | `MLFLOW_TRACE_ARCHIVAL_CONFIG` | `None` | supported (T21.1) | CLI wins over env. YAML schema/repository validation and errors match Python; incompatible with `--artifacts-only`. Runtime reads use a thread-safe 5s TTL cache with stale-on-refresh-error tolerance. Store/archive paths and scheduling are later T21 tasks. |
 | `--secrets-cache-ttl` | (none) | `60` | fail-loud | Secrets cache not ported. Unknown flag → exit 2. |
 | `--secrets-cache-max-size` | (none) | `1000` | fail-loud | Secrets cache not ported. Unknown flag → exit 2. |
 

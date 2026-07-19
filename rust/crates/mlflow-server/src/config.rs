@@ -11,8 +11,13 @@
 //! end with `/`.
 
 use std::fmt;
+use std::path::PathBuf;
 
 use clap::Parser;
+
+use crate::trace_archival_config::{
+    TraceArchivalConfigError, TraceArchivalConfigProvider, TraceArchivalServerConfig,
+};
 
 /// Env var Python's `--static-prefix` reads as a fallback
 /// (`mlflow/cli/__init__.py`).
@@ -36,6 +41,8 @@ pub const MLFLOW_WORKSPACE_STORE_URI_ENV_VAR: &str = "MLFLOW_WORKSPACE_STORE_URI
 /// `MLFLOW_AUTH_CONFIG_PATH`: Python's enable signal for the basic-auth app,
 /// set by `mlflow server --app-name basic-auth`.
 pub const MLFLOW_AUTH_CONFIG_PATH_ENV_VAR: &str = "MLFLOW_AUTH_CONFIG_PATH";
+/// `MLFLOW_TRACE_ARCHIVAL_CONFIG` (`environment_variables.py`).
+pub const MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR: &str = "MLFLOW_TRACE_ARCHIVAL_CONFIG";
 
 /// Default `X-Frame-Options` value (`MLFLOW_SERVER_X_FRAME_OPTIONS` default).
 pub const DEFAULT_X_FRAME_OPTIONS: &str = "SAMEORIGIN";
@@ -113,6 +120,11 @@ pub struct Cli {
     #[arg(long, env = "MLFLOW_ARTIFACTS_ONLY", default_value_t = false)]
     pub artifacts_only: bool,
 
+    /// YAML settings for server-owned trace archival
+    /// (`--trace-archival-config`, env `MLFLOW_TRACE_ARCHIVAL_CONFIG`).
+    #[arg(long, env = MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR, value_name = "PATH")]
+    pub trace_archival_config: Option<PathBuf>,
+
     /// The base artifact-store URI the `mlflow-artifacts` proxy reads/writes
     /// (`--artifacts-destination`, env `MLFLOW_ARTIFACTS_DESTINATION`). Python
     /// defaults to `./mlartifacts`.
@@ -187,6 +199,15 @@ pub enum ConfigError {
         "{name} value must be one of ['true', 'false', '1', '0'] (case-insensitive), but got {value}"
     )]
     InvalidBooleanEnvironment { name: &'static str, value: String },
+    #[error(
+        "--trace-archival-config cannot be combined with --artifacts-only because artifact-only \
+         servers do not initialize the tracking store required for server-owned trace archival."
+    )]
+    TraceArchivalArtifactsOnlyConflict,
+    #[error("{0}")]
+    TraceArchivalConfigPath(String),
+    #[error(transparent)]
+    TraceArchivalConfig(#[from] TraceArchivalConfigError),
 }
 
 /// Back-compat alias: pre-T11.1 code referred to `StaticPrefixError`.
@@ -215,6 +236,9 @@ pub struct ServerConfig {
     /// Artifacts-only mode (`--artifacts-only`): only the artifact proxy routes
     /// are registered; tracking endpoints are omitted.
     pub artifacts_only: bool,
+    /// Dynamic, typed trace-archival config source for the store and scheduler.
+    /// It has already passed startup validation when produced by `from_cli`.
+    pub trace_archival_config: TraceArchivalConfigProvider,
     /// The `--artifacts-destination` base URI for the proxy repo, if configured.
     pub artifacts_destination: Option<String>,
     pub allowed_hosts: Option<Vec<String>>,
@@ -259,6 +283,7 @@ impl Default for ServerConfig {
             default_artifact_root: None,
             serve_artifacts: true,
             artifacts_only: false,
+            trace_archival_config: TraceArchivalConfigProvider::default(),
             artifacts_destination: None,
             allowed_hosts: None,
             cors_allowed_origins: None,
@@ -329,6 +354,22 @@ impl ServerConfig {
         };
         let job_execution_enabled = env_bool(MLFLOW_SERVER_ENABLE_JOB_EXECUTION_ENV_VAR, true)?;
 
+        let trace_archival_config_path = cli
+            .trace_archival_config
+            .filter(|path| !path.to_string_lossy().trim().is_empty());
+        // Click's `Path(exists=True, dir_okay=False, readable=True)` validates
+        // the resolved CLI/env path before entering the server callback.
+        if let Some(path) = trace_archival_config_path.as_deref() {
+            validate_trace_archival_config_path(path)?;
+        }
+        // Python rejects the mode conflict after path validation but before
+        // reading/parsing the YAML.
+        if cli.artifacts_only && trace_archival_config_path.is_some() {
+            return Err(ConfigError::TraceArchivalArtifactsOnlyConflict);
+        }
+        let trace_archival_config = TraceArchivalConfigProvider::new(trace_archival_config_path);
+        trace_archival_config.validate_at_startup()?;
+
         Ok(Self {
             host: cli.host,
             port: cli.port,
@@ -340,6 +381,7 @@ impl ServerConfig {
             default_artifact_root: cli.default_artifact_root,
             serve_artifacts,
             artifacts_only: cli.artifacts_only,
+            trace_archival_config,
             artifacts_destination: cli.artifacts_destination,
             allowed_hosts,
             cors_allowed_origins,
@@ -354,6 +396,41 @@ impl ServerConfig {
             workspace_store_uri: cli.workspace_store_uri,
         })
     }
+
+    /// Return the current typed trace-archival settings. Runtime consumers use
+    /// this API so they share the provider's five-second stale-tolerant cache.
+    pub fn current_trace_archival_config(
+        &self,
+    ) -> Result<Option<TraceArchivalServerConfig>, TraceArchivalConfigError> {
+        self.trace_archival_config.get()
+    }
+}
+
+fn validate_trace_archival_config_path(path: &std::path::Path) -> Result<(), ConfigError> {
+    let quoted = format!("'{}'", path.display().to_string().replace('\'', "\\'"));
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        let detail = if error.kind() == std::io::ErrorKind::NotFound {
+            format!("File {quoted} does not exist.")
+        } else if error.kind() == std::io::ErrorKind::PermissionDenied {
+            format!("File {quoted} is not readable.")
+        } else {
+            format!("Unable to stat file {quoted}.")
+        };
+        ConfigError::TraceArchivalConfigPath(format!(
+            "Invalid value for '--trace-archival-config': {detail}"
+        ))
+    })?;
+    if metadata.is_dir() {
+        return Err(ConfigError::TraceArchivalConfigPath(format!(
+            "Invalid value for '--trace-archival-config': File {quoted} is a directory."
+        )));
+    }
+    std::fs::File::open(path).map_err(|_| {
+        ConfigError::TraceArchivalConfigPath(format!(
+            "Invalid value for '--trace-archival-config': File {quoted} is not readable."
+        ))
+    })?;
+    Ok(())
 }
 
 /// Split a comma-separated flag/env value, mirroring
@@ -406,7 +483,10 @@ fn validate_static_prefix(value: Option<String>) -> Result<Option<String>, Confi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::sync::Mutex;
+
+    use tempfile::TempDir;
 
     /// Serializes tests that mutate process-global env vars, since `cargo test`
     /// runs tests concurrently.
@@ -416,6 +496,18 @@ mod tests {
         let mut full = vec!["mlflow-server"];
         full.extend_from_slice(args);
         Cli::parse_from(full)
+    }
+
+    fn trace_archival_config(temp: &TempDir, name: &str, retention: &str) -> PathBuf {
+        let path = temp.path().join(name);
+        fs::write(
+            &path,
+            format!(
+                "trace_archival:\n  enabled: true\n  location: file:///tmp/archive\n  retention: {retention}\n"
+            ),
+        )
+        .unwrap();
+        path
     }
 
     #[test]
@@ -467,6 +559,7 @@ mod tests {
         assert_eq!(config.static_prefix, None);
         assert!(config.serve_artifacts);
         assert!(!config.artifacts_only);
+        assert!(config.trace_archival_config.path().is_none());
         assert_eq!(config.x_frame_options, "SAMEORIGIN");
         assert!(!config.disable_security_middleware);
         assert!(!config.expose_prometheus);
@@ -490,6 +583,165 @@ mod tests {
         clear_env();
         let config = ServerConfig::from_cli(parse(&["--artifacts-only"])).unwrap();
         assert!(config.artifacts_only);
+    }
+
+    #[test]
+    fn trace_archival_cli_flag_is_validated_and_exposed() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let path = trace_archival_config(&temp, "config.yaml", "30d");
+        let config =
+            ServerConfig::from_cli(parse(&["--trace-archival-config", path.to_str().unwrap()]))
+                .unwrap();
+
+        assert_eq!(config.trace_archival_config.path(), Some(path.as_path()));
+        assert_eq!(
+            config
+                .current_trace_archival_config()
+                .unwrap()
+                .unwrap()
+                .retention,
+            "30d"
+        );
+    }
+
+    #[test]
+    fn trace_archival_cli_flag_overrides_environment() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let env_path = trace_archival_config(&temp, "env.yaml", "30d");
+        let cli_path = trace_archival_config(&temp, "cli.yaml", "7d");
+        unsafe {
+            std::env::set_var(MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR, &env_path);
+        }
+        let config = ServerConfig::from_cli(parse(&[
+            "--trace-archival-config",
+            cli_path.to_str().unwrap(),
+        ]))
+        .unwrap();
+        assert_eq!(
+            config.trace_archival_config.path(),
+            Some(cli_path.as_path())
+        );
+        assert_eq!(
+            config
+                .current_trace_archival_config()
+                .unwrap()
+                .unwrap()
+                .retention,
+            "7d"
+        );
+    }
+
+    #[test]
+    fn trace_archival_falls_back_to_environment() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let path = trace_archival_config(&temp, "env.yaml", "14d");
+        unsafe {
+            std::env::set_var(MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR, &path);
+        }
+        let config = ServerConfig::from_cli(parse(&[])).unwrap();
+        assert_eq!(config.trace_archival_config.path(), Some(path.as_path()));
+        assert_eq!(
+            config
+                .current_trace_archival_config()
+                .unwrap()
+                .unwrap()
+                .retention,
+            "14d"
+        );
+    }
+
+    #[test]
+    fn artifacts_only_conflict_precedes_config_file_parse() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("malformed.yaml");
+        fs::write(&path, "trace_archival: [\n").unwrap();
+        let error = ServerConfig::from_cli(parse(&[
+            "--artifacts-only",
+            "--trace-archival-config",
+            path.to_str().unwrap(),
+        ]))
+        .unwrap_err();
+        assert_eq!(error, ConfigError::TraceArchivalArtifactsOnlyConflict);
+        assert_eq!(
+            error.to_string(),
+            "--trace-archival-config cannot be combined with --artifacts-only because \
+             artifact-only servers do not initialize the tracking store required for \
+             server-owned trace archival."
+        );
+    }
+
+    #[test]
+    fn artifacts_only_conflicts_with_trace_archival_environment_fallback() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let path = trace_archival_config(&temp, "env.yaml", "30d");
+        unsafe {
+            std::env::set_var(MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR, &path);
+        }
+        assert_eq!(
+            ServerConfig::from_cli(parse(&["--artifacts-only"])).unwrap_err(),
+            ConfigError::TraceArchivalArtifactsOnlyConflict
+        );
+    }
+
+    #[test]
+    fn missing_trace_archival_path_uses_click_message() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let error = ServerConfig::from_cli(parse(&[
+            "--trace-archival-config",
+            "/definitely/missing/config.yaml",
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Invalid value for '--trace-archival-config': File \
+             '/definitely/missing/config.yaml' does not exist."
+        );
+    }
+
+    #[test]
+    fn directory_trace_archival_path_uses_click_message() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let error = ServerConfig::from_cli(parse(&[
+            "--trace-archival-config",
+            temp.path().to_str().unwrap(),
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Invalid value for '--trace-archival-config': File '{}' is a directory.",
+                temp.path().display()
+            )
+        );
+    }
+
+    #[test]
+    fn invalid_trace_archival_config_fails_during_server_config_resolution() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_env();
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("bad.yaml");
+        fs::write(&path, "trace_archival: [\n").unwrap();
+        let error =
+            ServerConfig::from_cli(parse(&["--trace-archival-config", path.to_str().unwrap()]))
+                .unwrap_err();
+        assert!(matches!(error, ConfigError::TraceArchivalConfig(_)));
+        assert!(error
+            .to_string()
+            .starts_with("Invalid trace archival config file"));
     }
 
     #[test]
@@ -738,6 +990,7 @@ mod tests {
             "MLFLOW_DEFAULT_ARTIFACT_ROOT",
             "MLFLOW_SERVE_ARTIFACTS",
             "MLFLOW_ARTIFACTS_ONLY",
+            MLFLOW_TRACE_ARCHIVAL_CONFIG_ENV_VAR,
             "MLFLOW_ARTIFACTS_DESTINATION",
             "MLFLOW_EXPOSE_PROMETHEUS",
         ] {
