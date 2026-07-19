@@ -1,0 +1,1664 @@
+{
+  "adapter_transcripts": {
+    "deepeval": {
+      "parsed": {
+        "reason": "scripted",
+        "score": 0.75
+      },
+      "request": {
+        "eval_parameters": null,
+        "messages": [
+          {
+            "content": "REFERENCE PROMPT\n\nIMPORTANT: Return your response as valid JSON matching this schema: {'properties': {'score': {'title': 'Score', 'type': 'number'}, 'reason': {'title': 'Reason', 'type': 'string'}}, 'required': ['score', 'reason'], 'title': 'Result', 'type': 'object'}\nReturn ONLY the JSON object, no additional text or markdown formatting.",
+            "role": "user"
+          }
+        ],
+        "model": "fake-t19-3",
+        "provider": "openai",
+        "response_format": null
+      }
+    },
+    "ragas": {
+      "parsed": {
+        "reason": "scripted",
+        "score": 0.75
+      },
+      "request": {
+        "eval_parameters": null,
+        "messages": [
+          {
+            "content": "REFERENCE PROMPT\n\nOUTPUT FORMAT: Respond ONLY with a JSON object containing these fields: \"score\", \"reason\", no other text. Do not add markdown formatting to the response.",
+            "role": "user"
+          }
+        ],
+        "model": "fake-t19-3",
+        "provider": "openai",
+        "response_format": null
+      }
+    },
+    "trulens": {
+      "parsed": "{\"score\": 2, \"criteria\": \"scripted\", \"supporting_evidence\": \"fixture\"}",
+      "request": {
+        "eval_parameters": null,
+        "messages": [
+          {
+            "content": "REFERENCE SYSTEM",
+            "role": "system"
+          },
+          {
+            "content": "REFERENCE USER",
+            "role": "user"
+          }
+        ],
+        "model": "fake-t19-3",
+        "provider": "openai",
+        "response_format": null
+      }
+    }
+  },
+  "deterministic_cases": [
+    {
+      "expectations": {
+        "expected_output": "Paris"
+      },
+      "family": "deepeval",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "deepeval",
+          "score": 1.0,
+          "threshold": 1
+        },
+        "rationale": "The actual and expected outputs are exact matches.",
+        "source_id": null,
+        "source_type": "CODE",
+        "value": "yes"
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "ExactMatch",
+      "model": null,
+      "outputs": " Paris ",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "Paris"
+      },
+      "family": "deepeval",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "deepeval",
+          "score": 0.0,
+          "threshold": 0.25
+        },
+        "rationale": "The actual and expected outputs are different.",
+        "source_id": null,
+        "source_type": "CODE",
+        "value": "no"
+      },
+      "inputs": "reference input",
+      "kwargs": {
+        "threshold": 0.25
+      },
+      "metric": "ExactMatch",
+      "model": null,
+      "outputs": "Lyon",
+      "trace": null
+    },
+    {
+      "expectations": null,
+      "family": "deepeval",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "deepeval",
+          "score": 1.0,
+          "threshold": 1.0
+        },
+        "rationale": "The actual output fully matches the pattern.",
+        "source_id": null,
+        "source_type": "CODE",
+        "value": "yes"
+      },
+      "inputs": "reference input",
+      "kwargs": {
+        "pattern": "answer: \\d+"
+      },
+      "metric": "PatternMatch",
+      "model": null,
+      "outputs": " answer: 42 ",
+      "trace": null
+    },
+    {
+      "expectations": null,
+      "family": "deepeval",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "deepeval",
+          "score": 1.0,
+          "threshold": 1.0
+        },
+        "rationale": "The actual output fully matches the pattern.",
+        "source_id": null,
+        "source_type": "CODE",
+        "value": "yes"
+      },
+      "inputs": "reference input",
+      "kwargs": {
+        "ignore_case": true,
+        "pattern": "YES"
+      },
+      "metric": "PatternMatch",
+      "model": null,
+      "outputs": "yes",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "Paris"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "ExactMatch",
+        "source_type": "CODE",
+        "value": 1.0
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "ExactMatch",
+      "model": null,
+      "outputs": "Paris",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "Paris"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "ExactMatch",
+        "source_type": "CODE",
+        "value": 0.0
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "ExactMatch",
+      "model": null,
+      "outputs": " Paris ",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "Paris"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "StringPresence",
+        "source_type": "CODE",
+        "value": 1.0
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "StringPresence",
+      "model": null,
+      "outputs": "The capital is Paris.",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "sitting"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "NonLLMStringSimilarity",
+        "source_type": "CODE",
+        "value": 0.5714285714285714
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "NonLLMStringSimilarity",
+      "model": null,
+      "outputs": "kitten",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "The cat is on the mat."
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "BleuScore",
+        "source_type": "CODE",
+        "value": 1.0000000000000004
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "BleuScore",
+      "model": null,
+      "outputs": "The cat is on the mat.",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "Hello world"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "openai:/gpt-4.1-mini",
+        "source_type": "LLM_JUDGE",
+        "value": 0.9727748649210861
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "CHRFScore",
+      "model": "openai:/gpt-4.1-mini",
+      "outputs": "Hello world!",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "a b c"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "RougeScore",
+        "source_type": "CODE",
+        "value": 0.6666666666666666
+      },
+      "inputs": "reference input",
+      "kwargs": {
+        "rouge_type": "rougeL"
+      },
+      "metric": "RougeScore",
+      "model": null,
+      "outputs": "a b d",
+      "trace": null
+    },
+    {
+      "expectations": {
+        "expected_output": "id,name\n1,Alice\n2,Bob"
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": "Mode: rows, Precision: 0.6667, Recall: 1.0000",
+        "source_id": "openai:/gpt-4.1-mini",
+        "source_type": "LLM_JUDGE",
+        "value": 0.8
+      },
+      "inputs": "reference input",
+      "kwargs": {},
+      "metric": "DataCompyScore",
+      "model": "openai:/gpt-4.1-mini",
+      "outputs": "id,name\n1,Alice\n2,Bob\n3,Charlie",
+      "trace": null
+    },
+    {
+      "expectations": null,
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": "Matched 1/1 quoted spans",
+        "source_id": "openai:/gpt-4.1-mini",
+        "source_type": "LLM_JUDGE",
+        "value": 1.0
+      },
+      "inputs": null,
+      "kwargs": {},
+      "metric": "QuotedSpansAlignment",
+      "model": "openai:/gpt-4.1-mini",
+      "outputs": null,
+      "trace": {
+        "data": {
+          "spans": [
+            {
+              "attributes": {
+                "mlflow.spanInputs": "{\"question\": \"reference input\"}",
+                "mlflow.spanOutputs": "\"The source says \\\"machine learning models improve accuracy\\\".\"",
+                "mlflow.spanType": "\"CHAIN\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 2,
+              "events": [],
+              "links": [],
+              "name": "root",
+              "parent_span_id": null,
+              "span_id": "AAAAAAAAAAA=",
+              "start_time_unix_nano": 1,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            },
+            {
+              "attributes": {
+                "mlflow.spanOutputs": "[{\"page_content\": \"Machine learning models improve accuracy by 15%.\"}]",
+                "mlflow.spanType": "\"RETRIEVER\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 3,
+              "events": [],
+              "links": [],
+              "name": "retrieve",
+              "parent_span_id": null,
+              "span_id": "AQAAAAAAAAA=",
+              "start_time_unix_nano": 2,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            }
+          ]
+        },
+        "info": {
+          "execution_duration_ms": 1,
+          "request_preview": "reference input",
+          "request_time": "2026-01-01T00:00:00Z",
+          "response_preview": "The source says \"machine learning models improve accuracy\".",
+          "state": "OK",
+          "trace_id": "tr-00000000000000000000000000000000",
+          "trace_location": {
+            "mlflow_experiment": {
+              "experiment_id": "0"
+            },
+            "type": "MLFLOW_EXPERIMENT"
+          },
+          "trace_metadata": {
+            "mlflow.traceInputs": "{\"question\": \"reference input\"}",
+            "mlflow.traceOutputs": "\"The source says \\\"machine learning models improve accuracy\\\".\""
+          }
+        }
+      }
+    },
+    {
+      "expectations": {
+        "expected_tool_calls": [
+          {
+            "arguments": {
+              "location": "Paris"
+            },
+            "name": "get_weather"
+          }
+        ]
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "ToolCallAccuracy",
+        "source_type": "CODE",
+        "value": 1.0
+      },
+      "inputs": null,
+      "kwargs": {},
+      "metric": "ToolCallAccuracy",
+      "model": null,
+      "outputs": null,
+      "trace": {
+        "data": {
+          "spans": [
+            {
+              "attributes": {
+                "mlflow.spanInputs": "{\"question\": \"reference input\"}",
+                "mlflow.spanOutputs": "{\"answer\": \"sunny\"}",
+                "mlflow.spanType": "\"CHAIN\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 2,
+              "events": [],
+              "links": [],
+              "name": "root",
+              "parent_span_id": null,
+              "span_id": "AAAAAAAAAAA=",
+              "start_time_unix_nano": 1,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            },
+            {
+              "attributes": {
+                "mlflow.spanInputs": "{\"location\": \"Paris\"}",
+                "mlflow.spanOutputs": "{\"temperature\": 21}",
+                "mlflow.spanType": "\"TOOL\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 3,
+              "events": [],
+              "links": [],
+              "name": "get_weather",
+              "parent_span_id": null,
+              "span_id": "AgAAAAAAAAA=",
+              "start_time_unix_nano": 2,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            }
+          ]
+        },
+        "info": {
+          "execution_duration_ms": 1,
+          "request_preview": "reference input",
+          "request_time": "2026-01-01T00:00:00Z",
+          "response_preview": "{'answer': 'sunny'}",
+          "state": "OK",
+          "trace_id": "tr-00000000000000000000000000000000",
+          "trace_location": {
+            "mlflow_experiment": {
+              "experiment_id": "0"
+            },
+            "type": "MLFLOW_EXPERIMENT"
+          },
+          "trace_metadata": {
+            "mlflow.traceInputs": "{\"question\": \"reference input\"}",
+            "mlflow.traceOutputs": "{\"answer\": \"sunny\"}"
+          }
+        }
+      }
+    },
+    {
+      "expectations": {
+        "expected_tool_calls": [
+          {
+            "arguments": {
+              "location": "Paris"
+            },
+            "name": "get_weather"
+          }
+        ]
+      },
+      "family": "ragas",
+      "feedback": {
+        "metadata": {
+          "mlflow.scorer.framework": "ragas"
+        },
+        "rationale": null,
+        "source_id": "ToolCallF1",
+        "source_type": "CODE",
+        "value": 1.0
+      },
+      "inputs": null,
+      "kwargs": {},
+      "metric": "ToolCallF1",
+      "model": null,
+      "outputs": null,
+      "trace": {
+        "data": {
+          "spans": [
+            {
+              "attributes": {
+                "mlflow.spanInputs": "{\"question\": \"reference input\"}",
+                "mlflow.spanOutputs": "{\"answer\": \"sunny\"}",
+                "mlflow.spanType": "\"CHAIN\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 2,
+              "events": [],
+              "links": [],
+              "name": "root",
+              "parent_span_id": null,
+              "span_id": "AAAAAAAAAAA=",
+              "start_time_unix_nano": 1,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            },
+            {
+              "attributes": {
+                "mlflow.spanInputs": "{\"location\": \"Paris\"}",
+                "mlflow.spanOutputs": "{\"temperature\": 21}",
+                "mlflow.spanType": "\"TOOL\"",
+                "mlflow.traceRequestId": "\"tr-00000000000000000000000000000000\""
+              },
+              "end_time_unix_nano": 3,
+              "events": [],
+              "links": [],
+              "name": "get_weather",
+              "parent_span_id": null,
+              "span_id": "AgAAAAAAAAA=",
+              "start_time_unix_nano": 2,
+              "status": {
+                "code": "STATUS_CODE_OK",
+                "message": ""
+              },
+              "trace_id": "AAAAAAAAAAAAAAAAAAAAAA=="
+            }
+          ]
+        },
+        "info": {
+          "execution_duration_ms": 1,
+          "request_preview": "reference input",
+          "request_time": "2026-01-01T00:00:00Z",
+          "response_preview": "{'answer': 'sunny'}",
+          "state": "OK",
+          "trace_id": "tr-00000000000000000000000000000000",
+          "trace_location": {
+            "mlflow_experiment": {
+              "experiment_id": "0"
+            },
+            "type": "MLFLOW_EXPERIMENT"
+          },
+          "trace_metadata": {
+            "mlflow.traceInputs": "{\"question\": \"reference input\"}",
+            "mlflow.traceOutputs": "{\"answer\": \"sunny\"}"
+          }
+        }
+      }
+    }
+  ],
+  "dynamic_errors": {
+    "deepeval": {
+      "message": "Unknown metric: 'DefinitelyMissingMetric'. Could not import 'DefinitelyMissingMetricMetric' from 'deepeval.metrics'. Available pre-configured metrics: AnswerRelevancy, ArgumentCorrectness, Bias, ContextualPrecision, ContextualRecall, ContextualRelevancy, ConversationCompleteness, ExactMatch, Faithfulness, GoalAccuracy, Hallucination, JsonCorrectness, KnowledgeRetention, Misuse, NonAdvice, PIILeakage, PatternMatch, PlanAdherence, PlanQuality, PromptAlignment, RoleAdherence, RoleViolation, StepEfficiency, Summarization, TaskCompletion, ToolCorrectness, ToolUse, TopicAdherence, Toxicity, TurnRelevancy",
+      "type": "MlflowException"
+    },
+    "ragas": {
+      "message": "Unknown RAGAS metric: 'DefinitelyMissingMetric'. Could not find class 'DefinitelyMissingMetric' in module 'ragas.metrics.collections'.",
+      "type": "MlflowException"
+    },
+    "trulens": {
+      "message": "'GatewayProvider' object has no attribute 'definitely_missing_metric_with_cot_reasons'",
+      "type": "AttributeError"
+    }
+  },
+  "fake_credential": "sk-fake-t19-3-not-a-secret",
+  "generated_from": {
+    "deepeval": {
+      "license": "Apache-2.0",
+      "version": "4.0.7"
+    },
+    "ragas": {
+      "license": "Apache-2.0",
+      "version": "0.4.3"
+    },
+    "trulens": {
+      "license": "MIT",
+      "version": "2.8.1"
+    },
+    "trulens-providers-litellm": {
+      "license": "MIT",
+      "version": "2.8.1"
+    }
+  },
+  "live_provider_calls": 0,
+  "manifest": [
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ArgumentCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Bias",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualPrecision",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualRecall",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextualRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ConversationCompleteness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ConversationalDAG",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DAG",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "deterministic",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExactMatch",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Faithfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "GoalAccuracy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Hallucination",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageCoherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageEditing",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageHelpfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ImageReference",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "JsonCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "KnowledgeRetention",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MCPTaskCompletion",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MCPUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Misuse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiTurnMCPUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NonAdvice",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PIILeakage",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "deterministic",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PatternMatch",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanQuality",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PromptAlignment",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RoleAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RoleViolation",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "StepEfficiency",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TaskCompletion",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TextToImage",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCorrectness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolUse",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TopicAdherence",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Toxicity",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualPrecision",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualRecall",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnContextualRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnFaithfulness",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "deepeval",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TurnRelevancy",
+      "owner_task": "T19.3",
+      "package": "deepeval",
+      "pin": "4.0.7"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracyWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AgentGoalAccuracyWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerCorrectness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "AnswerRelevancy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "BleuScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "CHRFScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextEntityRecall",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecision",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecisionWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextPrecisionWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRecall",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRelevance",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextUtilization",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DataCompyScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "DomainSpecificRubrics",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExactMatch",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "FactualCorrectness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Faithfulness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "InstanceSpecificRubrics",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiModalFaithfulness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "MultiModalRelevance",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NoiseSensitivity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "NonLLMStringSimilarity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QuotedSpansAlignment",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ResponseGroundedness",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RougeScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RubricsScoreWithReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "RubricsScoreWithoutReference",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SQLSemanticEquivalence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SemanticSimilarity",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "StringPresence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SummaryScore",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCallAccuracy",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "deterministic",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCallF1",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "ragas",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "TopicAdherence",
+      "owner_task": "T19.3",
+      "package": "ragas",
+      "pin": "0.4.3"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Coherence",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Comprehensiveness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Conciseness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ContextRelevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Controversiality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Correctness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Criminality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ExecutionEfficiency",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Groundedness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Harmfulness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Helpfulness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Insensitivity",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "LogicalConsistency",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Maliciousness",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Misogyny",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanAdherence",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "PlanQuality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QsRelevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Relevance",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Sentiment",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Stereotypes",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolCalling",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolQuality",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "trulens",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "ToolSelection",
+      "owner_task": "T19.3",
+      "package": "trulens",
+      "pin": "2.8.1"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Hallucination",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "QA",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Relevance",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "SQL",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Summarization",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    },
+    {
+      "execution": "llm_or_embeddings",
+      "family": "phoenix",
+      "fixture_oracle": "corpus recorder needed",
+      "metric": "Toxicity",
+      "owner_task": "T19.3",
+      "package": "arize-phoenix-evals",
+      "pin": "2.13.0"
+    }
+  ],
+  "phoenix": {
+    "count": 6,
+    "disposition": "rejected-elastic-2.0-d23",
+    "metrics": [
+      "Hallucination",
+      "QA",
+      "Relevance",
+      "SQL",
+      "Summarization",
+      "Toxicity"
+    ]
+  },
+  "reference_tools": {
+    "datacompy": {
+      "scope": "corpus-generation-only",
+      "version": "0.19.0"
+    },
+    "rapidfuzz": {
+      "scope": "corpus-generation-only",
+      "version": "3.14.3"
+    },
+    "rouge-score": {
+      "scope": "corpus-generation-only",
+      "version": "0.1.2"
+    },
+    "sacrebleu": {
+      "scope": "corpus-generation-only",
+      "version": "2.6.0"
+    }
+  },
+  "schema_version": 1
+}
