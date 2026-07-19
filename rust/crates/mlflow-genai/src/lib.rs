@@ -12,6 +12,7 @@ mod jobs;
 mod judge;
 mod memory;
 mod online;
+mod optimization;
 mod payload;
 mod protocol;
 mod store;
@@ -26,6 +27,10 @@ pub use evaluation::{
     compute_aggregated_metrics, parse_rate_limit, scorer_error_shape, standardize_scorer_value,
     CanonicalAssessment, EvaluationConfig, EvaluationEngine, NamedScorer, RateConfig, RateLimiter,
     ScoredItem, ScorerAssessmentError, AUTO_INITIAL_RPS,
+};
+pub use optimization::{
+    Candidate, EvaluationRecord, GepaConfig, MetaPromptConfig, OptimizationEngine,
+    OptimizationOutput, OptimizationRuntime, OptimizerConfig,
 };
 pub use payload::{
     supported_builtin_scorers, BuiltinScorerPayload, InstructionsJudgePayload, ScorerPayloadError,
@@ -83,8 +88,7 @@ pub async fn execute_worker_request(request: &WorkerRequest) -> WorkerResponse {
             JobKind::InvokeScorer => execute_invoke_scorer(request).await,
             JobKind::RunOnlineTraceScorer => jobs::execute_online_trace(request).await,
             JobKind::RunOnlineSessionScorer => jobs::execute_online_session(request).await,
-            // Phase 19: native prompt-optimization execution lands here.
-            JobKind::OptimizePrompts => Err(EngineError::UnsupportedJobKind(request.job_kind)),
+            JobKind::OptimizePrompts => optimization::execute_job(request).await,
             JobKind::InvokeIssueDetection => unreachable!("native discovery returned above"),
             JobKind::InvokeGenaiEvaluate => jobs::execute_evaluate(request).await,
         }
