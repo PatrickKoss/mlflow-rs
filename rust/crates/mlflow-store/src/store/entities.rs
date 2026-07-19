@@ -272,6 +272,18 @@ pub const TRACE_METADATA_INFO_FINALIZED: &str = "mlflow.trace.infoFinalized";
 /// (`TraceTagKey.SPANS_LOCATION`).
 pub const TRACE_TAG_SPANS_LOCATION: &str = "mlflow.trace.spansLocation";
 
+/// Trace-tag key containing the artifact-repository URI for `traces.pb`.
+pub const TRACE_TAG_ARCHIVE_LOCATION: &str = "mlflow.trace.archiveLocation";
+
+/// Trace-tag key recording a terminal archival failure classification.
+pub const TRACE_TAG_ARCHIVAL_FAILURE: &str = "mlflow.trace.archivalFailure";
+
+/// Experiment-tag key overriding trace archival retention.
+pub const TRACE_EXPERIMENT_TAG_ARCHIVAL_RETENTION: &str = "mlflow.trace.archivalRetention";
+
+/// Experiment-tag key requesting an immediate archival pass.
+pub const TRACE_EXPERIMENT_TAG_ARCHIVE_NOW: &str = "mlflow.trace.archiveNow";
+
 /// The `SpansLocation.TRACKING_STORE` value written by `log_spans`.
 pub const SPANS_LOCATION_TRACKING_STORE: &str = "TRACKING_STORE";
 

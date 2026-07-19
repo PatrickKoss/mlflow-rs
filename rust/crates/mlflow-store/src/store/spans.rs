@@ -156,6 +156,12 @@ impl TrackingStore {
             create_trace_info_from_spans(&mut tx, dialect, trace_id, exp_id, range).await?;
         }
 
+        // Writer side of the archival generation guard. This conditional bump
+        // and every span mutation share the transaction: a finalize that won
+        // first makes the UPDATE affect fewer rows and rolls this write back;
+        // a writer that wins first changes the generation observed by finalize.
+        advance_db_payload_generations(&mut tx, dialect, &trace_ids).await?;
+
         // Phase 3: bulk upsert spans + span metrics (batched, dialect upsert).
         for span in spans {
             upsert_span(&mut tx, dialect, span, exp_id).await?;
@@ -181,6 +187,48 @@ impl TrackingStore {
         tx.commit().await.map_err(super::traces::map_db_err_pub)?;
         Ok(())
     }
+}
+
+async fn advance_db_payload_generations(
+    tx: &mut Tx<'_>,
+    dialect: Dialect,
+    trace_ids: &BTreeSet<String>,
+) -> Result<(), MlflowError> {
+    let mut binds = Vec::with_capacity(trace_ids.len());
+    let placeholders = trace_ids
+        .iter()
+        .enumerate()
+        .map(|(index, trace_id)| {
+            binds.push(Val::Text(trace_id.clone()));
+            dialect.placeholder(index + 1)
+        })
+        .collect::<Vec<_>>();
+    let sql = format!(
+        "UPDATE {TRACE_INFO} SET db_payload_generation = db_payload_generation + 1 \
+         WHERE request_id IN ({}) AND NOT EXISTS (SELECT 1 FROM {TRACE_TAGS} location \
+         WHERE location.request_id = {TRACE_INFO}.request_id \
+         AND location.\"key\" = '{}' AND location.value <> '{}')",
+        placeholders.join(", "),
+        TRACE_TAG_SPANS_LOCATION,
+        SPANS_LOCATION_TRACKING_STORE,
+    );
+    let updated = tx
+        .exec(&sql, &binds)
+        .await
+        .map_err(super::traces::map_db_err_pub)?;
+    if updated == trace_ids.len() as u64 {
+        return Ok(());
+    }
+
+    let archived = trace_ids
+        .iter()
+        .map(|trace_id| format!("'{trace_id}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(MlflowError::new(
+        format!("Cannot log spans to archived traces: {archived}."),
+        mlflow_error::ErrorCode::InvalidState,
+    ))
 }
 
 /// Existing-trace status read for `log_spans` (whether the trace exists, and

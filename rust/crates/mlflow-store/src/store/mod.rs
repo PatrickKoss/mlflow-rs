@@ -50,6 +50,7 @@ mod scorers;
 mod search;
 mod search_experiments;
 mod spans;
+mod trace_archival;
 mod trace_correlation;
 mod traces;
 mod traces_analytics;
@@ -66,7 +67,9 @@ pub use entities::{
     LoggedModelOutput, Metric, MetricWithRunId, Param, Run, RunData, RunInfo, RunInputs,
     RunOutputs, RunStatus, RunTag, StoredSpan, TraceAssessment, TraceInfo, TraceState,
     TraceWithSpans, MLFLOW_ARTIFACT_LOCATION, SPANS_LOCATION_ARCHIVE_REPO,
-    SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
+    SPANS_LOCATION_ARTIFACT_REPO, SPANS_LOCATION_TRACKING_STORE,
+    TRACE_EXPERIMENT_TAG_ARCHIVAL_RETENTION, TRACE_EXPERIMENT_TAG_ARCHIVE_NOW,
+    TRACE_TAG_ARCHIVAL_FAILURE, TRACE_TAG_ARCHIVE_LOCATION, TRACE_TAG_SPANS_LOCATION,
 };
 pub use evaluation_datasets::{
     python_json_dumps, EvaluationDataset, EvaluationDatasetsPage, EvaluationRecord,
@@ -101,6 +104,7 @@ pub use scorers::{OnlineScorer, OnlineScoringConfig, ScorerVersion};
 pub use search::{RunsPage, SEARCH_MAX_RESULTS_DEFAULT, SEARCH_MAX_RESULTS_THRESHOLD};
 pub use search_experiments::ExperimentsPage;
 pub use spans::{SpanInput, SpanMetricInput, TraceTimeRange};
+pub use trace_archival::{ArchiveNowRequest, TraceArchivalData, TraceArchiveCandidate};
 pub use traces::{StartTraceInput, MAX_TRACE_LINKS_PER_REQUEST};
 pub use traces_analytics::{
     MetricAggregation, MetricDataPoint, MetricViewType, TraceFilterCorrelationResult,

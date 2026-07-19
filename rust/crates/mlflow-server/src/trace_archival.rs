@@ -9,9 +9,12 @@
 //! [`StoredSpan`] entities. [`decode_traces_pb`] returns the resource and OTLP
 //! span entities directly so archive reads do not discard resource metadata.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
+use axum::body::Bytes;
 use base64::Engine;
+use futures::stream::{self, StreamExt};
+use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_proto::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, KeyValue, KeyValueList,
 };
@@ -19,7 +22,10 @@ use mlflow_proto::opentelemetry::proto::resource::v1::Resource;
 use mlflow_proto::opentelemetry::proto::trace::v1::{
     span, status, ResourceSpans, ScopeSpans, Span, Status, TracesData,
 };
-use mlflow_store::StoredSpan;
+use mlflow_store::{
+    StoredSpan, TraceInfo, TrackingStore, WorkspaceStore, SPANS_LOCATION_ARCHIVE_REPO,
+    TRACE_TAG_ARCHIVE_LOCATION, TRACE_TAG_SPANS_LOCATION,
+};
 use prost::Message;
 use serde_json::Value;
 
@@ -116,6 +122,351 @@ pub fn decode_traces_pb(data: &[u8]) -> Result<TraceArchive, TraceArchivalCodecE
         resource: resource_spans.resource.unwrap_or_default(),
         spans,
     })
+}
+
+/// Scheduler-facing, single-workspace archival pass. The caller supplies the
+/// already-resolved workspace location and retention plus the remaining
+/// pass-level budget; no scheduling or interval gating happens here.
+pub async fn archive_traces(
+    store: &TrackingStore,
+    workspace: &str,
+    resolved_trace_archival_location: &str,
+    broader_retention: &str,
+    long_retention_allowlist: &[String],
+    max_traces_per_pass: Option<usize>,
+) -> Result<u64, MlflowError> {
+    archive_traces_at(
+        store,
+        workspace,
+        resolved_trace_archival_location,
+        broader_retention,
+        long_retention_allowlist,
+        max_traces_per_pass,
+        chrono::Utc::now().timestamp_millis(),
+    )
+    .await
+}
+
+/// Resolve server/workspace configuration and run one bounded archival pass.
+/// This is the T21.4 hand-off: the scheduler owns timing, locking, fairness,
+/// and its cross-workspace remaining budget; this function owns one workspace.
+pub async fn archive_traces_for_workspace(
+    store: &TrackingStore,
+    workspace_store: Option<&WorkspaceStore>,
+    workspace: &str,
+    config: &crate::TraceArchivalServerConfig,
+    remaining_budget: Option<usize>,
+) -> Result<u64, MlflowError> {
+    if !config.enabled {
+        return Ok(0);
+    }
+    let (mut location, retention, append_workspace_prefix) =
+        if let Some(workspace_store) = workspace_store {
+            let resolved = workspace_store
+                .resolve_trace_archival_config(&config.location, &config.retention, workspace)
+                .await?;
+            (
+                resolved
+                    .config
+                    .location
+                    .unwrap_or_else(|| config.location.clone()),
+                resolved
+                    .config
+                    .retention
+                    .unwrap_or_else(|| config.retention.clone()),
+                resolved.append_workspace_prefix,
+            )
+        } else {
+            (config.location.clone(), config.retention.clone(), false)
+        };
+    if append_workspace_prefix {
+        location = format!(
+            "{}/workspaces/{}",
+            location.trim_end_matches('/'),
+            workspace.trim_matches('/')
+        );
+    }
+    let configured_budget = config
+        .max_traces_per_pass
+        .and_then(|value| usize::try_from(value).ok());
+    let budget = match (remaining_budget, configured_budget) {
+        (Some(remaining), Some(configured)) => Some(remaining.min(configured)),
+        (Some(remaining), None) => Some(remaining),
+        (None, configured) => configured,
+    };
+    archive_traces(
+        store,
+        workspace,
+        &location,
+        &retention,
+        &config.long_retention_allowlist,
+        budget,
+    )
+    .await
+}
+
+/// Deterministic-clock variant used by differential tests and T21.4.
+pub async fn archive_traces_at(
+    store: &TrackingStore,
+    workspace: &str,
+    resolved_trace_archival_location: &str,
+    broader_retention: &str,
+    long_retention_allowlist: &[String],
+    max_traces_per_pass: Option<usize>,
+    now_millis: i64,
+) -> Result<u64, MlflowError> {
+    if resolved_trace_archival_location.is_empty() {
+        return Err(MlflowError::invalid_parameter_value(
+            "`resolved_trace_archival_location` must be provided.",
+        ));
+    }
+    if broader_retention.is_empty() {
+        return Err(MlflowError::invalid_parameter_value(
+            "`broader_retention` must be provided.",
+        ));
+    }
+    if max_traces_per_pass == Some(0) {
+        return Err(MlflowError::invalid_parameter_value(
+            "`max_traces_per_pass` must be a positive integer, received 0.",
+        ));
+    }
+
+    let allowlist = long_retention_allowlist
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    let (archive_now_requests, candidates) = store
+        .plan_trace_archival(
+            workspace,
+            now_millis,
+            broader_retention,
+            &allowlist,
+            max_traces_per_pass,
+        )
+        .await?;
+    let mut archived = 0;
+    let archive_now_experiments = archive_now_requests
+        .iter()
+        .map(|request| request.experiment_id.as_str())
+        .collect::<HashSet<_>>();
+    let mut retryable_failure_experiment_ids = HashSet::new();
+    for candidate in candidates {
+        let data = match store
+            .load_trace_archival_data(workspace, &candidate.trace_id)
+            .await
+        {
+            Ok(Some(data)) => data,
+            Ok(None) => continue,
+            Err(error) => {
+                if archive_now_experiments.contains(candidate.experiment_id.as_str()) {
+                    retryable_failure_experiment_ids.insert(candidate.experiment_id.clone());
+                }
+                tracing::warn!(trace_id = %candidate.trace_id, %error, "failed to load trace archival snapshot");
+                continue;
+            }
+        };
+        let payload = match stored_spans_to_traces_pb(&data.spans) {
+            Ok(payload) => payload,
+            Err(error) => {
+                tracing::warn!(trace_id = %candidate.trace_id, %error, "marking malformed trace during archival");
+                if let Err(error) = store
+                    .mark_trace_archival_malformed(
+                        workspace,
+                        &candidate.trace_id,
+                        data.db_payload_generation,
+                    )
+                    .await
+                {
+                    if archive_now_experiments.contains(candidate.experiment_id.as_str()) {
+                        retryable_failure_experiment_ids.insert(candidate.experiment_id.clone());
+                    }
+                    tracing::warn!(trace_id = %candidate.trace_id, %error, "failed to mark malformed trace");
+                }
+                continue;
+            }
+        };
+        let artifact_uri = append_archive_artifact_uri(
+            resolved_trace_archival_location,
+            &candidate.experiment_id,
+            &candidate.trace_id,
+        );
+        let repo = match mlflow_artifacts::factory::repo_from_uri(&artifact_uri) {
+            Ok(repo) => repo,
+            Err(error) => {
+                if archive_now_experiments.contains(candidate.experiment_id.as_str()) {
+                    retryable_failure_experiment_ids.insert(candidate.experiment_id.clone());
+                }
+                tracing::warn!(trace_id = %candidate.trace_id, %error, "failed to resolve trace archive repository");
+                continue;
+            }
+        };
+        let body = stream::once(async move { Ok(Bytes::from(payload)) }).boxed();
+        if let Err(error) = repo.put(TRACE_ARCHIVAL_FILENAME, body).await {
+            if archive_now_experiments.contains(candidate.experiment_id.as_str()) {
+                retryable_failure_experiment_ids.insert(candidate.experiment_id.clone());
+            }
+            let _ = repo.delete(TRACE_ARCHIVAL_FILENAME).await;
+            tracing::warn!(trace_id = %candidate.trace_id, %error, "trace archival upload failed");
+            continue;
+        }
+        let finalized = match store
+            .finalize_archived_trace(
+                workspace,
+                &candidate.trace_id,
+                &artifact_uri,
+                data.db_payload_generation,
+            )
+            .await
+        {
+            Ok(finalized) => finalized,
+            Err(error) => {
+                if archive_now_experiments.contains(candidate.experiment_id.as_str()) {
+                    retryable_failure_experiment_ids.insert(candidate.experiment_id.clone());
+                }
+                delete_unreferenced_payload(
+                    store,
+                    workspace,
+                    &candidate.trace_id,
+                    &artifact_uri,
+                    repo.as_ref(),
+                )
+                .await;
+                tracing::warn!(trace_id = %candidate.trace_id, %error, "trace archival finalization failed");
+                continue;
+            }
+        };
+        if finalized {
+            archived += 1;
+        } else {
+            delete_unreferenced_payload(
+                store,
+                workspace,
+                &candidate.trace_id,
+                &artifact_uri,
+                repo.as_ref(),
+            )
+            .await;
+        }
+    }
+    store
+        .clear_completed_archive_now_requests(
+            workspace,
+            &archive_now_requests,
+            now_millis,
+            &retryable_failure_experiment_ids,
+        )
+        .await?;
+    Ok(archived)
+}
+
+/// Download an archive payload. Repository failures (including missing files)
+/// resolve to empty spans, while an empty or malformed payload is corruption,
+/// matching `ArtifactRepository.download_archived_trace_data`.
+pub async fn download_archived_spans(trace_info: &TraceInfo) -> Result<Vec<Span>, MlflowError> {
+    let artifact_uri = trace_info.tag(TRACE_TAG_ARCHIVE_LOCATION).ok_or_else(|| {
+        MlflowError::new(
+            format!(
+                "Trace data is corrupted for request_id={}",
+                trace_info.trace_id
+            ),
+            ErrorCode::InvalidState,
+        )
+    })?;
+    let repo = mlflow_artifacts::factory::repo_from_uri(artifact_uri)?;
+    let download = match repo.get(TRACE_ARCHIVAL_FILENAME).await {
+        Ok(download) => download,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let bytes = collect_download(download).await?;
+    if bytes.is_empty() {
+        return Err(archive_payload_corrupted());
+    }
+    decode_traces_pb(&bytes)
+        .map(|archive| archive.spans)
+        .map_err(|_| archive_payload_corrupted())
+}
+
+/// Archive-backed `get-trace-artifact` JSON reconstruction.
+pub async fn download_archived_trace_json(
+    trace_info: &TraceInfo,
+) -> Result<serde_json::Value, MlflowError> {
+    let artifact_uri = trace_info.tag(TRACE_TAG_ARCHIVE_LOCATION).ok_or_else(|| {
+        MlflowError::new(
+            format!(
+                "Trace data is corrupted for request_id={}",
+                trace_info.trace_id
+            ),
+            ErrorCode::InvalidState,
+        )
+    })?;
+    let repo = mlflow_artifacts::factory::repo_from_uri(artifact_uri)?;
+    let download = match repo.get(TRACE_ARCHIVAL_FILENAME).await {
+        Ok(download) => download,
+        Err(_) => return Ok(serde_json::json!({ "spans": [] })),
+    };
+    let bytes = collect_download(download).await?;
+    if bytes.is_empty() {
+        return Err(archive_payload_corrupted());
+    }
+    let archive = decode_traces_pb(&bytes).map_err(|_| archive_payload_corrupted())?;
+    let spans = archive
+        .spans
+        .iter()
+        .map(|span| {
+            crate::otlp::translate::archived_span_content(span, &archive.resource)
+                .map_err(|_| archive_payload_corrupted())
+                .and_then(|content| {
+                    serde_json::from_str(&content).map_err(|_| archive_payload_corrupted())
+                })
+        })
+        .collect::<Result<Vec<serde_json::Value>, MlflowError>>()?;
+    Ok(serde_json::json!({ "spans": spans }))
+}
+
+fn append_archive_artifact_uri(root: &str, experiment_id: &str, trace_id: &str) -> String {
+    format!(
+        "{}/{}/traces/{}/artifacts",
+        root.trim_end_matches('/'),
+        experiment_id.trim_matches('/'),
+        trace_id.trim_matches('/')
+    )
+}
+
+async fn delete_unreferenced_payload(
+    store: &TrackingStore,
+    workspace: &str,
+    trace_id: &str,
+    artifact_uri: &str,
+    repo: &dyn mlflow_artifacts::ArtifactRepo,
+) {
+    if let Ok(info) = store.get_trace_info(workspace, trace_id).await {
+        if info.tag(TRACE_TAG_SPANS_LOCATION) == Some(SPANS_LOCATION_ARCHIVE_REPO)
+            && info.tag(TRACE_TAG_ARCHIVE_LOCATION) == Some(artifact_uri)
+        {
+            return;
+        }
+    }
+    if let Err(error) = repo.delete(TRACE_ARCHIVAL_FILENAME).await {
+        tracing::warn!(%trace_id, %error, "failed to delete unreferenced archived payload");
+    }
+}
+
+async fn collect_download(
+    download: mlflow_artifacts::ArtifactDownload,
+) -> Result<Vec<u8>, MlflowError> {
+    let mut bytes = Vec::with_capacity(download.size.max(0) as usize);
+    let mut stream = download.stream;
+    while let Some(chunk) = stream.next().await {
+        bytes.extend_from_slice(&chunk?);
+    }
+    Ok(bytes)
+}
+
+fn archive_payload_corrupted() -> MlflowError {
+    MlflowError::new(
+        format!("Trace data is corrupted for path={TRACE_ARCHIVAL_FILENAME}"),
+        ErrorCode::InvalidState,
+    )
 }
 
 fn validate_single_trace(spans: &[Span]) -> Result<(), TraceArchivalCodecError> {

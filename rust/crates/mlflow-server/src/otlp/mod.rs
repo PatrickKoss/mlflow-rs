@@ -51,7 +51,7 @@
 //! [`mlflow_error::MlflowError`]'s own `IntoResponse`.
 
 mod json;
-mod translate;
+pub(crate) mod translate;
 
 use std::collections::BTreeMap;
 use std::io::Read;
