@@ -22,7 +22,7 @@
 //! * No `path`: dispatch on the trace's `mlflow.trace.spansLocation` tag:
 //!   - `TRACKING_STORE` → build `{"spans": [...]}` from the DB-backed spans
 //!     (`Trace.data.to_dict()`).
-//!   - `ARCHIVE_REPO` → out of scope v1 (plan D6): `NOT_IMPLEMENTED`.
+//!   - `ARCHIVE_REPO` → decode `traces.pb` from `mlflow.trace.archiveLocation`.
 //!   - anything else (including `ARTIFACT_REPO`, or no tag at all) →
 //!     `download_trace_data()`: read `traces.json` from the artifact repo.
 //!
@@ -94,13 +94,11 @@ pub async fn get_trace_artifact(
         None => {
             let trace_info = store.get_trace_info(workspace.name(), &request_id).await?;
             if trace_info.tag(TRACE_TAG_SPANS_LOCATION) == Some(SPANS_LOCATION_ARCHIVE_REPO) {
-                // Archive-backed trace payloads (plan D6): not implemented in v1.
-                return Err(MlflowError::not_implemented(
-                    "Archive-backed trace artifact reads are not implemented by this server.",
-                ));
+                crate::trace_archival::download_archived_trace_json(&trace_info).await?
+            } else {
+                let repo = repo_for_trace(&trace_info)?;
+                download_trace_data(repo.as_ref()).await?
             }
-            let repo = repo_for_trace(&trace_info)?;
-            download_trace_data(repo.as_ref()).await?
         }
     };
 
@@ -118,8 +116,7 @@ fn query_param(pairs: &[(String, String)], name: &str) -> Option<String> {
 /// trace is `TRACKING_STORE`-backed (`{"spans": [...]}`), `None` to signal
 /// "fall back to the artifact repo" for everything else (including
 /// `ARTIFACT_REPO` and an absent tag). `ARCHIVE_REPO` is also `None` here —
-/// the caller checks the tag again to route it to the (unimplemented)
-/// archive path instead of the artifact repo.
+/// the caller checks the tag again to route it to the archive repository.
 async fn fetch_trace_data_from_store(
     store: &mlflow_store::TrackingStore,
     workspace: &Workspace,

@@ -127,6 +127,7 @@ pub fn translate_request(
                     otel_span,
                     resource_span.resource.as_ref(),
                     resource_service_name.as_deref(),
+                    false,
                 )
                 .map_err(|_| {
                     SpanConversionError(
@@ -172,6 +173,7 @@ fn translate_span(
     otel_span: &OtelSpan,
     resource: Option<&Resource>,
     resource_service_name: Option<&str>,
+    preserve_request_id: bool,
 ) -> Result<TranslatedSpan, String> {
     if otel_span.trace_id.is_empty() {
         return Err("trace_id is required but was empty".to_string());
@@ -216,10 +218,12 @@ fn translate_span(
     // `preserve_request_id=False` (server ingest never trusts a client-sent
     // request id): always overwrite with the server-derived trace id
     // (span.py:499-515).
-    serialized_attributes.insert(
-        ATTR_REQUEST_ID.to_string(),
-        dump_span_attribute_value(&Value::String(mlflow_trace_id.clone())),
-    );
+    if !preserve_request_id || !serialized_attributes.contains_key(ATTR_REQUEST_ID) {
+        serialized_attributes.insert(
+            ATTR_REQUEST_ID.to_string(),
+            dump_span_attribute_value(&Value::String(mlflow_trace_id.clone())),
+        );
+    }
 
     // `sanitize_attributes` (translation/__init__.py:461-486): strip one layer
     // of double-encoding introduced by dumping an already-JSON-string value.
@@ -307,6 +311,18 @@ fn translate_span(
         metrics,
         is_root,
     })
+}
+
+/// Trusted archive-reader variant of `Span.from_otel_proto`: preserve the
+/// persisted MLflow request-id attribute and do not apply OTLP-ingest-only
+/// resource service-name propagation.
+pub(crate) fn archived_span_content(
+    otel_span: &OtelSpan,
+    resource: &Resource,
+) -> Result<String, SpanConversionError> {
+    translate_span(otel_span, Some(resource), None, true)
+        .map(|span| span.content)
+        .map_err(SpanConversionError)
 }
 
 /// `_try_parse_json_string` (`sqlalchemy_store.py:9751-9756`): unwrap one JSON
@@ -732,7 +748,7 @@ mod tests {
             }),
             ..span_with(vec![1; 16], vec![2; 8], "root")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         assert_eq!(translated.trace_id, "tr-01010101010101010101010101010101");
         assert_eq!(translated.span_id, "0202020202020202");
         assert_eq!(translated.status, "OK");
@@ -743,7 +759,7 @@ mod tests {
     #[test]
     fn missing_status_defaults_to_unset() {
         let otel_span = span_with(vec![1; 16], vec![2; 8], "root");
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         assert_eq!(translated.status, "UNSET");
     }
 
@@ -756,7 +772,7 @@ mod tests {
             }),
             ..span_with(vec![1; 16], vec![2; 8], "root")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         assert_eq!(translated.status, "ERROR");
         let content: Value = serde_json::from_str(&translated.content).unwrap();
         assert_eq!(content["status"]["code"], "STATUS_CODE_ERROR");
@@ -766,7 +782,7 @@ mod tests {
     #[test]
     fn content_encodes_ids_as_base64() {
         let otel_span = span_with(vec![1; 16], vec![2; 8], "root");
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         let content: Value = serde_json::from_str(&translated.content).unwrap();
         assert_eq!(
             content["trace_id"],
@@ -785,7 +801,7 @@ mod tests {
             parent_span_id: vec![9; 8],
             ..span_with(vec![1; 16], vec![2; 8], "child")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         assert_eq!(
             translated.parent_span_id.as_deref(),
             Some("0909090909090909")
@@ -796,13 +812,13 @@ mod tests {
     #[test]
     fn empty_trace_id_is_rejected() {
         let otel_span = span_with(vec![], vec![2; 8], "root");
-        assert!(translate_span(&otel_span, None, None).is_err());
+        assert!(translate_span(&otel_span, None, None, false).is_err());
     }
 
     #[test]
     fn empty_span_id_is_rejected() {
         let otel_span = span_with(vec![1; 16], vec![], "root");
-        assert!(translate_span(&otel_span, None, None).is_err());
+        assert!(translate_span(&otel_span, None, None, false).is_err());
     }
 
     #[test]
@@ -818,7 +834,7 @@ mod tests {
             }],
             ..span_with(vec![1; 16], vec![2; 8], "root")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         let content: Value = serde_json::from_str(&translated.content).unwrap();
         // Attribute values in `content.attributes` are the JSON-*encoded*
         // string produced by `dump_span_attribute_value` (see
@@ -864,7 +880,7 @@ mod tests {
             ],
             ..span_with(vec![1; 16], vec![2; 8], "root")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         let dims: Value =
             serde_json::from_str(translated.dimension_attributes.as_ref().unwrap()).unwrap();
         assert_eq!(dims[ATTR_MODEL], "gpt-4");
@@ -984,7 +1000,7 @@ mod tests {
             }],
             ..span_with(vec![1; 16], vec![2; 8], "root")
         };
-        let translated = translate_span(&otel_span, None, None).unwrap();
+        let translated = translate_span(&otel_span, None, None, false).unwrap();
         assert!(translated.content.contains("\\u00e9"));
         assert!(!translated.content.contains('é'));
     }

@@ -124,13 +124,25 @@ pub async fn get_trace(
     let trace_id = require_non_empty(req.trace_id.as_deref(), "trace_id")?;
     let allow_partial = req.allow_partial.unwrap_or(false);
 
-    let trace = state
+    let info = state
         .tracking_store()
-        .get_trace(workspace.name(), trace_id, allow_partial)
+        .get_trace_info(workspace.name(), trace_id)
         .await?;
-    let resp = pb::get_trace::Response {
-        trace: Some(to_proto_trace(&trace)?),
+    let trace = if info.tag(mlflow_store::TRACE_TAG_SPANS_LOCATION)
+        == Some(mlflow_store::SPANS_LOCATION_ARCHIVE_REPO)
+    {
+        pb::Trace {
+            trace_info: Some(to_proto_trace_info(&info)),
+            spans: crate::trace_archival::download_archived_spans(&info).await?,
+        }
+    } else {
+        let trace = state
+            .tracking_store()
+            .get_trace(workspace.name(), trace_id, allow_partial)
+            .await?;
+        to_proto_trace(&trace)?
     };
+    let resp = pb::get_trace::Response { trace: Some(trace) };
     proto_response(&resp, "mlflow.GetTrace.Response")
 }
 

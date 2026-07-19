@@ -243,9 +243,8 @@ impl TrackingStore {
     /// retry loop here so the HTTP handler stays thin. When `allow_partial` is
     /// true, the (possibly incomplete) trace is returned directly.
     ///
-    /// Archive-backed traces (`SPANS_LOCATION == ARCHIVE_REPO`) require object
-    /// -store payload reads and are out of scope for this DB-backed path
-    /// (plan T4.5 / D6): they surface `NOT_IMPLEMENTED`.
+    /// Archive-backed object-store payloads are loaded by the server layer;
+    /// this DB-only store method returns their metadata with no DB spans.
     pub async fn get_trace(
         &self,
         workspace: &str,
@@ -283,10 +282,10 @@ impl TrackingStore {
 
         let spans_location = info.tag(super::entities::TRACE_TAG_SPANS_LOCATION);
         if spans_location == Some(super::entities::SPANS_LOCATION_ARCHIVE_REPO) {
-            return Err(MlflowError::new(
-                "Archive-backed trace span reads are not implemented by this server.".to_string(),
-                ErrorCode::NotImplemented,
-            ));
+            return Ok(Some(TraceWithSpans {
+                info,
+                spans: Vec::new(),
+            }));
         }
 
         // Only TRACKING_STORE traces carry DB span rows; anything else (no
@@ -749,10 +748,10 @@ impl TrackingStore {
         .await
     }
 
-    /// `_delete_traces` (DB-backed subset). Selects trace ids matching the
-    /// filters in deterministic `(timestamp_ms, request_id)` order (deadlock
-    /// discipline), then deletes them; FK `ON DELETE CASCADE` removes tags,
-    /// metadata, metrics, spans, span_metrics, and assessments.
+    /// `_delete_traces`. DB-backed rows are removed in the selection
+    /// transaction. Archive-backed rows remain locked/persisted until their
+    /// external `traces.pb` payload is removed; a second transaction deletes
+    /// only the rows whose cleanup succeeded. Missing payloads are tolerated.
     ///
     /// Parity note: Python's `_delete_traces` deletes only `trace_info` (relying
     /// on FK cascade) and explicitly clears `review_queue_items`; it leaves
@@ -761,9 +760,6 @@ impl TrackingStore {
     /// items are soft references (no FK), so they are explicitly removed before
     /// the trace rows in the same transaction.
     ///
-    /// Archive-backed traces (`SPANS_LOCATION == ARCHIVE_REPO`) require object
-    /// -store payload cleanup and are handled in Phase 4; this DB-backed path
-    /// covers the tracking-store case.
     async fn delete_traces_impl(
         &self,
         workspace: &str,
@@ -816,8 +812,12 @@ impl TrackingStore {
             sql.push_str(&format!(" LIMIT {mt}"));
         }
 
-        let selected: Vec<String> = self
-            .db()
+        if dialect != Dialect::Sqlite {
+            sql.push_str(" FOR UPDATE");
+        }
+
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        let selected: Vec<String> = tx
             .fetch_all(&sql, &binds, |r| r.get_string("request_id"))
             .await
             .map_err(internal)?;
@@ -825,26 +825,71 @@ impl TrackingStore {
             return Ok(0);
         }
 
-        // Review-queue items are soft references to traces, so explicitly prune
-        // them. Then delete trace_info; FK cascades handle tags, metadata,
-        // metrics, spans, span_metrics, and assessments. Entity associations are
-        // intentionally left orphaned, matching Python.
-        let mut tx = self.db().begin_tx().await.map_err(internal)?;
-        let queue_placeholders = (0..selected.len())
-            .map(|offset| dialect.placeholder(offset + 2))
+        let selected_placeholders = selected
+            .iter()
+            .enumerate()
+            .map(|(index, _)| dialect.placeholder(index + 3))
             .collect::<Vec<_>>();
-        let queue_sql = format!(
-            "DELETE FROM review_queue_items WHERE item_type = {} AND item_id IN ({})",
+        let archived_sql = format!(
+            "SELECT locations.request_id, archives.value AS archive_location FROM {TRACE_TAGS} locations \
+             LEFT JOIN {TRACE_TAGS} archives ON archives.request_id = locations.request_id \
+             AND archives.\"key\" = {} WHERE locations.\"key\" = {} \
+             AND locations.value = 'ARCHIVE_REPO' AND locations.request_id IN ({})",
             dialect.placeholder(1),
-            queue_placeholders.join(", ")
+            dialect.placeholder(2),
+            selected_placeholders.join(", ")
         );
-        let mut queue_binds = vec![Val::Text("trace".to_string())];
-        queue_binds.extend(selected.iter().cloned().map(Val::Text));
-        tx.exec(&queue_sql, &queue_binds).await.map_err(internal)?;
-        let (del_sql, del_binds) = in_delete(dialect, TRACE_INFO, "request_id", &selected);
-        let deleted = tx.exec(&del_sql, &del_binds).await.map_err(internal)?;
+        let mut archived_binds = vec![
+            Val::Text(super::entities::TRACE_TAG_ARCHIVE_LOCATION.to_string()),
+            Val::Text(super::entities::TRACE_TAG_SPANS_LOCATION.to_string()),
+        ];
+        archived_binds.extend(selected.iter().cloned().map(Val::Text));
+        let archived = tx
+            .fetch_all(&archived_sql, &archived_binds, |row| {
+                Ok((
+                    row.get_string("request_id")?,
+                    row.get_opt_string("archive_location")?,
+                ))
+            })
+            .await
+            .map_err(internal)?;
+        let archived_ids = archived
+            .iter()
+            .map(|(trace_id, _)| trace_id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        let db_backed = selected
+            .iter()
+            .filter(|trace_id| !archived_ids.contains(trace_id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let deleted_db = delete_selected_trace_rows(&mut tx, dialect, &db_backed).await?;
         tx.commit().await.map_err(internal)?;
-        Ok(deleted)
+
+        let mut cleaned_archived = Vec::new();
+        for (trace_id, archive_location) in archived {
+            let Some(archive_location) = archive_location else {
+                cleaned_archived.push(trace_id);
+                continue;
+            };
+            let cleanup = match mlflow_artifacts::factory::repo_from_uri(&archive_location) {
+                Ok(repo) => repo.delete("traces.pb").await,
+                Err(error) => Err(error),
+            };
+            match cleanup {
+                Ok(()) => cleaned_archived.push(trace_id),
+                Err(error) => log::error!(
+                    "Failed to clean up archived payload for trace {trace_id}; leaving the trace row intact: {error}"
+                ),
+            }
+        }
+        if cleaned_archived.is_empty() {
+            return Ok(deleted_db);
+        }
+        let mut tx = self.db().begin_tx().await.map_err(internal)?;
+        let deleted_archived =
+            delete_selected_trace_rows(&mut tx, dialect, &cleaned_archived).await?;
+        tx.commit().await.map_err(internal)?;
+        Ok(deleted_db + deleted_archived)
     }
 
     // ---- internal helpers ----
@@ -1125,6 +1170,29 @@ impl TrackingStore {
             }
         }
     }
+}
+
+async fn delete_selected_trace_rows(
+    tx: &mut Tx<'_>,
+    dialect: Dialect,
+    trace_ids: &[String],
+) -> Result<u64, MlflowError> {
+    if trace_ids.is_empty() {
+        return Ok(0);
+    }
+    let queue_placeholders = (0..trace_ids.len())
+        .map(|offset| dialect.placeholder(offset + 2))
+        .collect::<Vec<_>>();
+    let queue_sql = format!(
+        "DELETE FROM review_queue_items WHERE item_type = {} AND item_id IN ({})",
+        dialect.placeholder(1),
+        queue_placeholders.join(", ")
+    );
+    let mut queue_binds = vec![Val::Text("trace".to_string())];
+    queue_binds.extend(trace_ids.iter().cloned().map(Val::Text));
+    tx.exec(&queue_sql, &queue_binds).await.map_err(internal)?;
+    let (delete_sql, delete_binds) = in_delete(dialect, TRACE_INFO, "request_id", trace_ids);
+    tx.exec(&delete_sql, &delete_binds).await.map_err(internal)
 }
 
 /// Map a `sqlx` error to an `MlflowError`, tagging deadlocks so the retry

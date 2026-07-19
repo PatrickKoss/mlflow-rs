@@ -358,6 +358,48 @@ async fn get_trace_with_spans_builds_otel_spans() {
 }
 
 #[tokio::test]
+async fn get_trace_reads_archive_repo_payload() {
+    let server = TestServer::start("get_trace_archive").await;
+    let trace_id = "tr-00112233445566778899aabbccddeeff";
+    start_trace(&server, trace_id, EXP_ID, "OK").await;
+    let archive = tempfile::tempdir().unwrap();
+    std::fs::write(
+        archive.path().join("traces.pb"),
+        include_bytes!("fixtures/trace_archival/python_db_traces.pb"),
+    )
+    .unwrap();
+    server
+        .store
+        .set_trace_tag(
+            "default",
+            trace_id,
+            "mlflow.trace.spansLocation",
+            "ARCHIVE_REPO",
+        )
+        .await
+        .unwrap();
+    server
+        .store
+        .set_trace_tag(
+            "default",
+            trace_id,
+            "mlflow.trace.archiveLocation",
+            &format!("file://{}", archive.path().display()),
+        )
+        .await
+        .unwrap();
+
+    let body = json!({"trace_id": trace_id, "allow_partial": false}).to_string();
+    let res = get_body(&server, "/api/3.0", "/mlflow/traces/get", &body).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let spans = res.json()["trace"]["spans"].as_array().unwrap().clone();
+    assert_eq!(spans.len(), 3);
+    assert_eq!(spans[0]["name"], "root");
+    assert_eq!(spans[1]["name"], "child-a");
+    assert_eq!(spans[2]["name"], "child-b");
+}
+
+#[tokio::test]
 async fn get_trace_missing_is_resource_does_not_exist() {
     let server = TestServer::start("get_trace_missing").await;
     let body = json!({"trace_id": "tr-nope", "allow_partial": true}).to_string();

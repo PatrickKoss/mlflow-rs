@@ -9,7 +9,7 @@
 //! * traversal `path=` → 400.
 //! * missing `request_id` → 400.
 //! * unknown trace → 404.
-//! * ARCHIVE_REPO → `NOT_IMPLEMENTED`.
+//! * ARCHIVE_REPO → archived payload (missing payload tolerated as empty).
 //! * both `/ajax-api/2.0` and `/ajax-api/3.0` prefixes serve the route.
 
 use std::path::{Path, PathBuf};
@@ -573,9 +573,10 @@ async fn unknown_trace_is_404_with_python_exact_body() {
 }
 
 #[tokio::test]
-async fn archive_repo_trace_is_not_implemented() {
+async fn archive_repo_missing_payload_returns_empty_spans() {
     let server = TestServer::start("archive_repo").await;
     let trace_id = "tr-archive-repo";
+    let archive = tempfile::tempdir().unwrap();
     start_trace(&server.store, trace_id).await;
     server
         .store
@@ -587,13 +588,18 @@ async fn archive_repo_trace_is_not_implemented() {
         )
         .await
         .unwrap();
+    server
+        .store
+        .set_trace_tag(
+            "default",
+            trace_id,
+            "mlflow.trace.archiveLocation",
+            &format!("file://{}", archive.path().display()),
+        )
+        .await
+        .unwrap();
 
     let res = get(&server, "/ajax-api/2.0", &format!("request_id={trace_id}")).await;
-    assert_eq!(
-        res.status,
-        StatusCode::NOT_IMPLEMENTED,
-        "{}",
-        res.body_str()
-    );
-    assert_eq!(res.json()["error_code"], "NOT_IMPLEMENTED");
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body_str());
+    assert_eq!(res.body, br#"{"spans": []}"#);
 }
