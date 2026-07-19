@@ -3,7 +3,6 @@
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
 use http_body_util::{BodyExt, Empty, Full};
@@ -14,6 +13,7 @@ use hyper_util::rt::TokioExecutor;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore, WORKSPACE_DEFAULT_NAME};
+use mlflow_test_support::reference_server::ReferenceServer;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
@@ -35,55 +35,23 @@ fn fixture_path() -> PathBuf {
 }
 
 struct PythonServer {
-    child: Child,
+    _server: ReferenceServer,
     base: String,
 }
 
 impl PythonServer {
     async fn start(uri: &str) -> Self {
-        let port = free_port();
-        let child = Command::new("uv")
-            .args([
-                "run",
-                "--frozen",
-                "python",
-                "-m",
-                "uvicorn",
-                "mlflow.server.fastapi_app:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                &port.to_string(),
-                "--log-level",
-                "error",
-            ])
-            .current_dir(repo_root())
-            .env(BACKEND_ENV, uri)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("launch Python server through uv");
+        let server = ReferenceServer::spawn(&repo_root(), |command, _port| {
+            command.env(BACKEND_ENV, uri);
+        })
+        .expect("launch Python reference server through uv");
+        let port = server.port();
         wait_for_port(port).await;
         Self {
-            child,
-            base: format!("http://127.0.0.1:{port}"),
+            base: server.base_url(),
+            _server: server,
         }
     }
-}
-
-impl Drop for PythonServer {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn free_port() -> u16 {
-    std::net::TcpListener::bind(("127.0.0.1", 0))
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
 }
 
 async fn wait_for_port(port: u16) {
