@@ -55,6 +55,7 @@ pub mod server_info;
 pub mod state;
 pub mod trace_archival;
 pub mod trace_archival_config;
+pub mod trace_archival_scheduler;
 pub mod trace_artifact;
 pub mod traces;
 pub mod traces_v2;

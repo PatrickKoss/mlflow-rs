@@ -157,6 +157,28 @@ pub async fn archive_traces_for_workspace(
     config: &crate::TraceArchivalServerConfig,
     remaining_budget: Option<usize>,
 ) -> Result<u64, MlflowError> {
+    archive_traces_for_workspace_at(
+        store,
+        workspace_store,
+        workspace,
+        config,
+        remaining_budget,
+        chrono::Utc::now().timestamp_millis(),
+    )
+    .await
+}
+
+/// Deterministic-clock workspace variant used by the scheduler. Configuration
+/// resolution remains identical to [`archive_traces_for_workspace`], while all
+/// workspace scopes in one scheduler pass share the same wall-clock cutoff.
+pub async fn archive_traces_for_workspace_at(
+    store: &TrackingStore,
+    workspace_store: Option<&WorkspaceStore>,
+    workspace: &str,
+    config: &crate::TraceArchivalServerConfig,
+    remaining_budget: Option<usize>,
+    now_millis: i64,
+) -> Result<u64, MlflowError> {
     if !config.enabled {
         return Ok(0);
     }
@@ -194,13 +216,14 @@ pub async fn archive_traces_for_workspace(
         (Some(remaining), None) => Some(remaining),
         (None, configured) => configured,
     };
-    archive_traces(
+    archive_traces_at(
         store,
         workspace,
         &location,
         &retention,
         &config.long_retention_allowlist,
         budget,
+        now_millis,
     )
     .await
 }
