@@ -3888,6 +3888,25 @@ zero live provider calls anywhere in this phase.
       equivalence checker passes on the smoke cell.
       **VER:** `rust/bench/genai/` harness + smoke-cell CI-runnable script,
       exit 0.
+      **DONE 2026-07-19** (codex agent, merged 297664586): `rust/bench/
+      genai/` — mock_provider.py (OpenAI chat SSE/non-stream + embeddings
+      + models + Anthropic messages/SSE; body/IDs/tokens derived solely
+      from SHA256("<seed>:<route>:"+canonical-sorted-JSON); byte-identical
+      across separate same-seed instances — tested; per-route fixed
+      latency, default 0), runner.py (compose lifecycle, fresh DB/S3
+      prefix per target, Python 4-worker uvicorn + real job runtime vs
+      Rust release + native worker, process-group cleanup), metrics.py
+      (per-endpoint p50/p95/p99/max + RPS + errors, SSE TTFE/inter-frame,
+      job queue-wait vs execution, 1 s /proc process-tree RSS+CPU,
+      pg_stat_activity), equivalence.py (seeded sample + all job terminal
+      states, id/uuid/timestamp/duration normalization),
+      raw-metrics.schema.json v1.0.0, docker-compose.yml, smoke.sh,
+      test_harness.py (5 tests), README. Assistant via existing
+      dev/dev_stubs fake CLI; gateway/judges via the local mock — zero
+      live provider calls. Smoke: 109 (Py) / 102 (Rust) reqs, 0 errors
+      both, equivalence PASS; RPS 32.4→139.5; dataset-search p50
+      49.95→0.91 ms; scorer job 2.378→0.508 s; peak RSS 3,380→16.2 MiB.
+      Post-merge gates 13/13 green.
 - [ ] **T23.2 CRUD + read-path matrix (Tier A families)**: scenario cells for
       every §12 CRUD family — datasets incl. record batches (12.1), scorers +
       versions (12.3), issues (12.4), label schemas (12.5), review queues
