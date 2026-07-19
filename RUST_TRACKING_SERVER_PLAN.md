@@ -3700,13 +3700,43 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       `ServerConfig::current_trace_archival_config()`. Merge conflict:
       lib.rs module-list union with T21.3. Post-merge gates 13/13 green
       (1,400+ Rust tests, route parity 372/372, replay 188).
-- [ ] **T21.2 Store paths**: `archive_traces`, transactional finalize
+- [x] **T21.2 Store paths**: `archive_traces`, transactional finalize
       (tag flips + content blank + generation guard), archived-payload
       deletion on trace delete, ARCHIVE_REPO reads in `getTrace` /
       `get-trace-artifact` (removing the Part I NOT_IMPLEMENTED stubs from
       T4.1/T4.5), retention/allowlist resolution.
       **AC:** archive→read→delete cycle byte-matches Python; D6 closed.
       **VER:** archival differential on sqlite + postgres.
+      **DONE 2026-07-19** (codex agent, merged d088c9ab1; **D6 CLOSED**):
+      `rust/crates/mlflow-store/src/store/trace_archival.rs` + server
+      pass API in `trace_archival.rs`. Mirrors sqlalchemy_store.py
+      archive orchestration (_plan/_execute/_archive_trace_candidate),
+      finalize (_finalize_archived_trace + failure/archive-now cleanup),
+      archived reads (get_trace/_get_spans_with_trace_info,
+      download_archived_trace_data, get-trace-artifact handler), 2-phase
+      delete (_select_archived_traces_for_delete/_delete_archived_trace
+      _payloads), retention/allowlist (trace_archival.py), workspace
+      resolve_trace_archival_config inheritance. Semantics: active
+      experiments only, deterministic (timestamp_ms, trace_id) selection;
+      archive-now priority sharing the pass budget; shorter retention
+      always applies, longer requires allowlist; upload precedes
+      generation-guarded finalize (row lock where supported, exact
+      db_payload_generation); span writes bump generation and reject
+      archive-backed traces; finalize atomically blanks content, deletes
+      extracted attrs, sets ARCHIVE_REPO + location tags, clears failure;
+      MALFORMED_TRACE generation-guarded; upload/finalize failures
+      retryable and pass-isolated; stale uploads removed only when DB
+      doesn't reference the URI; archive-now cleanup by original raw tag
+      value. T4.1/T4.5 stubs REMOVED: getTrace decodes traces.pb to
+      archived OTLP spans; get-trace-artifact reconstructs compact
+      {"spans": ...} JSON; missing payload → empty spans, corruption
+      paths match Python. Scheduler API for T21.4: archive_traces (one
+      bounded pass), archive_traces_for_workspace (overrides/inheritance
+      + remaining budget), archive_traces_at (deterministic clock).
+      Differential `rust/tools/trace_archival_store_differential.py`
+      (driven by trace_archival_store.rs, in cargo test): 6/6 sqlite,
+      6/6 live docker Postgres 16. Post-merge gates 13/13 green (1,415
+      Rust tests; route parity 372/372; replay 188).
 - [x] **T21.3 OTLP payloads**: `traces.pb` writer/reader (single
       ResourceSpans/ScopeSpans, root-first sort) interoperable with
       Python-written payloads both directions.
