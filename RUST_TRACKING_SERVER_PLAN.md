@@ -46,9 +46,12 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   scheduler with same-seed decision differential (fairness = name-sort +
   shuffle, shared per-pass budget). Phase 23 added 2026-07-19 per user
   directive: genai perf/resource evaluation Python-vs-Rust (Phase 14
-  style, deterministic fake providers, 1k–10k+ reqs/cell). Next:
-  Phase 23 T23.1 (bench harness), then Phase 22 (compliance & cutover;
-  Phase 23 must finish before T22.4 removes the Python container).
+  style, deterministic fake providers, 1k–10k+ reqs/cell). T23.1 harness
+  + T23.2 CRUD matrix done (56/56 cells zero-error, equivalence PASS,
+  Rust faster everywhere; see T23.2 DONE note). Next: T23.3 (jobs +
+  native-engine matrix), then T23.4, T23.5 — strictly serial — then
+  Phase 22 (compliance & cutover; Phase 23 must finish before T22.4
+  removes the Python container).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3920,7 +3923,7 @@ zero live provider calls anywhere in this phase.
       both, equivalence PASS; RPS 32.4→139.5; dataset-search p50
       49.95→0.91 ms; scorer job 2.378→0.508 s; peak RSS 3,380→16.2 MiB.
       Post-merge gates 13/13 green.
-- [ ] **T23.2 CRUD + read-path matrix (Tier A families)**: scenario cells for
+- [x] **T23.2 CRUD + read-path matrix (Tier A families)**: scenario cells for
       every §12 CRUD family — datasets incl. record batches (12.1), scorers +
       versions (12.3), issues (12.4), label schemas (12.5), review queues
       (12.6), prompt-optimization CRUD (12.7), gateway admin CRUD incl.
@@ -3936,6 +3939,24 @@ zero live provider calls anywhere in this phase.
       equivalence green; side-by-side per-cell tables.
       **VER:** harness cell definitions + emitted `genai_eval` raw metrics
       (JSON) checked into `rust/bench/genai/results/` (or artifacted).
+      **DONE 2026-07-19** (codex agent, merged 75e2204ff): 4 cells/family × 7
+      families × 2 targets = 56 cells, 154k requests/target (308k total; small
+      cells 10k, large 1k), run serially Python-then-Rust slices with fresh
+      DB/prefix per target on postgres:16+MinIO. Zero errors and equivalence
+      PASS on all 56 cells; no cell had Rust slower on RPS/p50/p95. Median
+      Rust speedups per family: datasets 31.1×, prompt-opt 23.7×, scorers
+      16.6×, gateway admin 13.0×, label schemas 9.6×, review queues 4.3×,
+      issues 3.4×. Headliners: dataset search under 128-client read load p50
+      1448→29 ms (Py max 179 s vs Rust 177 ms); prompt-opt read-heavy p50
+      10.6 s→0.45 s; Py RSS ~3.1–4.4 GiB vs Rust 36–442 MiB; CPU-s gaps up to
+      792 vs 3.9. Large payloads documented per family (512 KiB dataset
+      batches, 64 KiB scorers/issues/secrets, max-valid label schemas).
+      Both targets pool_size=32+max_overflow=8, pg max_connections=400.
+      Artifacts: `rust/bench/genai/results/t23_2/` (56 schema-valid JSONs +
+      `t23_2_summary.md`), driver `rust/bench/genai/t23_2.py`. Caveats
+      recorded in summary: Python RSS spans two serial fresh-target slices;
+      host lacks cgroup pids.current (field null, /proc counts recorded).
+      Measured wall time 1.94 h Python + 0.10 h Rust.
 - [ ] **T23.3 Jobs + native-engine matrix**: every job kind in the worker
       dispatch (evaluation/invoke, scorer runs incl. online scoring, judges,
       issue detection/discovery, prompt optimization — the full
