@@ -15,6 +15,7 @@
 pub mod artifacts;
 pub mod assessments;
 pub mod assistant;
+pub mod assistant_providers;
 pub mod auth_api;
 pub mod auth_middleware;
 pub mod budget;
