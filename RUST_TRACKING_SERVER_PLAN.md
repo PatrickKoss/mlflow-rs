@@ -3569,13 +3569,28 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 20 — Assistant + promptlab
 
-- [ ] **T20.1 Assistant sessions + routes**: session file store (atomic
+- [x] **T20.1 Assistant sessions + routes**: session file store (atomic
       write, UUID validation, PID files), all 9 routes, localhost gate, SSE
       framing, config + skills + models endpoints; D18 resolution for the
       stream_url path.
       **AC:** assistant UI chat works against Rust with the dev stub.
       **VER:** HTTP tests + `dev/run_dev_server.py --stub-providers claude`
       smoke against the Rust server.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge 700e8a56b):** AC MET. All
+      9 §12.10 routes native in `assistant.rs`; session JSON byte-parity
+      (Python json.dump spacing/ordering/ASCII), 0600 tmp+rename atomic
+      writes, PID files + SIGTERM cancel, exact `Invalid session ID format`
+      UUID guard; localhost gate via real TCP peer (IPv4/IPv6 loopback)
+      with Python's exact 403 body; SSE `event:/data:` framing exact,
+      all six event types; D18: /message returns the real
+      sessions/{id}/stream path. Provider seam `AssistantProvider` trait
+      (stream/check_connection/list_models/resolve_skills_path) with
+      in-process dev stub; CLI providers are T20.2's module, wired in
+      T20.3. 27 HTTP/SSE differentials + dev-stub smoke green. Merge
+      resolutions: lib.rs router union with T20.4; route_parity §12.10
+      flip + PLANNED_EXTERNAL_ROUTES now empty (all §12 implemented);
+      404 sentinel repointed to a permanently-nonexistent path.
+      Post-merge gates 13/13 green (incl. new assistant differential).
 - [ ] **T20.2 CLI providers**: claude/codex subprocess spawn (exact flag
       construction, permission modes), NDJSON parsing, message filtering,
       usage events, SIGKILL→interrupted, cancellation, health probes with
