@@ -3534,6 +3534,27 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       run/job state, and failure behavior.
       **VER:** optimizer state-machine differential + artifact byte/semantic
       fixtures where reference formatting is intentionally nondeterministic.
+      **STATUS 2026-07-19 (codex gpt-5.6-sol, merge dfe7120f5 — tick pending
+      one environmental re-verify):** implementation complete and merged.
+      MetaPrompt exact templates/validation/fallback; GEPA ports CPython
+      MT19937 seeding + `getrandbits` selection directly (no scripted-
+      selection workaround) — fixed-seed differential exact (candidates
+      seed→candidate-2→candidate-4, batches, scores, 39 calls at budget 35);
+      `gepa_kwargs` pinned-signature validation; candidate artifact layout +
+      metrics parity (nondeterministic multi-scorer column order normalized
+      by sorting, documented); prompt registration/linkage via
+      `mlflow.linkedPrompts`, result URI `prompts:/<name>/<version>`;
+      failure paths exact. New gate `rust/tools/prompt_optimization_oracle.py`
+      (pinned `gepa==0.0.27`). Post-merge gates: 10/11 green incl. both new
+      oracles; `cargo test --workspace` blocked by HOST pid exhaustion —
+      95 uvicorn reference servers leaked by earlier SIGKILL'd runs hold
+      ~4750 threads against the WSL2 cgroup pids.max 4915, so thread/process
+      spawn fails EAGAIN (also the true root cause of the 2026-07-19 "load-
+      correlated flakes", ld OOM-kills, and rustc ICEs). 58/59 suites green
+      at --test-threads=2; only the cross-server suites (which must boot the
+      Python reference server) cannot run. Cleanup requires user-run pkill
+      (Claude's kill blocked by permissions); then rerun
+      `cargo test --workspace` and tick.
 
 ### Phase 20 — Assistant + promptlab
 
