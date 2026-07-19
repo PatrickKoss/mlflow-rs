@@ -25,8 +25,15 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   parity, full provider matrix (191/191 pinned providers, zero Python
   fallback), traffic split + fallback, budget enforcement, guardrails.
   Every §12 route family fully accounted (§12.8 78/0, §12.9 10/0). Replay
-  corpus 188 cases, zero non-allowlisted diffs. Next: Phase 19 (native
-  GenAI execution parity — scorers/judges, evaluation, online scoring).
+  corpus 188 cases, zero non-allowlisted diffs. Phase 19 (native GenAI
+  execution) COMPLETE 2026-07-19: scorers + judges, evaluation/invoke/
+  online scoring, third-party scorer parity (T19.3+T19.3b), issue
+  discovery, prompt optimization (exact CPython MT19937 GEPA) — all five
+  tasks native, Python-free, with six pinned oracles as gates. Also
+  2026-07-19: root-caused the day's "load-correlated flakes"/ICEs to
+  leaked uvicorn reference servers exhausting the WSL2 cgroup pid limit
+  (see T19.5 note); post-cleanup full suite 1,353 tests green. Next:
+  Phase 20 (assistant §12.10 + promptlab §12.11).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3524,7 +3531,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       route_parity 372/replay 188/scorer/judge/eval/third-party/discovery
       oracles); merge auto-resolved cleanly (lib.rs module list + worker
       dispatch verified by hand).
-- [ ] **T19.5 Native prompt optimization**: server-constrained prediction
+- [x] **T19.5 Native prompt optimization**: server-constrained prediction
       from prompt model config, scorer aggregation, native MetaPrompt, pinned
       GEPA algorithm/`gepa_kwargs`, seeded candidate selection, reflective
       datasets, metric-call budget, candidate artifacts/metrics, prompt
@@ -3534,8 +3541,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       run/job state, and failure behavior.
       **VER:** optimizer state-machine differential + artifact byte/semantic
       fixtures where reference formatting is intentionally nondeterministic.
-      **STATUS 2026-07-19 (codex gpt-5.6-sol, merge dfe7120f5 — tick pending
-      one environmental re-verify):** implementation complete and merged.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge dfe7120f5):** AC MET.
       MetaPrompt exact templates/validation/fallback; GEPA ports CPython
       MT19937 seeding + `getrandbits` selection directly (no scripted-
       selection workaround) — fixed-seed differential exact (candidates
@@ -3545,16 +3551,21 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       by sorting, documented); prompt registration/linkage via
       `mlflow.linkedPrompts`, result URI `prompts:/<name>/<version>`;
       failure paths exact. New gate `rust/tools/prompt_optimization_oracle.py`
-      (pinned `gepa==0.0.27`). Post-merge gates: 10/11 green incl. both new
-      oracles; `cargo test --workspace` blocked by HOST pid exhaustion —
-      95 uvicorn reference servers leaked by earlier SIGKILL'd runs hold
-      ~4750 threads against the WSL2 cgroup pids.max 4915, so thread/process
-      spawn fails EAGAIN (also the true root cause of the 2026-07-19 "load-
-      correlated flakes", ld OOM-kills, and rustc ICEs). 58/59 suites green
-      at --test-threads=2; only the cross-server suites (which must boot the
-      Python reference server) cannot run. Cleanup requires user-run pkill
-      (Claude's kill blocked by permissions); then rerun
-      `cargo test --workspace` and tick.
+      (pinned `gepa==0.0.27`). Post-merge gates all 11 green (fmt/clippy/
+      test/route_parity 372/replay 188/scorer/judge/eval/third-party/
+      discovery/prompt-optimization oracles). NOTE: the test gate was
+      initially blocked by HOST pid exhaustion — 95 uvicorn reference
+      servers leaked by earlier SIGKILL'd test runs held ~4750 threads
+      against the WSL2 cgroup pids.max 4915, making thread/process spawn
+      fail EAGAIN. This was the true root cause of ALL of 2026-07-19's
+      "load-correlated flakes" (invoke_http, workspace_scoping_http,
+      native_protocol), the ld OOM-kills, and the rustc ICEs; earlier
+      flake notes are superseded. After user-run pkill of the leaked
+      servers, full `cargo test --workspace` at default parallelism:
+      1,353 tests / 115 suites, exit 0, zero flakes. Hardening backlog:
+      cross-server tests leak the reference server when the test binary
+      dies uncleanly (Drop never runs) — consider process-group spawn +
+      stale-server reaper in mlflow-test-support.
 
 ### Phase 20 — Assistant + promptlab
 
