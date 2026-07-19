@@ -3392,7 +3392,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 19 — Native GenAI execution parity (Tier C)
 
-- [ ] **T19.1 Scorer model + native judges** per §14.3: exact
+- [x] **T19.1 Scorer model + native judges** per §14.3: exact
       `SerializedScorer` parsing/round-trip/errors; all concrete deterministic
       and LLM builtins; `InstructionsJudge`, `Guidelines`, trace tools and
       structured output; `MemoryAugmentedJudge` embedding retrieval; explicit
@@ -3402,6 +3402,26 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       form returns Python's status/error class/message.
       **VER:** scorer serialization corpus + scripted judge/tool/embedding
       differential suites.
+      **DONE (2026-07-19, codex agent, merge b3e2b760f):** new
+      `rust/crates/mlflow-genai/` crate. Manifest coverage: 139 entries →
+      26 accepted natively (24 builtins + InstructionsJudge +
+      MemoryAugmentedJudge), 7 rejected correctly (OSS @scorer security
+      rejection + 6 Phoenix per D23), 106 deferred to T19.3
+      (DeepEval/Ragas/TruLens). All five SerializedScorer representations
+      parse/round-trip; 11 malformed forms return Python's exact HTTP 400
+      INVALID_PARAMETER_VALUE messages. Deterministic value-exact:
+      PIIDetection, RegexMatch (lookarounds/backreferences),
+      ResponseLength, Equivalence + ToolCallCorrectness short-circuits;
+      ordered/unordered ToolCallCorrectness rationales value-exact. 21
+      LLM/hybrid builtins natively dispatched; InstructionsJudge/
+      Guidelines request construction + structured output + feedback
+      source/metadata + 6 trace-tool schemas scripted-diff-clean.
+      MemoryAugmentedJudge: scripted corpus/query embeddings, cosine
+      top-k, semantic/episodic augmentation, retrieved-memory metadata.
+      Real execution wired into Phase 17 worker; fixture mode intact. New
+      oracles: rust/tools/scorer_oracle.py (run with `uv run --with
+      dspy==3.2.1`; 26/26/11) + judge_oracle.py (7 suites, 6 schemas).
+      Zero live LLM calls. Gates all 0; corpus 188 unchanged; 1,321 tests.
 - [ ] **T19.2 Evaluation, invoke, and online scoring**: native bounded
       concurrency/rate limiting/retries, scorer-result standardization,
       `SCORER_ERROR`, evaluator traces, single-turn/session grouping,
