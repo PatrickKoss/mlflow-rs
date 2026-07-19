@@ -3668,12 +3668,38 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
 
 ### Phase 21 — Trace archival (closes D6)
 
-- [ ] **T21.1 Config + flag**: `--trace-archival-config` /
+- [x] **T21.1 Config + flag**: `--trace-archival-config` /
       `MLFLOW_TRACE_ARCHIVAL_CONFIG` YAML parsing/validation (incl. repo
       support constraints and the artifacts-only conflict), 5s-TTL cache
       with stale tolerance.
       **AC:** invalid configs fail startup with Python's messages.
       **VER:** config-parity unit tests.
+      **DONE 2026-07-19** (codex agent, merged 5fa612337): full validation
+      per Python (`mlflow/cli/__init__.py` precedence + file checks,
+      `mlflow/tracing/trace_archival_config.py` schema/cache,
+      `mlflow/utils/validation.py` retention/repo rules,
+      `store/tracking/utils/trace_archival.py` allowlist normalization,
+      `server_cli_utils.py` artifacts-only conflict): required
+      trace_archival mapping / boolean enabled / trimmed URI location;
+      rejects local paths, mlflow-artifacts:, Databricks repos without
+      archived-read support, repos without deletion support; retention
+      `^[1-9][0-9]*[mhd]$` max 32 chars; allowlist scalar-conversion +
+      comma split + exp-ID validation + ordered dedup; interval_seconds
+      positive int default 300 max 86400; max_traces_per_pass optional
+      positive; unknown keys ignored, duplicate YAML keys last-wins, CLI
+      overrides env. Error parity 20/20 byte-identical (incl. YAML source
+      marks) via new `rust/tools/trace_archival_config_parity.py` —
+      re-verified 20/20 on the merged tree. Cache: 5s monotonic TTL,
+      reload at exact expiry, serialized concurrent reloads, same-path
+      stale fallback on refresh error with TTL renewal, no cross-path
+      stale reuse, cleared when unconfigured; deterministic clock
+      injection (`TraceArchivalConfigClock`). API for T21.2/T21.4:
+      `trace_archival_config.rs` (`TraceArchivalServerConfig`,
+      `TraceArchivalConfigProvider`, `load_trace_archival_server_config`,
+      `TRACE_ARCHIVAL_CONFIG_CACHE_TTL`) +
+      `ServerConfig::current_trace_archival_config()`. Merge conflict:
+      lib.rs module-list union with T21.3. Post-merge gates 13/13 green
+      (1,400+ Rust tests, route parity 372/372, replay 188).
 - [ ] **T21.2 Store paths**: `archive_traces`, transactional finalize
       (tag flips + content blank + generation guard), archived-payload
       deletion on trace delete, ARCHIVE_REPO reads in `getTrace` /
