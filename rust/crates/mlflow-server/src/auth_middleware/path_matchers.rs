@@ -486,6 +486,14 @@ fn build_dispatch() -> Dispatch {
         validator: Validator::OtlpExperimentUpdate,
     });
 
+    // Ajax-only Flask route (`CREATE_PROMPTLAB_RUN`): UPDATE on the request
+    // body's experiment_id (`validate_can_create_promptlab_run`).
+    d.exact.push(Route {
+        matcher: TemplateMatcher::compile("/ajax-api/2.0/mlflow/runs/create-promptlab-run"),
+        method: "POST",
+        validator: Validator::UpdateExperiment,
+    });
+
     d
 }
 
@@ -885,6 +893,17 @@ mod tests {
         assert_eq!(
             validator_of(dispatch_request("/api/2.0/mlflow/runs/log-metric", "POST")),
             Validator::UpdateRun
+        );
+    }
+
+    #[test]
+    fn promptlab_run_creation_requires_experiment_update() {
+        assert_eq!(
+            validator_of(dispatch_request(
+                "/ajax-api/2.0/mlflow/runs/create-promptlab-run",
+                "POST"
+            )),
+            Validator::UpdateExperiment
         );
     }
 

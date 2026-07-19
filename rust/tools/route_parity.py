@@ -138,6 +138,15 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
 )
 IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
     route_info(
+        "demo",
+        "T20.4",
+        "get_endpoints",
+        ("POST", "/ajax-api/3.0/mlflow/demo/generate"),
+        ("POST", "/ajax-api/3.0/mlflow/demo/delete"),
+    )
+)
+IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
+    route_info(
         "12.8",
         "T18.2",
         "get_endpoints",
@@ -173,18 +182,9 @@ IMPLEMENTED_GET_ENDPOINT_ROUTES.update(
 )
 
 
-# Non-proto routes returned by handlers.get_endpoints(). These are the 15
-# entries that T15.2 moves out of the old "genai, out of scope" allowlist.
-# Two demo-data routes are adjacent GenAI UI surface but are not listed in §12.
-PLANNED_GET_ENDPOINT_ROUTES = {
-    **planned(
-        "demo",
-        "T20.4",
-        "get_endpoints",
-        ("POST", "/ajax-api/3.0/mlflow/demo/generate"),
-        ("POST", "/ajax-api/3.0/mlflow/demo/delete"),
-    ),
-}
+# No get_endpoints routes remain planned after T20.4 landed the two adjacent
+# demo-data routes (which are not listed in §12).
+PLANNED_GET_ENDPOINT_ROUTES = {}
 
 # §12 routes mounted outside handlers.get_endpoints(): two Flask routes in
 # server/__init__.py and the FastAPI gateway/assistant routers. They cannot
@@ -192,6 +192,12 @@ PLANNED_GET_ENDPOINT_ROUTES = {
 # (method, path) inventory here prevents them from disappearing from T15.2's
 # accounting.
 IMPLEMENTED_EXTERNAL_ROUTES = {
+    **route_info(
+        "12.11",
+        "T20.4",
+        "server/__init__.py",
+        ("POST", "/ajax-api/2.0/mlflow/runs/create-promptlab-run"),
+    ),
     **route_info(
         "12.8",
         "T18.2",
@@ -235,12 +241,6 @@ PLANNED_EXTERNAL_ROUTES = {
         ("PUT", "/ajax-api/3.0/mlflow/assistant/config"),
         ("POST", "/ajax-api/3.0/mlflow/assistant/skills/install"),
         ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"),
-    ),
-    **planned(
-        "12.11",
-        "T20.4",
-        "server/__init__.py",
-        ("POST", "/ajax-api/2.0/mlflow/runs/create-promptlab-run"),
     ),
 }
 
@@ -341,8 +341,14 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
             f"planned={proto_planned + len(hand) - implemented} "
             f"(proto metadata={generated}, hand-registered={len(hand)}{suffix})"
         )
-    demo_count = sum(info.section == "demo" for info in PLANNED_GET_ENDPOINT_ROUTES.values())
-    print(f"  adjacent demo routes: implemented=0, planned={demo_count} (T20.4)")
+    demo_implemented = sum(
+        info.section == "demo" for info in IMPLEMENTED_GET_ENDPOINT_ROUTES.values()
+    )
+    demo_planned = sum(info.section == "demo" for info in PLANNED_GET_ENDPOINT_ROUTES.values())
+    print(
+        f"  adjacent demo routes: implemented={demo_implemented}, "
+        f"planned={demo_planned} (T20.4)"
+    )
 
 
 def section_route_counts(proto_routes: dict[str, set[Route]]) -> dict[str, int]:
@@ -393,7 +399,7 @@ def compare() -> int:
         for section, expected in EXPECTED_SECTION_ROUTE_COUNTS.items()
         if actual_section_counts[section] != expected
     ]
-    bad_planned_get_count = len(planned_get) != 2
+    bad_planned_get_count = len(planned_get) != 0
 
     ok = True
     if rust_only:
@@ -448,7 +454,7 @@ def compare() -> int:
     if bad_planned_get_count:
         ok = False
         print(
-            "FAILURE: expected exactly 2 phase-tagged non-proto get_endpoints routes, "
+            "FAILURE: expected no phase-tagged non-proto get_endpoints routes, "
             f"found {len(planned_get)}"
         )
 

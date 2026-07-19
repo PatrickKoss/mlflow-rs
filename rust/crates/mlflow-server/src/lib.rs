@@ -19,6 +19,7 @@ pub mod auth_middleware;
 pub mod budget;
 pub mod config;
 pub mod datasets;
+pub mod demo;
 pub mod experiments;
 pub mod gateway;
 mod gateway_guardrails;
@@ -37,6 +38,7 @@ pub mod native_worker;
 pub mod online_scoring_scheduler;
 pub mod otlp;
 pub mod prompt_optimization;
+pub mod promptlab;
 pub mod proto_http;
 pub mod registry;
 pub mod review_queues;
@@ -299,6 +301,10 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         "/ajax-api/2.0/mlflow/metrics/get-history-bulk",
         get(metric_history::get_metric_history_bulk),
     );
+    router = router.route(
+        "/ajax-api/2.0/mlflow/runs/create-promptlab-run",
+        axum::routing::post(promptlab::create_promptlab_run),
+    );
     // `get-trace-artifact` (plan T4.5, §3.10) — ajax-only, served under both
     // the 2.0 and 3.0 ajax prefixes (`mlflow/server/__init__.py:159-161`);
     // not proto-route-table-driven (plain `request_id`/`path` query params).
@@ -414,6 +420,17 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         axum::routing::post(invoke::invoke_issue_detection),
     );
     // ---- end GenAI invoke submissions ----
+
+    // ---- Demo data routes (T20.4, adjacent GenAI UI surface) ----
+    router = router.route(
+        "/ajax-api/3.0/mlflow/demo/generate",
+        axum::routing::post(demo::generate),
+    );
+    router = router.route(
+        "/ajax-api/3.0/mlflow/demo/delete",
+        axum::routing::post(demo::delete),
+    );
+    // ---- end demo data routes ----
 
     // ---- Gateway runtime (T18.3/T18.4, §12.9) ----
     router = router.route(
