@@ -3461,6 +3461,21 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       external Python package is installed in the execution image.
       **VER:** per-family version matrix + license/provenance audit + golden
       corpus generated from the pinned reference environments.
+      **PARTIAL (2026-07-19, codex agent, merge 3c79adebc — AC NOT MET,
+      T19.3b follow-up in flight):** foundation merged: all 106
+      DeepEval(44)/Ragas(37)/TruLens(25) metrics natively dispatched;
+      all 12 deterministic metrics value-exact (15-case corpus);
+      dynamic unknown-name error parity all three families; Phoenix 6/6
+      rejected per D23 with equivalence pointers. Pins/licenses audited:
+      DeepEval 4.0.7 Apache-2.0, Ragas 0.4.3 Apache-2.0, TruLens 2.8.1
+      MIT, Phoenix 2.13.0 Elastic-2.0 (rejected). Agent's honest
+      limitation (why the box stays open): most LLM-based DeepEval/Ragas
+      paths use family-generic prompts, not exact per-metric pinned
+      workflows; golden corpus covers 3 family adapter transcripts, not
+      every LLM metric. Artifacts: third_party_golden.json + generator,
+      rust/genai-inventory/third-party-compatibility.md. Gates + all
+      oracles 0 post-merge; corpus 188. T19.3b closes the per-metric
+      prompt/parser/transcript gap.
 - [ ] **T19.4 Native issue discovery**: sampling, scorer verification,
       triage evaluation, session/error/execution-path extraction, latency
       statistics, LLM clustering/summarization/resplitting/dedup, severity/
