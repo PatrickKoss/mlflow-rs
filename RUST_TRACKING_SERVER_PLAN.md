@@ -3422,7 +3422,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       oracles: rust/tools/scorer_oracle.py (run with `uv run --with
       dspy==3.2.1`; 26/26/11) + judge_oracle.py (7 suites, 6 schemas).
       Zero live LLM calls. Gates all 0; corpus 188 unchanged; 1,321 tests.
-- [ ] **T19.2 Evaluation, invoke, and online scoring**: native bounded
+- [x] **T19.2 Evaluation, invoke, and online scoring**: native bounded
       concurrency/rate limiting/retries, scorer-result standardization,
       `SCORER_ERROR`, evaluator traces, single-turn/session grouping,
       expectations/tags/assessments, aggregate metrics, batching, dense
@@ -3431,6 +3431,26 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       produce identical jobs, runs, traces, assessments, metrics, and
       checkpoints with Python absent.
       **VER:** seeded end-to-end semantic differential corpus.
+      **DONE (2026-07-19, codex agent, merge 33d66655c):** rate limits per
+      Python env contract (predict default auto@10RPS, scorer = predict ×
+      scorer count, workers scorer-RPS×2s clamped 10–500, per-item scorer
+      workers default 10, retries default 3 — 429-only, 1/2/4…s cap 60);
+      AIMD token-bucket limiter (×0.5 throttle, 1/rps recovery, 5s
+      cooldown, 2× ceiling). Standardization incl. SCORER_ERROR
+      CODE-sourced with error_code/message/stack; session feedback carries
+      mlflow.trace.session; evaluator traces mlflow.trace.sourceScorer +
+      mlflow.assessment.scorerTraceId; aggregates
+      `<name>/<agg>` for mean/min/max/median/population-variance/linear-
+      p90. All three job kinds Python-free: evaluate-invoke run/trace
+      links + root-span assessments + terminal status; scorer-invoke
+      batching + session order; online trace/session with SHA-256 dense
+      sampling, 500/100 caps, checkpoint tags byte-exact (JSON spacing +
+      timestamp/ID ties), rescoring logs replacements before deleting
+      superseded assessments. Fixture mode intact. New
+      rust/tools/evaluation_oracle.py (seed 1902: 4 rate + 6
+      standardization + 10 aggregate values + 6 metrics). Gates + all 3
+      oracles 0; corpus 188; 1,334 tests (one invoke_http flake under full
+      parallel load did not reproduce in 6 follow-up runs — watching).
 - [ ] **T19.3 Third-party scorer compatibility**: port every DeepEval,
       Ragas, TruLens, and Phoenix metric in the pinned manifest, including
       deterministic algorithms, prompts/parsers, input/session mapping,
