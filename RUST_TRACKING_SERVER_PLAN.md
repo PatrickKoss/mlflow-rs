@@ -3591,12 +3591,23 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       negative.
       **VER:** `rust/tests/assistant_tools.rs` incl. traversal/symlink
       matrix.
-- [ ] **T20.4 Promptlab** per D19: run creation parity + pyfunc promptlab
+- [x] **T20.4 Promptlab** per D19: run creation parity + pyfunc promptlab
       model artifact + `eval_results_table.json`, loadable by the Python
       client.
       **AC:** `mlflow.pyfunc.load_model` on a Rust-created promptlab run
       predicts through the gateway identically.
       **VER:** cross-language load test.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge from 344f51169):** AC MET.
+      §12.11 create-promptlab-run + both demo routes implemented
+      (`promptlab.rs`, `demo.rs`) — the LAST planned external routes;
+      route_parity now zero planned. Rust-created promptlab run loads via
+      `mlflow.pyfunc.load_model` and predicts through a scripted gateway
+      identically to the Python twin; all artifacts byte-identical
+      (MLmodel identical after run-id/uuid/timestamp normalization, YAML
+      semantically equal). Demo parity incl. Flask JSON bytes + trailing
+      newline, feature ordering/filtering, idempotence, deletion.
+      Cross-language harness `rust/tools/promptlab_cross_language.py`.
+      Post-merge gates 11/11 green (1,357+ tests).
 
 ### Phase 21 — Trace archival (closes D6)
 
