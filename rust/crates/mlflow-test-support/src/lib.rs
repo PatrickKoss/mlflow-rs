@@ -30,6 +30,9 @@ use mlflow_registry::schema::REGISTRY_TABLES;
 use mlflow_store::schema::TRACKING_TABLES;
 use mlflow_store::{Db, PoolConfig};
 
+#[cfg(unix)]
+pub mod reference_server;
+
 /// Env var selecting the live dialect to run the shared suites against.
 /// Unset (the default) or any other value falls back to the SQLite fixture.
 pub const DIALECT_ENV: &str = "MLFLOW_RUST_TEST_DIALECT";
