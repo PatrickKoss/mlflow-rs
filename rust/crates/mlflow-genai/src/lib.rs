@@ -4,15 +4,21 @@
 //! instructions-judge gateway seam. The public payload, executor, protocol,
 //! and subprocess-launcher types are the foundations expanded by T17/T18.
 
+mod builtins;
 mod engine;
+mod judge;
+mod memory;
 mod payload;
 mod protocol;
+mod trace;
 mod worker;
 
-pub use engine::{AssessmentSource, EngineError, EvalItem, Feedback, ScorerExecutor};
+pub use engine::{
+    AssessmentSource, EngineError, EvalItem, Feedback, MemoryExample, ScorerExecutor,
+};
 pub use payload::{
-    BuiltinScorerPayload, InstructionsJudgePayload, ScorerPayloadError, SerializedScorer,
-    SerializedScorerCommon,
+    supported_builtin_scorers, BuiltinScorerPayload, InstructionsJudgePayload, ScorerPayloadError,
+    SerializedScorer, SerializedScorerCommon,
 };
 pub use protocol::{
     decode_worker_request, ExecutionFailure, InvokeScorerParams, JobKind, WorkerRequest,
@@ -142,16 +148,43 @@ async fn execute_invoke_scorer(request: &WorkerRequest) -> Result<serde_json::Va
     let params: InvokeScorerParams = serde_json::from_value(request.params.clone())
         .map_err(|error| EngineError::InvalidParams(error.to_string()))?;
     let scorer = SerializedScorer::from_json(&params.serialized_scorer)?;
+    let gateway_url = params.gateway_url.or_else(|| {
+        std::env::var("MLFLOW_GATEWAY_URI")
+            .ok()
+            .map(|base| worker_gateway_url(&base, "/gateway/mlflow/v1/chat/completions"))
+    });
+    let embedding_url = params.embedding_url.or_else(|| {
+        std::env::var("MLFLOW_GATEWAY_URI")
+            .ok()
+            .map(|base| worker_gateway_url(&base, "/gateway/openai/v1/embeddings"))
+    });
     let feedback = ScorerExecutor::new()
-        .execute(
+        .execute_all(
             &scorer,
             &EvalItem {
                 inputs: params.inputs,
                 outputs: params.outputs,
                 expectations: params.expectations,
+                trace: params.trace,
+                session: params.session,
+                memory_examples: params.memory_examples,
             },
-            params.gateway_url.as_deref(),
+            gateway_url.as_deref(),
+            embedding_url.as_deref(),
         )
         .await?;
-    serde_json::to_value(feedback).map_err(|error| EngineError::Serialization(error.to_string()))
+    let value = if feedback.len() == 1 {
+        serde_json::to_value(&feedback[0])
+    } else {
+        serde_json::to_value(feedback)
+    };
+    value.map_err(|error| EngineError::Serialization(error.to_string()))
+}
+
+fn worker_gateway_url(base: &str, path: &str) -> String {
+    if base.ends_with(path) {
+        base.to_string()
+    } else {
+        format!("{}{path}", base.trim_end_matches('/'))
+    }
 }

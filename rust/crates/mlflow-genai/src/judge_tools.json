@@ -1,0 +1,88 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_trace_info",
+      "description": "Retrieve high-level metadata about the trace including ID, timing, state, location, and request/response previews. This provides an overview of the trace without detailed span data. Use this to understand the overall trace context, execution duration, and whether the trace completed successfully.",
+      "parameters": {"type": "object", "properties": {}, "required": []},
+      "strict": false
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_root_span",
+      "description": "Retrieve the root span of the trace, which contains the top-level inputs to the agent and final outputs. Note that in some traces, the root span may not contain outputs, but it typically should. If the root span doesn't have outputs, you may need to look at other spans to find the final results. The content is returned as a JSON string. Large content may be paginated. Consider selecting only relevant attributes to reduce data size and improve efficiency.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "attributes_to_fetch": {"type": "array", "items": {"type": "string"}, "description": "List of specific attributes to fetch from the span. If specified, only these attributes will be returned. If not specified, all attributes are returned. Use list_spans first to see available attribute names, then select only the relevant ones."},
+          "max_content_length": {"type": "integer", "description": "Maximum content size in bytes (default: 100000)"},
+          "page_token": {"type": "string", "description": "Token to retrieve the next page of content"}
+        },
+        "required": []
+      },
+      "strict": false
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_span",
+      "description": "Retrieve a specific span by its ID. Returns the complete span data including inputs, outputs, attributes, events, and timing information. Use this when you need to examine the full details of a particular span. Large content may be paginated. Consider selecting only relevant attributes to reduce data size and improve efficiency.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "span_id": {"type": "string", "description": "The ID of the span to retrieve"},
+          "attributes_to_fetch": {"type": "array", "items": {"type": "string"}, "description": "List of specific attributes to fetch from the span. If specified, only these attributes will be returned. If not specified, all attributes are returned. It is recommended to use list_spans first to see available attribute names, then select relevant ones."},
+          "max_content_length": {"type": "integer", "description": "Maximum content size in bytes (default: 100000)"},
+          "page_token": {"type": "string", "description": "Token to retrieve the next page of content"}
+        },
+        "required": ["span_id"]
+      },
+      "strict": false
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_spans",
+      "description": "List information about spans within a trace with pagination support. Returns span metadata including span_id, name, span_type, timing data (start_time_ms, end_time_ms, duration_ms), parent_id, status, and attribute_names (list of attribute keys). This provides an overview of all spans but does not fetch full span content.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "max_results": {"type": "integer", "description": "Maximum number of spans to return (default: 100)"},
+          "page_token": {"type": "string", "description": "Token for retrieving the next page of results"}
+        },
+        "required": []
+      },
+      "strict": false
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_trace_regex",
+      "description": "Search through the entire trace using a regular expression pattern. Performs case-insensitive matching across all trace fields including spans, metadata, tags, requests, and responses. Returns all matches with surrounding context. Useful for finding specific patterns, values, or text anywhere in the trace.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {"type": "string", "description": "Regular expression pattern to search for. The search is case-insensitive. Examples: 'error.*timeout', 'user_id:\\s*\\d+', 'function_name\\(.*\\)'"},
+          "max_matches": {"type": "integer", "description": "Maximum number of matches to return (default: 50)"},
+          "surrounding_content_length": {"type": "integer", "description": "Number of characters to include before and after each match for context (default: 100)"}
+        },
+        "required": ["pattern"]
+      },
+      "strict": false
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_span_performance_and_timing_report",
+      "description": "Generate a comprehensive span timing report for the trace, showing latencies, execution order, hierarchy, duration statistics, longest spans, and concurrent operations. Useful for analyzing system performance and identifying bottlenecks.",
+      "parameters": {"type": "object", "properties": {}, "required": []},
+      "strict": false
+    }
+  }
+]

@@ -1,5 +1,9 @@
 {
   "name": "response_length",
   "value": "yes",
-  "rationale": "Output length (4 words) is within bounds"
+  "rationale": "Output length (4 words) is within bounds",
+  "source": {
+    "source_type": "CODE",
+    "source_id": "default"
+  }
 }
