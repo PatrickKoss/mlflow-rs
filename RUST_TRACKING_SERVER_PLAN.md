@@ -3498,7 +3498,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       multi-checkout cargo runs (invoke_http once, workspace_scoping_http
       once incl. an ld OOM-kill signal 9) — never reproduced in isolation
       or repeat full runs; unrelated to merged diffs; watching.
-- [ ] **T19.4 Native issue discovery**: sampling, scorer verification,
+- [x] **T19.4 Native issue discovery**: sampling, scorer verification,
       triage evaluation, session/error/execution-path extraction, latency
       statistics, LLM clustering/summarization/resplitting/dedup, severity/
       category filtering, issue rows, annotations, costs, progress, summary,
@@ -3506,6 +3506,24 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       **AC:** scripted-model runs yield diff-clean issues, affected trace IDs,
       assessments, summary artifact, cost tag, status details, and job result.
       **VER:** phase-by-phase and end-to-end discovery differentials.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge 8937d2f38):** AC MET. Full
+      `invoke_issue_detection` pipeline native in
+      `mlflow-genai/src/discovery.rs`, mapping Python job.py/sampling.py/
+      pipeline.py/extraction.py/clustering.py/utils.py phase-for-phase;
+      fixture mode untouched. CPython `Random(42)` sampling ported (3/3
+      exact incl. the 5,000-item branch); latency p50/p75/p90/p95/p99
+      value-exact; clustering incl. invalid-index removal + orphan
+      singletons exact; dedup assignments/severity/categories/examples
+      exact. Scripted E2E diff-clean: issue rows, affected trace IDs,
+      triage feedback + issue annotations, `summary.md` byte-exact,
+      issues.json/metadata.json semantic-exact (elapsed-time normalized),
+      cost 0.4 + `total_cost_usd` tag, `Generating summary...` status,
+      FINISHED-before-cost-tag ordering, failure→FAILED. New gate
+      `rust/tools/issue_discovery_oracle.py` (7 cases, zero diffs) +
+      golden corpus. Post-merge gates all 0 (fmt/clippy/test -j4/
+      route_parity 372/replay 188/scorer/judge/eval/third-party/discovery
+      oracles); merge auto-resolved cleanly (lib.rs module list + worker
+      dispatch verified by hand).
 - [ ] **T19.5 Native prompt optimization**: server-constrained prediction
       from prompt model config, scorer aggregation, native MetaPrompt, pinned
       GEPA algorithm/`gepa_kwargs`, seeded candidate selection, reflective
