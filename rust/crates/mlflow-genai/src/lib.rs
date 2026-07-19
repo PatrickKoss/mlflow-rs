@@ -6,15 +6,24 @@
 
 mod builtins;
 mod engine;
+mod evaluation;
+mod jobs;
 mod judge;
 mod memory;
+mod online;
 mod payload;
 mod protocol;
+mod store;
 mod trace;
 mod worker;
 
 pub use engine::{
     AssessmentSource, EngineError, EvalItem, Feedback, MemoryExample, ScorerExecutor,
+};
+pub use evaluation::{
+    compute_aggregated_metrics, parse_rate_limit, scorer_error_shape, standardize_scorer_value,
+    CanonicalAssessment, EvaluationConfig, EvaluationEngine, NamedScorer, RateConfig, RateLimiter,
+    ScoredItem, ScorerAssessmentError, AUTO_INITIAL_RPS,
 };
 pub use payload::{
     supported_builtin_scorers, BuiltinScorerPayload, InstructionsJudgePayload, ScorerPayloadError,
@@ -48,19 +57,19 @@ pub async fn execute_worker_request(request: &WorkerRequest) -> WorkerResponse {
         match request.job_kind {
             // Phase 19: replace T15.4's direct EvalItem spike with the full
             // trace-loading, assessment-writing invoke job implementation.
-            JobKind::InvokeScorer => execute_invoke_scorer(request).await,
-            // Phase 19: native online trace-scoring execution lands here.
-            JobKind::RunOnlineTraceScorer => Err(EngineError::UnsupportedJobKind(request.job_kind)),
-            // Phase 19: native online session-scoring execution lands here.
-            JobKind::RunOnlineSessionScorer => {
-                Err(EngineError::UnsupportedJobKind(request.job_kind))
+            JobKind::InvokeScorer if request.params.get("trace_ids").is_some() => {
+                jobs::execute_invoke(request).await
             }
+            // Retain T19.1's direct executor seam for its hermetic scorer and
+            // judge oracles. Real server submissions always carry trace_ids.
+            JobKind::InvokeScorer => execute_invoke_scorer(request).await,
+            JobKind::RunOnlineTraceScorer => jobs::execute_online_trace(request).await,
+            JobKind::RunOnlineSessionScorer => jobs::execute_online_session(request).await,
             // Phase 19: native prompt-optimization execution lands here.
             JobKind::OptimizePrompts => Err(EngineError::UnsupportedJobKind(request.job_kind)),
             // Phase 19: native issue-discovery execution lands here.
             JobKind::InvokeIssueDetection => Err(EngineError::UnsupportedJobKind(request.job_kind)),
-            // Phase 19: native evaluation execution lands here.
-            JobKind::InvokeGenaiEvaluate => Err(EngineError::UnsupportedJobKind(request.job_kind)),
+            JobKind::InvokeGenaiEvaluate => jobs::execute_evaluate(request).await,
         }
     };
 

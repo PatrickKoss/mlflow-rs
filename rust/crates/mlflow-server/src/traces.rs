@@ -29,7 +29,8 @@ use mlflow_proto::mlflow as pb;
 use mlflow_proto::opentelemetry::proto::common::v1 as otel_common;
 use mlflow_proto::opentelemetry::proto::trace::v1 as otel_trace;
 use mlflow_store::{
-    MetricAggregation, MetricDataPoint, MetricViewType, StoredSpan, TraceInfo, TraceState,
+    Assessment, AssessmentError, AssessmentSource, AssessmentValue, MetricAggregation,
+    MetricDataPoint, MetricViewType, StoredSpan, TraceAssessment, TraceInfo, TraceState,
     TraceWithSpans, MAX_RESULTS_QUERY_TRACE_METRICS,
 };
 
@@ -609,14 +610,67 @@ fn to_proto_trace_info(info: &TraceInfo) -> pb::TraceInfoV3 {
             .iter()
             .map(|(k, v)| (k.clone(), v.clone().unwrap_or_default()))
             .collect(),
-        // Assessments proto assembly is deferred (T2.12/Phase 12 owns the full
-        // Assessment.to_proto); the repeated field starts empty here.
-        assessments: Vec::new(),
+        assessments: info
+            .assessments
+            .iter()
+            .map(trace_assessment_to_entity)
+            .map(crate::assessments::to_proto_assessment)
+            .collect(),
         tags: info
             .tags
             .iter()
             .map(|(k, v)| (k.clone(), v.clone().unwrap_or_default()))
             .collect(),
+    }
+}
+
+fn trace_assessment_to_entity(assessment: &TraceAssessment) -> Assessment {
+    let value = match assessment.assessment_type.as_str() {
+        "feedback" => AssessmentValue::Feedback {
+            value_json: assessment.value.clone(),
+            error: assessment.error.as_deref().map(|value| {
+                serde_json::from_str::<AssessmentError>(value).unwrap_or(AssessmentError {
+                    error_code: "UNKNOWN".to_string(),
+                    error_message: None,
+                    stack_trace: None,
+                })
+            }),
+        },
+        "expectation" => AssessmentValue::Expectation {
+            value_json: assessment.value.clone(),
+        },
+        _ => AssessmentValue::Issue {
+            issue_name: serde_json::from_str::<serde_json::Value>(&assessment.value)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("issue_name")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_default(),
+        },
+    };
+    Assessment {
+        assessment_id: assessment.assessment_id.clone(),
+        trace_id: assessment.trace_id.clone(),
+        name: assessment.name.clone(),
+        value,
+        source: AssessmentSource {
+            source_type: assessment.source_type.clone(),
+            source_id: assessment.source_id.clone(),
+        },
+        run_id: assessment.run_id.clone(),
+        span_id: assessment.span_id.clone(),
+        rationale: assessment.rationale.clone(),
+        metadata: assessment
+            .metadata
+            .as_deref()
+            .and_then(|value| serde_json::from_str(value).ok()),
+        create_time_ms: assessment.created_timestamp,
+        last_update_time_ms: assessment.last_updated_timestamp,
+        overrides: assessment.overrides.clone(),
+        valid: assessment.valid,
     }
 }
 
