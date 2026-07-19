@@ -82,3 +82,80 @@ uv run --frozen python -m rust.bench.genai.equivalence \
   rust/bench/genai/results/smoke-python.json \
   rust/bench/genai/results/smoke-rust.json
 ```
+
+## T23.2 CRUD + read-path matrix
+
+Run the complete Tier-A matrix with:
+
+```bash
+uv run --frozen --extra db python -m rust.bench.genai.runner t23-2
+```
+
+The matrix is a four-cell fractional-factorial design repeated for every
+family. It covers all three requested concurrency points without paying for the
+full 24-combination Cartesian product:
+
+| Cell | Payload | Clients | Mix | Measured requests |
+| --- | --- | ---: | --- | ---: |
+| `small-c1-wh` | small | 1 | 90% write / 10% read | 10,000 |
+| `small-c128-rh` | small | 128 | 10% write / 90% read | 10,000 |
+| `large-c16-wh` | large | 16 | 90% write / 10% read | 1,000 |
+| `large-c128-rh` | large | 128 | 10% write / 90% read | 1,000 |
+
+This gives a single-client write baseline, high-contention small reads,
+mid-concurrency large writes, and high-concurrency large reads. The complete
+stream, including inter-arrival times, is generated before a cell and is
+identical for Python and Rust. Twenty warm-up requests use the same client pool
+and are excluded from request and resource statistics.
+
+Each target gets one fresh database and artifact prefix. Its seven family
+corpora are bulk-seeded once with deterministic IDs and timestamps, then its 28
+cells run serially. Python runs all cells before Rust; the targets are never
+under load together. T23.2 sets the documented MLflow SQL pool knobs to 32
+base + 8 overflow for both targets and PostgreSQL `max_connections=400`; this
+prevents the Python prompt-search implementation's per-page pool reacquisition
+from producing pool-timeout errors at 128 clients. Every family has at least
+10,000 backing rows. Dataset reads cover both 10,000 datasets and 10,000
+records. Scorer reads cover 100
+names with 100 versions each. Prompt search scans 10,000 optimizer jobs, 10 of
+which match the requested experiment so its unpaginated response stays bounded;
+CRUD-only cancel/delete fixtures use a different job name. Gateway list reads
+page through a 10,000-policy corpus.
+
+“Large” follows each schema's realistic ceiling:
+
+- datasets: eight 64 KiB record outputs, about 512 KiB per upsert;
+- scorers: 64 KiB serialized scorer JSON;
+- issues: 64 KiB description;
+- label schemas: 250-character name, 1,000-character instruction, and ten
+  64-character categorical options (about 2 KiB);
+- review queues: ten 250-character users plus 100 schema or item references
+  (about 6–8 KiB);
+- prompt optimization: 5 KiB optimizer JSON on measured create requests (the
+  largest realistic value below the 6,000-character run-parameter cap);
+- gateway admin: 64 KiB obvious-fake secret material through the envelope
+  encryption update path.
+
+Prompt optimization keeps the real Python Huey / Rust native runtime enabled,
+but only 1% of measured writes create and enqueue jobs; 9% cancel deterministic
+pending fixtures and 90% delete deterministic finalized fixtures. This keeps
+T23.2 focused on CRUD while still measuring create/enqueue. T23.3 owns sustained
+job-engine saturation.
+
+T23.2 writes one schema `1.1.0` JSON per target/cell under
+`results/t23_2/`, plus `t23_2_summary.md`. Version 1.1 adds matrix axes,
+request-body byte counts, overall latency percentiles, an equivalence verdict,
+and the pre-cell load/pids process snapshot. The schema remains backward
+compatible with checked-in T23.1 version `1.0.0` artifacts. Non-sampled
+responses are retained as byte count + SHA-256 to keep large-payload artifacts
+bounded; the deterministic equivalence sample retains full decoded responses.
+
+For a short harness check, select a family and reduce volume into a temporary
+directory; reduced counts are marked as trimmed in the raw metadata and
+summary:
+
+```bash
+uv run --frozen --extra db python -m rust.bench.genai.runner t23-2 \
+  --families datasets --small-requests 20 --large-requests 10 \
+  --output-dir /tmp/t23-2-check
+```

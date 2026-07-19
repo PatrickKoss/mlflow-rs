@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime as dt
+import hashlib
 import json
 import math
 import os
@@ -44,6 +45,7 @@ class RequestRecord:
     latency_ms: float
     error: str | None
     response: Any
+    request_bytes: int | None = None
     sse: SseMetrics | None = None
 
 
@@ -108,12 +110,19 @@ class MetricsCollector:
                 },
             }
         errors = sum(record.error is not None for record in self.records)
+        latencies = [record.latency_ms for record in self.records]
         overall = {
             "duration_seconds": duration,
             "requests": len(self.records),
             "errors": errors,
             "error_rate": errors / len(self.records) if self.records else 0.0,
             "rps": len(self.records) / duration,
+            "latency_ms": {
+                "p50": percentile(latencies, 50),
+                "p95": percentile(latencies, 95),
+                "p99": percentile(latencies, 99),
+                "max": max(latencies) if latencies else None,
+            },
         }
         return endpoints, overall
 
@@ -122,13 +131,20 @@ class MetricsCollector:
 
 
 class AsyncBenchClient:
-    def __init__(self, base_url: str, concurrency: int, collector: MetricsCollector) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        concurrency: int,
+        collector: MetricsCollector,
+        *,
+        timeout_seconds: float = 60,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.collector = collector
         self.connector = aiohttp.TCPConnector(limit=concurrency, limit_per_host=concurrency)
         self.session = aiohttp.ClientSession(
             connector=self.connector,
-            timeout=aiohttp.ClientTimeout(total=60),
+            timeout=aiohttp.ClientTimeout(total=timeout_seconds),
         )
         self._sequence = 0
 
@@ -144,6 +160,7 @@ class AsyncBenchClient:
         measured: bool = True,
         sse: bool = False,
         expected: set[int] | None = None,
+        capture_response: bool = True,
         sequence: int | None = None,
         **kwargs: Any,
     ) -> tuple[int | None, Any, SseMetrics | None]:
@@ -155,6 +172,15 @@ class AsyncBenchClient:
         error: str | None = None
         response_value: Any = None
         sse_metrics: SseMetrics | None = None
+        response_bytes: bytes | None = None
+        request_bytes = None
+        if "json" in kwargs:
+            request_bytes = len(
+                json.dumps(kwargs["json"], sort_keys=True, separators=(",", ":")).encode()
+            )
+        elif isinstance(kwargs.get("data"), (bytes, str)):
+            data = kwargs["data"]
+            request_bytes = len(data.encode() if isinstance(data, str) else data)
         accepted = expected or set(range(200, 300))
         try:
             async with self.session.request(method, self.base_url + path, **kwargs) as response:
@@ -163,6 +189,7 @@ class AsyncBenchClient:
                     response_value, sse_metrics = await self._read_sse(response, started)
                 else:
                     raw = await response.read()
+                    response_bytes = raw
                     try:
                         response_value = json.loads(raw)
                     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -173,6 +200,12 @@ class AsyncBenchClient:
             error = f"{type(exc).__name__}: {exc}"
         latency_ms = (time.perf_counter() - started) * 1000
         if measured:
+            recorded_response = response_value
+            if not capture_response and response_bytes is not None:
+                recorded_response = {
+                    "body_bytes": len(response_bytes),
+                    "body_sha256": hashlib.sha256(response_bytes).hexdigest(),
+                }
             self.collector.add(
                 RequestRecord(
                     sequence=sequence,
@@ -182,7 +215,8 @@ class AsyncBenchClient:
                     status=status,
                     latency_ms=latency_ms,
                     error=error,
-                    response=response_value,
+                    response=recorded_response,
+                    request_bytes=request_bytes,
                     sse=sse_metrics,
                 )
             )
@@ -219,7 +253,7 @@ def process_tree(root_pid: int) -> list[int]:
         try:
             rest = (entry / "stat").read_text().rsplit(")", 1)[1].split()
             parents[int(entry.name)] = int(rest[1])
-        except (FileNotFoundError, IndexError, PermissionError, ValueError):
+        except (OSError, IndexError, ValueError):
             continue
     tree = {root_pid}
     changed = True
@@ -246,7 +280,7 @@ def process_tree_resources(root_pid: int) -> dict[str, Any]:
             rest = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
             utime_ticks += int(rest[11])
             stime_ticks += int(rest[12])
-        except (FileNotFoundError, IndexError, PermissionError, ValueError):
+        except (OSError, IndexError, ValueError):
             continue
     ticks_per_second = os.sysconf("SC_CLK_TCK")
     return {
@@ -277,6 +311,16 @@ class ResourceMonitor:
     def close(self) -> None:
         self.stop_event.set()
         self.thread.join(timeout=5)
+        now = time.monotonic()
+        elapsed = now - self.started
+        if not self.samples or elapsed - self.samples[-1]["elapsed_seconds"] > 0.01:
+            self.samples.append({
+                "elapsed_seconds": elapsed,
+                "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                **process_tree_resources(self.root_pid),
+            })
+            if self.pool_sampler and (pool := self.pool_sampler()):
+                self.pool_samples.append({"elapsed_seconds": elapsed, **pool})
 
     def _run(self) -> None:
         next_sample = time.monotonic()

@@ -7,6 +7,14 @@ import requests
 
 from rust.bench.genai.equivalence import compare_runs, normalize
 from rust.bench.genai.mock_provider import deterministic_payloads, provider_server
+from rust.bench.genai.t23_2 import (
+    FAMILIES,
+    Cell,
+    cell_matrix,
+    fixed_id,
+    sample_sequences,
+    seeded_stream,
+)
 
 
 def test_mock_provider_is_byte_stable_for_every_protocol_route() -> None:
@@ -108,3 +116,88 @@ def test_equivalence_normalizes_ids_times_and_sse_json() -> None:
     right["equivalence"]["jobs"][0]["status"] = "FAILED"
     assert compare_runs(left, right)
     assert normalize(json.loads('{"trace_ids":["tr-aaaaaaaaaaaaaaaa"]}')) == {"trace_ids": ["<id>"]}
+    assert normalize({"records": '[{"id":"left","optional":null}]'}) == {
+        "records": '[{"id":"<id>"}]'
+    }
+    assert normalize("obvious-fake-model-208") == "<concurrent-model-state>"
+    assert normalize("http://127.0.0.1:54321/v1") == "http://127.0.0.1:<port>/v1"
+
+
+def _matrix_setup() -> dict:
+    experiments = {
+        family: {"read": f"read-{family}", "write": f"write-{family}"} for family in FAMILIES
+    }
+    return {
+        "datasets": {"read_records": fixed_id("d-", "read"), "write": fixed_id("d-", "write")},
+        "experiments": experiments,
+        "gateway": {
+            "read": {
+                "endpoint_id": fixed_id("ep-", "read"),
+                "model_definition_id": fixed_id("md-", "read"),
+                "secret_id": fixed_id("s-", "read"),
+            },
+            "write": {
+                "endpoint_id": fixed_id("ep-", "write"),
+                "model_definition_id": fixed_id("md-", "write"),
+                "secret_id": fixed_id("s-", "write"),
+            },
+            "read_guardrail_id": fixed_id("gr-", "read"),
+            "scorer_id": fixed_id("sc-", "guardrail"),
+            "scorer_version": 1,
+        },
+        "review_schema_ids": [fixed_id("ls-", index) for index in range(100)],
+        "review_trace_ids": [fixed_id("tr-", index) for index in range(100)],
+        "seed": 2320,
+    }
+
+
+def test_t23_2_fractional_matrix_covers_axes_and_canonical_counts() -> None:
+    cells = cell_matrix(10_000, 1_000)
+    assert len(cells) == 4
+    assert {cell.payload_size for cell in cells} == {"small", "large"}
+    assert {cell.concurrency for cell in cells} == {1, 16, 128}
+    assert {cell.mix for cell in cells} == {"write-heavy", "read-heavy"}
+    assert all(
+        cell.requests == (10_000 if cell.payload_size == "small" else 1_000) for cell in cells
+    )
+
+
+def test_t23_2_stream_is_repeatable_and_has_exact_mix() -> None:
+    setup = _matrix_setup()
+    cell = Cell(0, "small", 1, "write-heavy", 100, 10_000)
+    first = seeded_stream("issues", cell, setup, 2320)
+    second = seeded_stream("issues", cell, setup, 2320)
+    assert first == second
+    assert sum("search" not in spec.endpoint for spec in first) == 90
+    assert len(sample_sequences(first, 2320)) >= 16
+
+
+def test_t23_2_dataset_large_batch_is_in_required_range() -> None:
+    setup = _matrix_setup()
+    cell = Cell(2, "large", 16, "write-heavy", 100, 1_000)
+    specs = seeded_stream("datasets", cell, setup, 2320)
+    upsert = next(spec for spec in specs if spec.endpoint == "dataset_records_upsert")
+    body_bytes = len(json.dumps(upsert.json_body, separators=(",", ":")).encode())
+    assert 256 * 1024 <= body_bytes <= 1024 * 1024
+
+
+def test_t23_2_mutable_unique_names_do_not_collide_between_cells() -> None:
+    setup = _matrix_setup()
+    cells = cell_matrix(1_000, 100)
+    for family, endpoint in (
+        ("label_schemas", "label_schemas_update"),
+        ("review_queues", "review_queues_update"),
+    ):
+        names_by_cell = [
+            {
+                spec.json_body["name"]
+                for spec in seeded_stream(family, cell, setup, 2320)
+                if spec.endpoint == endpoint
+            }
+            for cell in cells
+        ]
+        assert all(
+            left.isdisjoint(right)
+            for index, left in enumerate(names_by_cell)
+            for right in names_by_cell[index + 1 :]
+        )
