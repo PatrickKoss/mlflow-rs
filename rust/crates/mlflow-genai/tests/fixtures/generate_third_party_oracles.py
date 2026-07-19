@@ -18,6 +18,7 @@ shared MLflow provider boundary and use the conspicuously fake credential above.
 """
 
 import importlib.metadata
+import inspect
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,12 @@ OUTPUT = Path(
     os.environ.get(
         "MLFLOW_THIRD_PARTY_ORACLE_OUTPUT",
         Path(__file__).with_name("third_party_golden.json"),
+    )
+)
+WORKFLOW_OUTPUT = Path(
+    os.environ.get(
+        "MLFLOW_THIRD_PARTY_WORKFLOW_OUTPUT",
+        ROOT / "rust/crates/mlflow-genai/src/third_party/pinned_workflows.json",
     )
 )
 PINS = {
@@ -101,11 +108,7 @@ def reference_trace(*, output, retrieval_context=None, tool_call=None):
                 "AQAAAAAAAAA=",
                 "retrieve",
                 "RETRIEVER",
-                {
-                    "mlflow.spanOutputs": json.dumps(
-                        [{"page_content": retrieval_context}]
-                    )
-                },
+                {"mlflow.spanOutputs": json.dumps([{"page_content": retrieval_context}])},
                 2,
             )
         )
@@ -158,21 +161,17 @@ def deterministic_cases():
             outputs=outputs,
             expectations={"expected_output": expected} if expected is not None else None,
         )
-        cases.append(
-            {
-                "family": "deepeval",
-                "metric": name,
-                "kwargs": kwargs,
-                "model": scorer.model_dump()["third_party_scorer_data"]["model"],
-                "inputs": "reference input",
-                "outputs": outputs,
-                "expectations": (
-                    {"expected_output": expected} if expected is not None else None
-                ),
-                "trace": None,
-                "feedback": feedback(result),
-            }
-        )
+        cases.append({
+            "family": "deepeval",
+            "metric": name,
+            "kwargs": kwargs,
+            "model": scorer.model_dump()["third_party_scorer_data"]["model"],
+            "inputs": "reference input",
+            "outputs": outputs,
+            "expectations": ({"expected_output": expected} if expected is not None else None),
+            "trace": None,
+            "feedback": feedback(result),
+        })
 
     ragas_cases = [
         ("ExactMatch", {}, "Paris", "Paris"),
@@ -190,19 +189,17 @@ def deterministic_cases():
             outputs=outputs,
             expectations={"expected_output": expected},
         )
-        cases.append(
-            {
-                "family": "ragas",
-                "metric": name,
-                "kwargs": kwargs,
-                "model": scorer.model_dump()["third_party_scorer_data"]["model"],
-                "inputs": "reference input",
-                "outputs": outputs,
-                "expectations": {"expected_output": expected},
-                "trace": None,
-                "feedback": feedback(result),
-            }
-        )
+        cases.append({
+            "family": "ragas",
+            "metric": name,
+            "kwargs": kwargs,
+            "model": scorer.model_dump()["third_party_scorer_data"]["model"],
+            "inputs": "reference input",
+            "outputs": outputs,
+            "expectations": {"expected_output": expected},
+            "trace": None,
+            "feedback": feedback(result),
+        })
 
     csv_reference = "id,name\n1,Alice\n2,Bob"
     csv_response = "id,name\n1,Alice\n2,Bob\n3,Charlie"
@@ -212,19 +209,17 @@ def deterministic_cases():
         outputs=csv_response,
         expectations={"expected_output": csv_reference},
     )
-    cases.append(
-        {
-            "family": "ragas",
-            "metric": "DataCompyScore",
-            "kwargs": {},
-            "model": scorer.model_dump()["third_party_scorer_data"]["model"],
-            "inputs": "reference input",
-            "outputs": csv_response,
-            "expectations": {"expected_output": csv_reference},
-            "trace": None,
-            "feedback": feedback(result),
-        }
-    )
+    cases.append({
+        "family": "ragas",
+        "metric": "DataCompyScore",
+        "kwargs": {},
+        "model": scorer.model_dump()["third_party_scorer_data"]["model"],
+        "inputs": "reference input",
+        "outputs": csv_response,
+        "expectations": {"expected_output": csv_reference},
+        "trace": None,
+        "feedback": feedback(result),
+    })
 
     quoted_output = 'The source says "machine learning models improve accuracy".'
     trace = reference_trace(
@@ -233,19 +228,17 @@ def deterministic_cases():
     )
     scorer = ragas_scorer("QuotedSpansAlignment")
     result = scorer(trace=trace)
-    cases.append(
-        {
-            "family": "ragas",
-            "metric": "QuotedSpansAlignment",
-            "kwargs": {},
-            "model": scorer.model_dump()["third_party_scorer_data"]["model"],
-            "inputs": None,
-            "outputs": None,
-            "expectations": None,
-            "trace": json.loads(trace.to_json()),
-            "feedback": feedback(result),
-        }
-    )
+    cases.append({
+        "family": "ragas",
+        "metric": "QuotedSpansAlignment",
+        "kwargs": {},
+        "model": scorer.model_dump()["third_party_scorer_data"]["model"],
+        "inputs": None,
+        "outputs": None,
+        "expectations": None,
+        "trace": json.loads(trace.to_json()),
+        "feedback": feedback(result),
+    })
 
     expected_tool_call = {"name": "get_weather", "arguments": {"location": "Paris"}}
     trace = reference_trace(output={"answer": "sunny"}, tool_call=expected_tool_call)
@@ -253,19 +246,17 @@ def deterministic_cases():
         scorer = ragas_scorer(name)
         expectations = {"expected_tool_calls": [expected_tool_call]}
         result = scorer(trace=trace, expectations=expectations)
-        cases.append(
-            {
-                "family": "ragas",
-                "metric": name,
-                "kwargs": {},
-                "model": scorer.model_dump()["third_party_scorer_data"]["model"],
-                "inputs": None,
-                "outputs": None,
-                "expectations": expectations,
-                "trace": json.loads(trace.to_json()),
-                "feedback": feedback(result),
-            }
-        )
+        cases.append({
+            "family": "ragas",
+            "metric": name,
+            "kwargs": {},
+            "model": scorer.model_dump()["third_party_scorer_data"]["model"],
+            "inputs": None,
+            "outputs": None,
+            "expectations": expectations,
+            "trace": json.loads(trace.to_json()),
+            "feedback": feedback(result),
+        })
     return cases
 
 
@@ -330,6 +321,260 @@ def adapter_transcripts():
     return transcripts
 
 
+def _schema_value(schema, root, field_name=""):
+    """Build a deterministic valid value for a pinned structured-output schema."""
+    if "$ref" in schema:
+        resolved = root
+        for part in schema["$ref"].split("/")[1:]:
+            resolved = resolved[part]
+        schema = resolved
+    if schema.get("default") is not None:
+        return schema["default"]
+    if "const" in schema:
+        return schema["const"]
+    if values := schema.get("enum"):
+        return values[0]
+    if variants := schema.get("anyOf"):
+        variants = [variant for variant in variants if variant.get("type") != "null"]
+        return _schema_value(variants[0], root, field_name) if variants else None
+    schema_type = schema.get("type")
+    if schema_type == "object" or "properties" in schema:
+        properties = schema.get("properties", {})
+        required = schema.get("required", properties)
+        return {
+            name: _schema_value(value, root, name)
+            for name, value in properties.items()
+            if name in required
+        }
+    if schema_type == "array":
+        return [_schema_value(schema.get("items", {"type": "string"}), root, field_name)]
+    if schema_type == "boolean":
+        return True
+    if schema_type == "integer":
+        if field_name == "rating":
+            return 2
+        return 1
+    if schema_type == "number":
+        return 0.75
+    if field_name in {"verdict", "classification"}:
+        return "yes"
+    if field_name in {"reason", "feedback", "explanation"}:
+        return "scripted reason"
+    return "scripted statement"
+
+
+def _active_response_schema():
+    for frame in inspect.stack():
+        if frame.function in {"generate", "agenerate"}:
+            if schema := (
+                frame.frame.f_locals.get("schema") or frame.frame.f_locals.get("response_model")
+            ):
+                return schema
+    return None
+
+
+def _wire_request(args, call_kwargs):
+    request = {
+        "model": args[1],
+        "messages": call_kwargs["messages"],
+    }
+    if parameters := call_kwargs.get("eval_parameters"):
+        request.update(parameters)
+    if response_format := call_kwargs.get("response_format"):
+        request["response_format"] = response_format
+    return request
+
+
+def _assessment_error(value):
+    error = getattr(value, "error", None)
+    if error is None:
+        return None
+    return {
+        "type": getattr(error, "error_code", type(error).__name__),
+        "message": getattr(error, "error_message", str(error)),
+    }
+
+
+class _ScriptedEmbeddings:
+    def __init__(self, calls):
+        self.calls = calls
+
+    async def aembed_text(self, text):
+        self.calls.append({
+            "kind": "embedding",
+            "request": {"model": "text-embedding-3-small", "input": text},
+            "response": {"embedding": [1.0, 0.0]},
+        })
+        return [1.0, 0.0]
+
+    def embed_text(self, text):
+        self.calls.append({
+            "kind": "embedding",
+            "request": {"model": "text-embedding-3-small", "input": text},
+            "response": {"embedding": [1.0, 0.0]},
+        })
+        return [1.0, 0.0]
+
+    async def aembed_texts(self, texts):
+        self.calls.append({
+            "kind": "embedding",
+            "request": {"model": "text-embedding-3-small", "input": texts},
+            "response": {"embeddings": [[1.0, 0.0] for _ in texts]},
+        })
+        return [[1.0, 0.0] for _ in texts]
+
+    def embed_texts(self, texts):
+        self.calls.append({
+            "kind": "embedding",
+            "request": {"model": "text-embedding-3-small", "input": texts},
+            "response": {"embeddings": [[1.0, 0.0] for _ in texts]},
+        })
+        return [[1.0, 0.0] for _ in texts]
+
+
+DEEPEVAL_KWARGS = {
+    "JsonCorrectness": {"expected_schema": {"type": "object"}},
+    "Misuse": {"domain": "general"},
+    "NonAdvice": {"advice_types": ["medical"]},
+    "PromptAlignment": {"prompt_instructions": ["be concise"]},
+    "RoleViolation": {"role": "assistant"},
+    "ToolUse": {"available_tools": ["lookup"]},
+    "TopicAdherence": {"relevant_topics": ["science"]},
+}
+
+RAGAS_KWARGS = {
+    "AnswerCorrectness": {"weights": [1.0, 0.0]},
+    "DomainSpecificRubrics": {"rubrics": {"0": "bad", "1": "good"}},
+    "RubricsScoreWithReference": {"rubrics": {"0": "bad", "1": "good"}},
+    "RubricsScoreWithoutReference": {"rubrics": {"0": "bad", "1": "good"}},
+}
+
+
+def _reference_case():
+    trace = reference_trace(
+        output="reference output",
+        retrieval_context="reference context",
+        tool_call={"name": "lookup", "arguments": {"q": "x"}},
+    )
+    expectations = {
+        "expected_output": "reference expected",
+        "context": "reference context",
+        "expected_tool_calls": [{"name": "lookup", "arguments": {"q": "x"}}],
+        "reference_topics": ["science"],
+        "rubrics": {"0": "bad", "1": "good"},
+    }
+    return trace, expectations
+
+
+def _record_metric(family, metric, *, malformed=False):
+    trace, expectations = _reference_case()
+    calls = []
+
+    def provider_call(*args, **call_kwargs):
+        schema = _active_response_schema()
+        response_schema = schema.model_json_schema() if schema is not None else None
+        if malformed and not calls:
+            response = "not-json"
+        elif schema is not None:
+            response = json.dumps(_schema_value(response_schema, response_schema))
+        else:
+            response = json.dumps({
+                "score": 2,
+                "criteria": "scripted",
+                "supporting_evidence": "fixture",
+            })
+        calls.append({
+            "kind": "chat",
+            "request": _wire_request(args, call_kwargs),
+            "response": response,
+            "response_schema": response_schema,
+        })
+        return response
+
+    kwargs = {}
+    try:
+        if family == "deepeval":
+            kwargs = DEEPEVAL_KWARGS.get(metric, {})
+            scorer = deepeval_scorer(metric, model="openai:/fake-t19-3", **kwargs)
+        elif family == "ragas":
+            kwargs = RAGAS_KWARGS.get(metric, {})
+            if metric == "SemanticSimilarity":
+                scorer = ragas_scorer(metric, **kwargs)
+            else:
+                scorer = ragas_scorer(metric, model="openai:/fake-t19-3", **kwargs)
+            if getattr(scorer._metric, "embeddings", None):
+                scorer._metric.embeddings = _ScriptedEmbeddings(calls)
+        else:
+            scorer = trulens_scorer(metric, model="openai:/fake-t19-3")
+    except Exception as error:
+        return {
+            "family": family,
+            "metric": metric,
+            "status": "pinned-error",
+            "kwargs": kwargs,
+            "calls": calls,
+            "error": {"type": type(error).__name__, "message": str(error)},
+        }
+
+    with patch(
+        "mlflow.genai.scorers.llm_backend._call_llm_provider_api",
+        side_effect=provider_call,
+    ):
+        if family == "deepeval" and scorer.is_session_level_scorer:
+            result = scorer(
+                session=[trace],
+                expectations={
+                    "scenario": "test",
+                    "chatbot_role": "assistant",
+                    "expected_outcome": "help",
+                    "context": ["reference context"],
+                },
+            )
+        elif family == "ragas":
+            result = scorer(
+                inputs="reference input",
+                outputs="reference output",
+                expectations=expectations,
+                trace=trace,
+                session=[trace],
+            )
+        else:
+            result = scorer(
+                inputs="reference input",
+                outputs="reference output",
+                expectations=expectations,
+                trace=trace,
+            )
+
+    record = {
+        "family": family,
+        "metric": metric,
+        "status": (
+            "exact-workflow" if calls or _assessment_error(result) is None else "pinned-error"
+        ),
+        "kwargs": kwargs,
+        "calls": calls,
+    }
+    if error := _assessment_error(result):
+        record["error"] = error
+    else:
+        record["feedback"] = feedback(result)
+    return record
+
+
+def workflow_transcripts(metrics):
+    records = []
+    for entry in metrics:
+        family = entry["family"]
+        if family == "phoenix" or entry["execution"] == "deterministic":
+            continue
+        record = _record_metric(family, entry["metric"])
+        if record["status"] == "exact-workflow" and record["calls"]:
+            record["malformed"] = _record_metric(family, entry["metric"], malformed=True)
+        records.append(record)
+    return records
+
+
 def dynamic_errors():
     errors = {}
     for family, factory in [("deepeval", deepeval_scorer), ("ragas", ragas_scorer)]:
@@ -369,8 +614,10 @@ def main():
     manifest = json.loads(MANIFEST.read_text())
     metrics = manifest["third_party_metrics"]
     assert len(metrics) == 112
+    workflows = workflow_transcripts(metrics)
+    workflow_trace, workflow_expectations = _reference_case()
     corpus = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_from": versions,
         "reference_tools": reference_tools,
         "fake_credential": "sk-fake-t19-3-not-a-secret",
@@ -378,6 +625,13 @@ def main():
         "manifest": metrics,
         "deterministic_cases": deterministic_cases(),
         "adapter_transcripts": adapter_transcripts(),
+        "workflow_transcripts": workflows,
+        "workflow_case": {
+            "inputs": "reference input",
+            "outputs": "reference output",
+            "expectations": workflow_expectations,
+            "trace": json.loads(workflow_trace.to_json()),
+        },
         "dynamic_errors": dynamic_errors(),
         "phoenix": {
             "count": 6,
@@ -386,13 +640,17 @@ def main():
         },
     }
     OUTPUT.write_text(json.dumps(corpus, indent=2, sort_keys=True) + "\n")
+    WORKFLOW_OUTPUT.write_text(json.dumps(workflows, indent=2, sort_keys=True) + "\n")
     print(  # noqa: T201 - command-line generator reports its result
         json.dumps(
             {
                 "output": str(OUTPUT),
+                "workflow_output": str(WORKFLOW_OUTPUT),
                 "manifest": len(metrics),
                 "deterministic_cases": len(corpus["deterministic_cases"]),
                 "adapter_transcripts": len(corpus["adapter_transcripts"]),
+                "workflow_metrics": len(workflows),
+                "workflow_calls": sum(len(record["calls"]) for record in workflows),
                 "live_provider_calls": 0,
             },
             sort_keys=True,

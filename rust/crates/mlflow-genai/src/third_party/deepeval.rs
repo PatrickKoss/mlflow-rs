@@ -2,10 +2,9 @@ use fancy_regex::Regex;
 use serde_json::{json, Map, Value};
 
 use super::{
-    feedback, invoke_messages, kwargs, map_single_turn, metric_name, model, parse_score_reason,
-    FeedbackContext, ThirdPartyFamily, ThirdPartyMetric,
+    feedback, kwargs, map_single_turn, metric_name, workflow, FeedbackContext, ThirdPartyFamily,
+    ThirdPartyMetric,
 };
-use crate::trace::python_str;
 use crate::{EngineError, EvalItem, Feedback, ScorerExecutor, SerializedScorerCommon};
 
 const METRICS: [&str; 44] = [
@@ -140,7 +139,7 @@ pub(super) async fn execute(
                     common.name
                 )));
             }
-            llm_metric(executor, common, data, item, &metric_kwargs, gateway_url)
+            workflow::execute(executor, "deepeval", common, data, item, gateway_url, None)
                 .await
                 .map(|feedback| vec![feedback])
         }
@@ -230,74 +229,6 @@ fn pattern_match(
         FeedbackContext {
             source_type: "CODE",
             source_id: None,
-            family: "deepeval",
-            score: Some(score),
-            threshold: Some(threshold),
-        },
-    ))
-}
-
-async fn llm_metric(
-    executor: &ScorerExecutor,
-    common: &SerializedScorerCommon,
-    data: &Map<String, Value>,
-    item: &EvalItem,
-    metric_kwargs: &Map<String, Value>,
-    gateway_url: Option<&str>,
-) -> Result<Feedback, EngineError> {
-    let name = metric_name(common, data)?;
-    let mapped = map_single_turn(item);
-    let evaluation_input = if let Some(session) = &item.session {
-        json!({
-            "turns": session.iter().flat_map(|trace| {
-                let mapped = map_single_turn(&EvalItem { trace: Some(trace.clone()), ..EvalItem::default() });
-                [json!({"role":"user","content":mapped.input}), json!({"role":"assistant","content":mapped.output})]
-            }).collect::<Vec<_>>()
-        })
-    } else {
-        json!({
-            "input": mapped.input,
-            "actual_output": mapped.output,
-            "expected_output": mapped.reference,
-            "retrieval_context": mapped.contexts,
-        })
-    };
-    let prompt = format!(
-        "Evaluate the following test case using DeepEval's {name} metric. Return the metric score and concise reason.\n\nTest case:\n{}",
-        serde_json::to_string_pretty(&evaluation_input)
-            .map_err(|error| EngineError::Serialization(error.to_string()))?
-    );
-    let schema = json!({
-        "properties": {
-            "score": {"title": "Score", "type": "number"},
-            "reason": {"title": "Reason", "type": "string"}
-        },
-        "required": ["score", "reason"],
-        "title": "Result",
-        "type": "object"
-    });
-    let full_prompt = format!(
-        "{prompt}\n\nIMPORTANT: Return your response as valid JSON matching this schema: {}\nReturn ONLY the JSON object, no additional text or markdown formatting.",
-        python_str(&schema)
-    );
-    let content = invoke_messages(
-        executor,
-        model(data),
-        vec![json!({"role":"user", "content":full_prompt})],
-        data.get("model_kwargs").and_then(Value::as_object),
-        None,
-        gateway_url,
-    )
-    .await?;
-    let (score, reason) = parse_score_reason(&content)?;
-    let threshold = number(metric_kwargs, "threshold").unwrap_or(0.5);
-    Ok(feedback(
-        common,
-        json!(if score >= threshold { "yes" } else { "no" }),
-        reason,
-        FeedbackContext {
-            source_type: "LLM_JUDGE",
-            source_id: Some(model(data).to_string()),
             family: "deepeval",
             score: Some(score),
             threshold: Some(threshold),

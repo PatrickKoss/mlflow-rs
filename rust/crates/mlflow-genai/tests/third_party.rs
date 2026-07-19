@@ -21,11 +21,8 @@ async fn scripted(State(script): State<Script>, Json(request): Json<Value>) -> J
     Json(script.responses.lock().unwrap().pop_front().unwrap())
 }
 
-async fn server(contents: &[&str]) -> (String, Script) {
-    let responses = contents
-        .iter()
-        .map(|content| json!({"choices":[{"message":{"content":content}}]}))
-        .collect::<VecDeque<_>>();
+async fn server(responses: Vec<Value>) -> (String, Script) {
+    let responses = responses.into_iter().collect::<VecDeque<_>>();
     let script = Script {
         requests: Arc::new(Mutex::new(Vec::new())),
         responses: Arc::new(Mutex::new(responses)),
@@ -37,6 +34,19 @@ async fn server(contents: &[&str]) -> (String, Script) {
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     (format!("http://{address}/"), script)
+}
+
+fn scripted_responses(calls: &[Value]) -> Vec<Value> {
+    calls
+        .iter()
+        .map(|call| {
+            if call["kind"] == "embedding" {
+                json!({"data":[{"embedding":[1.0,0.0]},{"embedding":[1.0,0.0]}]})
+            } else {
+                json!({"choices":[{"message":{"content":call["response"]}}]})
+            }
+        })
+        .collect()
 }
 
 fn payload(family: &str, metric: &str, model: Value, kwargs: Value) -> SerializedScorer {
@@ -213,95 +223,134 @@ async fn dynamic_metric_errors_match_the_pinned_families() {
 }
 
 #[tokio::test]
-async fn scripted_family_adapter_requests_and_feedback_are_diff_clean() {
-    let (url, script) = server(&[
-        r#"{"score":0.75,"reason":"deep scripted"}"#,
-        r#"{"score":0.75,"reason":"ragas scripted"}"#,
-        r#"{"score":2,"criteria":"coherent","supporting_evidence":"structured"}"#,
-    ])
-    .await;
+async fn every_pinned_workflow_request_and_feedback_is_diff_clean() {
+    let corpus: Value =
+        serde_json::from_str(include_str!("fixtures/third_party_golden.json")).unwrap();
     let executor = ScorerExecutor::new();
+    let trace = corpus["workflow_case"]["trace"].clone();
     let item = EvalItem {
         inputs: Some(json!("reference input")),
         outputs: Some(json!("reference output")),
-        expectations: Some(
-            json!({"expected_output":"reference output","context":"reference context"}),
-        ),
+        expectations: Some(corpus["workflow_case"]["expectations"].clone()),
+        trace: Some(trace.clone()),
+        session: Some(vec![trace]),
         ..EvalItem::default()
     };
-    let deep = executor
-        .execute(
-            &payload(
-                "deepeval",
-                "AnswerRelevancy",
-                json!("openai:/fake-t19-3"),
-                json!({"threshold":0.7}),
-            ),
-            &item,
-            Some(&url),
-        )
-        .await
-        .unwrap();
-    let ragas = executor
-        .execute(
-            &payload(
-                "ragas",
-                "Faithfulness",
-                json!("openai:/fake-t19-3"),
-                json!({"threshold":0.7}),
-            ),
-            &item,
-            Some(&url),
-        )
-        .await
-        .unwrap();
-    let trulens = executor
-        .execute(
-            &payload(
-                "trulens",
-                "Coherence",
-                json!("openai:/fake-t19-3"),
-                json!({"threshold":0.5}),
-            ),
-            &item,
-            Some(&url),
-        )
-        .await
-        .unwrap();
-    assert_eq!(deep.value, "yes");
-    assert_eq!(deep.rationale, "deep scripted");
-    assert_eq!(ragas.value, "yes");
-    assert_eq!(ragas.rationale, "ragas scripted");
-    assert_eq!(trulens.value, "yes");
-    assert_eq!(
-        trulens.rationale,
-        "reason: Criteria: coherent\nSupporting Evidence: structured"
-    );
+    for workflow in corpus["workflow_transcripts"].as_array().unwrap() {
+        let family = workflow["family"].as_str().unwrap();
+        let metric = workflow["metric"].as_str().unwrap();
+        let scorer = payload(
+            family,
+            metric,
+            json!("openai:/fake-t19-3"),
+            workflow["kwargs"].clone(),
+        );
+        if workflow["status"] == "pinned-error" {
+            let error = executor
+                .execute_all(&scorer, &item, None, None)
+                .await
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, workflow["error"]["message"], "{family}/{metric}");
+            continue;
+        }
 
-    let requests = script.requests.lock().unwrap();
-    assert_eq!(requests.len(), 3);
+        let calls = workflow["calls"].as_array().unwrap();
+        let (url, script) = server(scripted_responses(calls)).await;
+        let result = executor
+            .execute_all(&scorer, &item, Some(&url), Some(&url))
+            .await
+            .unwrap_or_else(|error| panic!("{family}/{metric}: {error}"));
+        assert_eq!(result.len(), 1, "{family}/{metric}");
+        let result = &result[0];
+        let expected = &workflow["feedback"];
+        assert_eq!(result.value, expected["value"], "{family}/{metric}/value");
+        assert_eq!(
+            result.rationale,
+            expected["rationale"].as_str().unwrap_or_default(),
+            "{family}/{metric}/rationale"
+        );
+        assert_eq!(
+            result.source.as_ref().unwrap().source_type,
+            expected["source_type"],
+            "{family}/{metric}/source_type"
+        );
+        assert_eq!(
+            result.source.as_ref().unwrap().source_id.as_deref(),
+            expected["source_id"].as_str(),
+            "{family}/{metric}/source_id"
+        );
+        assert_eq!(
+            serde_json::to_value(result.metadata.as_ref().unwrap()).unwrap(),
+            expected["metadata"],
+            "{family}/{metric}/metadata"
+        );
+        assert_eq!(
+            script.requests.lock().unwrap().as_slice(),
+            calls
+                .iter()
+                .map(|call| call["request"].clone())
+                .collect::<Vec<_>>(),
+            "{family}/{metric}/ordered requests"
+        );
+    }
+}
+
+#[tokio::test]
+async fn every_pinned_parser_matches_its_malformed_transcript() {
     let corpus: Value =
         serde_json::from_str(include_str!("fixtures/third_party_golden.json")).unwrap();
-    for (index, family) in ["deepeval", "ragas"].into_iter().enumerate() {
-        let oracle = corpus["adapter_transcripts"][family]["request"]["messages"][0]["content"]
-            .as_str()
-            .unwrap();
-        let suffix = oracle.strip_prefix("REFERENCE PROMPT").unwrap();
-        assert!(
-            requests[index]["messages"][0]["content"]
-                .as_str()
-                .unwrap()
-                .ends_with(suffix),
-            "{family} adapter suffix differs"
+    let executor = ScorerExecutor::new();
+    let trace = corpus["workflow_case"]["trace"].clone();
+    let item = EvalItem {
+        inputs: Some(json!("reference input")),
+        outputs: Some(json!("reference output")),
+        expectations: Some(corpus["workflow_case"]["expectations"].clone()),
+        trace: Some(trace.clone()),
+        session: Some(vec![trace]),
+        ..EvalItem::default()
+    };
+    for workflow in corpus["workflow_transcripts"].as_array().unwrap() {
+        let Some(malformed) = workflow.get("malformed") else {
+            continue;
+        };
+        let family = workflow["family"].as_str().unwrap();
+        let metric = workflow["metric"].as_str().unwrap();
+        let scorer = payload(
+            family,
+            metric,
+            json!("openai:/fake-t19-3"),
+            workflow["kwargs"].clone(),
         );
-        assert_eq!(requests[index]["model"], "fake-t19-3");
-        assert!(requests[index].get("response_format").is_none());
+        let calls = malformed["calls"].as_array().unwrap();
+        let (url, script) = server(scripted_responses(calls)).await;
+        let result = executor
+            .execute_all(&scorer, &item, Some(&url), Some(&url))
+            .await;
+        if let Some(message) = malformed["error"]["message"].as_str() {
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                message,
+                "{family}/{metric}/malformed error"
+            );
+        } else {
+            let result =
+                result.unwrap_or_else(|error| panic!("{family}/{metric}/malformed: {error}"));
+            assert_eq!(result[0].value, malformed["feedback"]["value"]);
+            assert_eq!(
+                result[0].rationale,
+                malformed["feedback"]["rationale"]
+                    .as_str()
+                    .unwrap_or_default()
+            );
+        }
+        assert_eq!(
+            script.requests.lock().unwrap().as_slice(),
+            calls
+                .iter()
+                .map(|call| call["request"].clone())
+                .collect::<Vec<_>>(),
+            "{family}/{metric}/malformed ordered requests"
+        );
     }
-    assert_eq!(requests[2]["messages"][0]["role"], "system");
-    assert_eq!(requests[2]["messages"][1]["role"], "user");
-    assert_eq!(requests[2]["temperature"], 0.0);
-    assert_eq!(
-        requests[2]["response_format"]["json_schema"]["name"],
-        "ChainOfThoughtResponse"
-    );
 }
