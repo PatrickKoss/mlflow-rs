@@ -23,9 +23,9 @@ def feedback_projection(feedback, *, include_judge_fields: bool = False) -> dict
         "name": feedback.name,
         "value": str(feedback.value),
         "rationale": feedback.rationale,
+        "source": feedback.source.to_dictionary(),
     }
     if include_judge_fields:
-        projected["source"] = feedback.source.to_dictionary()
         projected["metadata"] = feedback.metadata
     return projected
 

@@ -44,12 +44,14 @@ pub async fn register_scorer(
             DECORATOR_SCORER_REGISTRATION_NOT_SUPPORTED_ERROR,
         ));
     }
-    if let Err(ScorerPayloadError::PhoenixLicense { metric }) =
-        SerializedScorer::from_json(serialized_scorer)
-    {
-        return Err(MlflowError::invalid_parameter_value(
-            ScorerPayloadError::PhoenixLicense { metric }.to_string(),
-        ));
+    if let Ok(scorer) = SerializedScorer::from_json(serialized_scorer) {
+        if let Err(ScorerPayloadError::PhoenixLicense { metric }) =
+            scorer.validate_for_oss_execution()
+        {
+            return Err(MlflowError::invalid_parameter_value(
+                ScorerPayloadError::PhoenixLicense { metric }.to_string(),
+            ));
+        }
     }
     let scorer = state
         .tracking_store()

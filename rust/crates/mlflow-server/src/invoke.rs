@@ -391,27 +391,20 @@ fn fixed_batches(trace_ids: &[String]) -> Result<Vec<Vec<String>>, MlflowError> 
 }
 
 fn validate_serialized_scorer(value: &str) -> Result<SerializedScorer, MlflowError> {
-    SerializedScorer::from_json(value).map_err(|error| {
+    let scorer = SerializedScorer::from_json(value).map_err(|error| {
         let message = match error {
             ScorerPayloadError::Json(error) => format!(
                 "Invalid JSON in serialized scorer: {}",
                 python_json_error(value, &error)
             ),
-            ScorerPayloadError::RepresentationCount(0) => {
-                let parsed: Value = serde_json::from_str(value).unwrap_or(Value::Null);
-                if parsed.as_object().is_some_and(|object| !object.contains_key("name")) {
-                    "Failed to validate scorer: Failed to parse serialized scorer data: SerializedScorer.__init__() missing 1 required positional argument: 'name'".to_string()
-                } else {
-                    format!(
-                        "Failed to validate scorer: Failed to load scorer '{}'. The scorer is serialized in an unknown format that cannot be deserialized.",
-                        parsed.get("name").and_then(Value::as_str).unwrap_or("")
-                    )
-                }
-            }
             other => format!("Failed to validate scorer: {other}"),
         };
         MlflowError::invalid_parameter_value(message)
-    })
+    })?;
+    scorer.validate_for_oss_execution().map_err(|error| {
+        MlflowError::invalid_parameter_value(format!("Failed to validate scorer: {error}"))
+    })?;
+    Ok(scorer)
 }
 
 fn validated_json(

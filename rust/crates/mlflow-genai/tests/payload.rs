@@ -36,7 +36,10 @@ fn rejects_multiple_representations() {
         "instructions_judge_pydantic_data": {}
     });
     let error = SerializedScorer::from_json(&payload.to_string()).unwrap_err();
-    assert!(error.to_string().contains("exactly one"));
+    assert_eq!(
+        error.to_string(),
+        "Failed to parse serialized scorer data: SerializedScorer cannot have multiple types of scorer fields present simultaneously"
+    );
 }
 
 #[test]
@@ -51,7 +54,8 @@ fn rejects_phoenix_metric_for_elastic_2_license() {
             "model": "openai:/gpt-4"
         }
     });
-    let error = SerializedScorer::from_json(&payload.to_string()).unwrap_err();
+    let scorer = SerializedScorer::from_json(&payload.to_string()).unwrap();
+    let error = scorer.validate_for_oss_execution().unwrap_err();
     assert_eq!(
         error.to_string(),
         "Phoenix scorer metric 'Hallucination' is unavailable in the Rust server: \

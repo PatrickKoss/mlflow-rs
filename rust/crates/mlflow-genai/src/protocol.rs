@@ -119,9 +119,17 @@ pub struct InvokeScorerParams {
     pub outputs: Option<Value>,
     #[serde(default)]
     pub expectations: Option<Value>,
+    #[serde(default)]
+    pub trace: Option<Value>,
+    #[serde(default)]
+    pub session: Option<Vec<Value>>,
+    #[serde(default)]
+    pub memory_examples: Option<Vec<crate::MemoryExample>>,
     /// Spike injection seam; production workers use the propagated gateway URI.
     #[serde(default)]
     pub gateway_url: Option<String>,
+    #[serde(default)]
+    pub embedding_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,0 +1,41 @@
+{
+  "max_tokens": 50,
+  "messages": [
+    {
+      "content": "You are an expert judge tasked with evaluating the performance of an AI\nagent on a particular query. You will be given instructions that describe the criteria and\nmethodology for evaluating the agent's performance on the query.\n\nYour task: Return yes when {{ inputs }} is answered by {{ outputs }}.\n\nYou *must* format your evaluation rating as a JSON object with the following fields (no markdown). Pay close attention to the field type of the evaluation rating (string, boolean, numeric, etc.), and ensure that it conforms to the instructions.\n\n- result (Literal['yes', 'no']): The evaluation rating/result\n- rationale (str): Detailed explanation for the evaluation",
+      "role": "system"
+    },
+    {
+      "content": "inputs: {\n  \"question\": \"capital?\"\n}\noutputs: \"Paris\"",
+      "role": "user"
+    }
+  ],
+  "model": "fake-chat",
+  "response_format": {
+    "json_schema": {
+      "name": "ResponseFormat",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "rationale": {
+            "description": "Detailed explanation for the evaluation",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "result": {
+            "description": "The evaluation rating/result",
+            "enum": ["yes", "no"],
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": ["result", "rationale"],
+        "title": "ResponseFormat",
+        "type": "object"
+      },
+      "strict": true
+    },
+    "type": "json_schema"
+  },
+  "temperature": 0.0
+}

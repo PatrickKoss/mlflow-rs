@@ -11,7 +11,9 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fancy-regex = "0.14.0"
 reqwest = { workspace = true }
+regex = "1.13.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -21,4 +23,5 @@ tokio = { workspace = true }
 nix = { version = "0.31.3", features = ["process", "signal"] }
 
 [dev-dependencies]
+axum = { workspace = true }
 serde_json = { workspace = true }

@@ -122,6 +122,7 @@ impl LoadedGuardrails {
                     inputs,
                     outputs,
                     expectations: None,
+                    ..EvalItem::default()
                 },
                 gateway_url.as_deref(),
             )
@@ -436,6 +437,8 @@ mod tests {
             rationale: "x".repeat(510),
             source: None,
             metadata: None,
+            span_id: None,
+            trace_id: None,
         };
         assert_eq!(rationale(&feedback).len(), 500);
     }
