@@ -3681,10 +3681,33 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       T4.1/T4.5), retention/allowlist resolution.
       **AC:** archive→read→delete cycle byte-matches Python; D6 closed.
       **VER:** archival differential on sqlite + postgres.
-- [ ] **T21.3 OTLP payloads**: `traces.pb` writer/reader (single
+- [x] **T21.3 OTLP payloads**: `traces.pb` writer/reader (single
       ResourceSpans/ScopeSpans, root-first sort) interoperable with
       Python-written payloads both directions.
       **AC/VER:** cross-language payload fixtures.
+      **DONE 2026-07-19** (codex agent, merged ed4fafbf4): codec in
+      `rust/crates/mlflow-server/src/trace_archival.rs` —
+      `TRACE_ARCHIVAL_FILENAME`, `TraceArchive`, `encode_traces_pb`,
+      `decode_traces_pb`, `stored_spans_to_traces_pb`; self-contained for
+      T21.2 (shared stored-span→OTLP conversion incl. links extracted from
+      traces.rs). Envelope exactly per `mlflow/tracing/otel/otel_archival.py`:
+      one TracesData→ResourceSpans→ScopeSpans, resource always present
+      (empty for SQL-backed spans), scope/schema URLs unset; ordering
+      root-first, then start_time_unix_nano, then span ID. Rejects empty
+      payloads, noncanonical envelopes, missing IDs, mixed OTLP trace IDs.
+      Two documented Python normalizations using pre-existing machinery
+      (+ new Python tests): writer now applies the reader's existing
+      `_sort_spans_for_trace_output` canonical order; reader passes the
+      envelope resource through `from_otel_proto(resource=…)` instead of
+      dropping attrs. Matched Python's unset-AnyValue presence for None;
+      fixtures avoid `Resource.create()` env detectors. Golden fixtures
+      (python_db_traces.pb, python_resource_traces.pb + manifest, pinned
+      Python 3.10.18/protobuf 6.33.6/OTel 1.43.0) byte-exact BOTH
+      directions: Rust-read-Python round-trips exactly; Rust-write
+      byte-identical to Python; Python-read-Rust via
+      `rust/tools/trace_archival_cross_language.py` exact. Post-merge
+      gates 13/13 green (incl. new otel-archival pytest step; 1,392 Rust
+      tests / 120 suites, route parity 372/372, replay 188).
 - [ ] **T21.4 Scheduler task**: minute tick + interval gate + workspace
       fairness + per-pass budget on the §14.6 scheduler.
       **AC/VER:** same-seed scheduling decisions match Python.
