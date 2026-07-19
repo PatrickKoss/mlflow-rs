@@ -90,6 +90,8 @@ pub enum EngineError {
     Gateway(String),
     #[error("embedding request failed: {0}")]
     Embedding(String),
+    #[error("tracking store request failed: {0}")]
+    Store(String),
     #[error("gateway returned malformed completion: {0}")]
     MalformedGatewayResponse(String),
     #[error("judge tool execution failed: {0}")]

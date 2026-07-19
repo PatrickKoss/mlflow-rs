@@ -524,7 +524,7 @@ fn millis_to_timestamp(ms: i64) -> prost_types::Timestamp {
 
 /// `Assessment.to_proto` (`assessment.py:122-155`): the store entity ->
 /// response proto direction.
-fn to_proto_assessment(a: Assessment) -> apb::Assessment {
+pub(crate) fn to_proto_assessment(a: Assessment) -> apb::Assessment {
     let value = match a.value {
         AssessmentValue::Expectation { value_json } => {
             apb::assessment::Value::Expectation(expectation_to_proto(value_json))
