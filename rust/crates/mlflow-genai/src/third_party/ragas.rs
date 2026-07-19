@@ -4,8 +4,8 @@ use regex::Regex;
 use serde_json::{json, Map, Value};
 
 use super::{
-    feedback, invoke_messages, kwargs, map_single_turn, metric_name, model, parse_score_reason,
-    FeedbackContext, ThirdPartyFamily, ThirdPartyMetric,
+    feedback, kwargs, map_single_turn, metric_name, model, workflow, FeedbackContext,
+    ThirdPartyFamily, ThirdPartyMetric,
 };
 use crate::{
     trace::{python_str, TraceView},
@@ -91,14 +91,17 @@ pub(super) async fn execute(
     if DETERMINISTIC.contains(&name) {
         return deterministic(common, name, data, &metric_kwargs, item).map(|value| vec![value]);
     }
-    if name == "SemanticSimilarity" {
-        return semantic_similarity(executor, common, data, item, embedding_url)
-            .await
-            .map(|value| vec![value]);
-    }
-    llm_metric(executor, common, data, item, &metric_kwargs, gateway_url)
-        .await
-        .map(|value| vec![value])
+    workflow::execute(
+        executor,
+        "ragas",
+        common,
+        data,
+        item,
+        gateway_url,
+        embedding_url,
+    )
+    .await
+    .map(|value| vec![value])
 }
 
 fn deterministic(
@@ -180,132 +183,6 @@ fn deterministic(
             } else {
                 name.to_string()
             }),
-            family: "ragas",
-            score: threshold.map(|_| score),
-            threshold,
-        },
-    ))
-}
-
-async fn semantic_similarity(
-    executor: &ScorerExecutor,
-    common: &SerializedScorerCommon,
-    data: &Map<String, Value>,
-    item: &EvalItem,
-    embedding_url: Option<&str>,
-) -> Result<Feedback, EngineError> {
-    let mapped = map_single_turn(item);
-    let reference = require_reference("SemanticSimilarity", &mapped.reference)?;
-    let embedding_model = kwargs(data)
-        .get("embedding_model")
-        .and_then(Value::as_str)
-        .unwrap_or("text-embedding-3-small")
-        .to_string();
-    let response = executor
-        .client()
-        .post(embedding_url.ok_or(EngineError::MissingEmbeddingUrl)?)
-        .json(&json!({"model": embedding_model, "input": [reference, mapped.output]}))
-        .send()
-        .await
-        .map_err(|error| EngineError::Embedding(error.to_string()))?;
-    let status = response.status();
-    let body: Value = response
-        .json()
-        .await
-        .map_err(|error| EngineError::Embedding(error.to_string()))?;
-    if !status.is_success() {
-        return Err(EngineError::Embedding(format!("HTTP {status}: {body}")));
-    }
-    let vectors = body
-        .get("data")
-        .and_then(Value::as_array)
-        .ok_or_else(|| EngineError::Embedding("missing data".into()))?;
-    let left = embedding(vectors.first())?;
-    let right = embedding(vectors.get(1))?;
-    let score = cosine(&left, &right);
-    Ok(feedback(
-        common,
-        json!(score),
-        String::new(),
-        FeedbackContext {
-            source_type: "CODE",
-            source_id: Some("SemanticSimilarity".to_string()),
-            family: "ragas",
-            score: None,
-            threshold: None,
-        },
-    ))
-}
-
-async fn llm_metric(
-    executor: &ScorerExecutor,
-    common: &SerializedScorerCommon,
-    data: &Map<String, Value>,
-    item: &EvalItem,
-    metric_kwargs: &Map<String, Value>,
-    gateway_url: Option<&str>,
-) -> Result<Feedback, EngineError> {
-    let name = metric_name(common, data)?;
-    let mapped = map_single_turn(item);
-    let sample = if is_multiturn(name) {
-        let traces = item
-            .session
-            .as_deref()
-            .or_else(|| item.trace.as_ref().map(std::slice::from_ref))
-            .unwrap_or_default();
-        let mut messages = Vec::new();
-        for trace in traces {
-            let turn = map_single_turn(&EvalItem {
-                trace: Some(trace.clone()),
-                ..EvalItem::default()
-            });
-            if !turn.input.trim().is_empty() {
-                messages.push(json!({"role":"human", "content":turn.input}));
-            }
-            if !turn.output.trim().is_empty() {
-                messages.push(json!({"role":"ai", "content":turn.output}));
-            }
-        }
-        json!({"user_input":messages, "reference":mapped.reference})
-    } else {
-        json!({
-            "user_input": mapped.input,
-            "response": mapped.output,
-            "retrieved_contexts": mapped.contexts,
-            "reference": mapped.reference,
-            "rubrics": item.expectations.as_ref().and_then(|value| value.get("rubrics")),
-        })
-    };
-    let prompt = format!(
-        "Evaluate the sample using the RAGAS {name} metric.\n\n{}",
-        serde_json::to_string_pretty(&sample)
-            .map_err(|error| EngineError::Serialization(error.to_string()))?
-    );
-    let full_prompt = format!(
-        "{prompt}\n\nOUTPUT FORMAT: Respond ONLY with a JSON object containing these fields: \"score\", \"reason\", no other text. Do not add markdown formatting to the response."
-    );
-    let content = invoke_messages(
-        executor,
-        model(data),
-        vec![json!({"role":"user", "content":full_prompt})],
-        None,
-        None,
-        gateway_url,
-    )
-    .await?;
-    let (score, rationale) = parse_score_reason(&content)?;
-    let threshold = metric_kwargs.get("threshold").and_then(Value::as_f64);
-    let value = threshold.map_or_else(
-        || json!(score),
-        |threshold| json!(if score >= threshold { "yes" } else { "no" }),
-    );
-    Ok(feedback(
-        common,
-        value,
-        rationale,
-        FeedbackContext {
-            source_type: "LLM_JUDGE",
-            source_id: Some(model(data).to_string()),
             family: "ragas",
             score: threshold.map(|_| score),
             threshold,
@@ -779,45 +656,4 @@ fn data_compare(
         score,
         format!("Mode: {mode}, Precision: {precision:.4}, Recall: {recall:.4}"),
     ))
-}
-
-fn embedding(value: Option<&Value>) -> Result<Vec<f64>, EngineError> {
-    value
-        .and_then(|value| value.get("embedding"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| EngineError::Embedding("missing embedding".into()))?
-        .iter()
-        .map(|value| {
-            value
-                .as_f64()
-                .ok_or_else(|| EngineError::Embedding("non-numeric embedding".into()))
-        })
-        .collect()
-}
-
-fn cosine(left: &[f64], right: &[f64]) -> f64 {
-    let dot = left
-        .iter()
-        .zip(right)
-        .map(|(left, right)| left * right)
-        .sum::<f64>();
-    let left_norm = left.iter().map(|value| value * value).sum::<f64>().sqrt();
-    let right_norm = right.iter().map(|value| value * value).sum::<f64>().sqrt();
-    if left_norm == 0.0 || right_norm == 0.0 {
-        0.0
-    } else {
-        dot / (left_norm * right_norm)
-    }
-}
-
-fn is_multiturn(name: &str) -> bool {
-    matches!(
-        name,
-        "AgentGoalAccuracy"
-            | "AgentGoalAccuracyWithReference"
-            | "AgentGoalAccuracyWithoutReference"
-            | "ToolCallAccuracy"
-            | "ToolCallF1"
-            | "TopicAdherence"
-    )
 }

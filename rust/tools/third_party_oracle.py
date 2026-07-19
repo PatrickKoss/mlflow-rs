@@ -14,10 +14,12 @@ GENERATOR = ROOT / "rust/crates/mlflow-genai/tests/fixtures/generate_third_party
 def main():
     with tempfile.TemporaryDirectory(prefix="mlflow-t19-3-") as directory:
         generated = Path(directory) / "third_party_golden.json"
+        generated_workflows = Path(directory) / "pinned_workflows.json"
         env = {
             **os.environ,
             "OPENAI_API_KEY": "sk-fake-t19-3-not-a-secret",
             "MLFLOW_THIRD_PARTY_ORACLE_OUTPUT": str(generated),
+            "MLFLOW_THIRD_PARTY_WORKFLOW_OUTPUT": str(generated_workflows),
         }
         subprocess.run(
             [
@@ -47,6 +49,8 @@ def main():
             check=True,
         )
         assert generated.read_bytes() == FIXTURE.read_bytes(), "golden corpus drift"
+        workflows = ROOT / "rust/crates/mlflow-genai/src/third_party/pinned_workflows.json"
+        assert generated_workflows.read_bytes() == workflows.read_bytes(), "workflow corpus drift"
 
     subprocess.run(
         ["cargo", "test", "--quiet", "-p", "mlflow-genai", "--test", "third_party"],
@@ -63,11 +67,14 @@ def main():
                 "manifest_coverage": len(corpus["manifest"]),
                 "families": families,
                 "deterministic_cases": len(corpus["deterministic_cases"]),
-                "adapter_transcripts": len(corpus["adapter_transcripts"]),
+                "workflow_metrics": len(corpus["workflow_transcripts"]),
+                "workflow_calls": sum(
+                    len(record["calls"]) for record in corpus["workflow_transcripts"]
+                ),
                 "dynamic_error_families": len(corpus["dynamic_errors"]),
                 "corpus_diff": 0,
                 "live_provider_calls": corpus["live_provider_calls"],
-                "rust_suites": 5,
+                "rust_suites": 6,
             },
             sort_keys=True,
         )
