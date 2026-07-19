@@ -1,0 +1,3179 @@
+{
+  "db_pool": {
+    "method": "pg_stat_activity (server-side pool occupancy proxy)",
+    "samples": [
+      {
+        "active": 0,
+        "elapsed_seconds": 0.00019079000048805028,
+        "source": "pg_stat_activity",
+        "total": 2,
+        "waiting": 0
+      },
+      {
+        "active": 0,
+        "elapsed_seconds": 1.0002767359983409,
+        "source": "pg_stat_activity",
+        "total": 3,
+        "waiting": 0
+      },
+      {
+        "active": 0,
+        "elapsed_seconds": 2.000272256002063,
+        "source": "pg_stat_activity",
+        "total": 9,
+        "waiting": 0
+      },
+      {
+        "active": 0,
+        "elapsed_seconds": 3.0002462120028213,
+        "source": "pg_stat_activity",
+        "total": 15,
+        "waiting": 0
+      },
+      {
+        "active": 0,
+        "elapsed_seconds": 4.000283821005723,
+        "source": "pg_stat_activity",
+        "total": 18,
+        "waiting": 0
+      },
+      {
+        "active": 0,
+        "elapsed_seconds": 5.00029455900949,
+        "source": "pg_stat_activity",
+        "total": 17,
+        "waiting": 0
+      }
+    ]
+  },
+  "equivalence": {
+    "jobs": [
+      {
+        "execution_seconds": 2.048964183006319,
+        "job_id": "2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+        "polls": 10,
+        "queue_wait_seconds": 0.32865221599058714,
+        "result": {
+          "tr-543b89339de361bc463b56b3eb999832": {
+            "assessments": [
+              {
+                "assessment_name": "concise_answer",
+                "create_time": "2026-07-19T11:58:37.766Z",
+                "feedback": {
+                  "value": "yes"
+                },
+                "last_update_time": "2026-07-19T11:58:37.766Z",
+                "metadata": {
+                  "guideline": "Return 'yes' when {{ outputs }} is concise, otherwise return 'no'.",
+                  "mlflow.assessment.judgeInputTokens": "14",
+                  "mlflow.assessment.judgeOutputTokens": "5"
+                },
+                "rationale": "deterministic judge rationale 2fc1989fbe30",
+                "source": {
+                  "source_id": "gateway:/t23-smoke-endpoint-2301",
+                  "source_type": "LLM_JUDGE"
+                },
+                "trace_id": "",
+                "valid": true
+              }
+            ],
+            "failures": []
+          }
+        },
+        "status": "SUCCEEDED",
+        "status_details": null,
+        "submit_to_terminal_seconds": 2.3776163989969064
+      }
+    ],
+    "sample_seed": 2301,
+    "samples": [
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 8,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 10,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 18,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 26,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 31,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 33,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 46,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 53,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 58,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 59,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 73,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 81,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "datasets_search",
+        "method": "POST",
+        "path": "/api/3.0/mlflow/datasets/search",
+        "response": {
+          "datasets": [
+            {
+              "created_time": 1784462314840,
+              "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+              "digest": "c61ecb0d",
+              "last_update_time": 1784462314840,
+              "name": "t23-smoke-dataset-2301",
+              "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+            }
+          ]
+        },
+        "sequence": 86,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "gateway_chat_sse",
+        "method": "POST",
+        "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+        "response": [
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-4a5a\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"885a811b 2\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2bc39eb\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+        ],
+        "sequence": 93,
+        "sse_frames": [
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-4a5a\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"885a811b 2\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2bc39eb\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+        ],
+        "status": 200
+      },
+      {
+        "endpoint": "scorer_job_submit",
+        "method": "POST",
+        "path": "/ajax-api/3.0/mlflow/scorer/invoke",
+        "response": {
+          "jobs": [
+            {
+              "job_id": "2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+              "trace_ids": [
+                "tr-543b89339de361bc463b56b3eb999832"
+              ]
+            }
+          ]
+        },
+        "sequence": 96,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "assistant_message",
+        "method": "POST",
+        "path": "/ajax-api/3.0/mlflow/assistant/message",
+        "response": {
+          "session_id": "f89e52f1-fb24-493b-95db-ab9c13dac533",
+          "stream_url": "/ajax-api/3.0/mlflow/assistant/stream/f89e52f1-fb24-493b-95db-ab9c13dac533"
+        },
+        "sequence": 97,
+        "sse_frames": null,
+        "status": 200
+      },
+      {
+        "endpoint": "assistant_stream",
+        "method": "GET",
+        "path": "/ajax-api/3.0/mlflow/assistant/sessions/f89e52f1-fb24-493b-95db-ab9c13dac533/stream",
+        "response": [
+          "event: message\ndata: {\"message\": {\"role\": \"assistant\", \"content\": [{\"text\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\"}]}}",
+          "event: stream_event\ndata: {\"event\": {\"type\": \"usage\", \"usage\": {\"prompt_tokens\": 8, \"completion_tokens\": 24, \"total_tokens\": 32, \"total_cost_usd\": 0.0}}}",
+          "event: done\ndata: {\"result\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\", \"session_id\": \"mlflow-dev-stub-a6eb8ec8de2c\"}"
+        ],
+        "sequence": 98,
+        "sse_frames": [
+          "event: message\ndata: {\"message\": {\"role\": \"assistant\", \"content\": [{\"text\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\"}]}}",
+          "event: stream_event\ndata: {\"event\": {\"type\": \"usage\", \"usage\": {\"prompt_tokens\": 8, \"completion_tokens\": 24, \"total_tokens\": 32, \"total_cost_usd\": 0.0}}}",
+          "event: done\ndata: {\"result\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\", \"session_id\": \"mlflow-dev-stub-a6eb8ec8de2c\"}"
+        ],
+        "status": 200
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "execution_seconds": 2.048964183006319,
+      "job_id": "2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "polls": 10,
+      "queue_wait_seconds": 0.32865221599058714,
+      "result": {
+        "tr-543b89339de361bc463b56b3eb999832": {
+          "assessments": [
+            {
+              "assessment_name": "concise_answer",
+              "create_time": "2026-07-19T11:58:37.766Z",
+              "feedback": {
+                "value": "yes"
+              },
+              "last_update_time": "2026-07-19T11:58:37.766Z",
+              "metadata": {
+                "guideline": "Return 'yes' when {{ outputs }} is concise, otherwise return 'no'.",
+                "mlflow.assessment.judgeInputTokens": "14",
+                "mlflow.assessment.judgeOutputTokens": "5"
+              },
+              "rationale": "deterministic judge rationale 2fc1989fbe30",
+              "source": {
+                "source_id": "gateway:/t23-smoke-endpoint-2301",
+                "source_type": "LLM_JUDGE"
+              },
+              "trace_id": "",
+              "valid": true
+            }
+          ],
+          "failures": []
+        }
+      },
+      "status": "SUCCEEDED",
+      "status_details": null,
+      "submit_to_terminal_seconds": 2.3776163989969064
+    }
+  ],
+  "provider": {
+    "observations": [
+      {
+        "request_sha256": "c6503f24a35c199d401791c6a5ec2e281c15ac63bffa382b7a3cd2e4fb7211d7",
+        "response_bytes": 301,
+        "response_sha256": "0308c580c5d15773fb44410c0f342bea4d3cf164c109e33b80cca8deb304d51b",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "9aa1c15f20cad3979858cdbeb104c0149f156bb3a84f6d079180fa505735c257",
+        "response_bytes": 719,
+        "response_sha256": "4888034fb416f28e2270a747280493760a73170f6e0670de9013e14bc0906a30",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "0c207593f6ce67b50591de089ccb94fa2cbcd5d3e722e2631058422eff4e27fa",
+        "response_bytes": 716,
+        "response_sha256": "affac013864fe7fe4944c78b43c1bfb2ffa7bfbc71c9785f8c93d96199e178f7",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "c187e1797d858ce3373a6f8eff8db41847755bb4762ddd1c51e37407f72fa939",
+        "response_bytes": 719,
+        "response_sha256": "24052d8dcb412a721c2d296cef06918e9affb2f36f8357419aa46bca7ac5ce78",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "918a9aeda0ad00b3d261fe3697959c8cc1392aab85e4378f4dd87b51e858e023",
+        "response_bytes": 719,
+        "response_sha256": "97d8f6f91c41db3027c759a5e635ca452494cb8578d85ccae3de53f9e50cb85e",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "4d63b3667f899c037c4346000b9d0795156e2ca7a4a6e4bdfea2ada1d58b6b0a",
+        "response_bytes": 718,
+        "response_sha256": "8a5cac32d7e3b3b5c2d95df1bb50a41e6f53909bb3d7a0f391239e9f2f03a948",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "2e04243596bed2984ebffd5caa69763bf78b900da2b5fb349b72cd6cb4dfbdb8",
+        "response_bytes": 718,
+        "response_sha256": "bef0bf2f48da728886f5fccca4a5450a261d731617c4bd647af65aca79cd0d4e",
+        "route": "chat_completions"
+      },
+      {
+        "request_sha256": "7099a412c8beb95d606181c6080b6e008b920aed681149668e21b8f70c29a23c",
+        "response_bytes": 354,
+        "response_sha256": "470058e75d4b65a22d74fc8376e225a90acb5ea6829776f0524305d0e6e1754d",
+        "route": "chat_completions"
+      }
+    ],
+    "route_latency_ms": {},
+    "seed": 2301,
+    "url": "http://127.0.0.1:44745"
+  },
+  "requests": [
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 6.750922009814531,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 3,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 48.33896300988272,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 0,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 62.01408299966715,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 1,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 58.64981299964711,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 8,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.98879099730402,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 9,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 44.99830599525012,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 10,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.91751999477856,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 11,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 152.00324899342377,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 2,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 150.60657801222987,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 5,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.022937002941035,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 12,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.08359800558537,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 13,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 167.8928380133584,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 4,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.984559993608855,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 14,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 63.74730599054601,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 15,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.095077991718426,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 17,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.00248000782449,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 18,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 63.55945499672089,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 16,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 57.361632003448904,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 19,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.006240993971005,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 20,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 265.9893719974207,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 6,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.73818201164249,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 21,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.5880750042852,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 22,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.55564300529659,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 23,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.7839149995707,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 24,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.034758998663165,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 26,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.9805530073354,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 25,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 290.0940469990019,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 7,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.05351500585675,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 28,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.971961008850485,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 29,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 57.949387992266566,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 27,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.83118698874023,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 31,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.71815000521019,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 30,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.93659400497563,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 32,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.76583299343474,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 33,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 63.50940199627075,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 34,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.873445997945964,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 35,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.75582599581685,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 36,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.68648300564382,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 38,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.74126099841669,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 37,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.156978992163204,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 41,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.16942599671893,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 39,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.05163901136257,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 40,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.01346299832221,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 42,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.63200900238007,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 46,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.703053999110125,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 45,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.88497600425035,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 43,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.786603995016776,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 44,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.85904399654828,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 47,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.70226000295952,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 49,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.77083000994753,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 48,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 60.02201698720455,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 50,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.635351009783335,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 54,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.04830300458707,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 51,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.96287300309632,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 52,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.93486400053371,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 53,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.62619300931692,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 57,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.867358000483364,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 55,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.72576200088952,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 56,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.069268996594474,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 58,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.72674400778487,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 62,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.07446699892171,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 59,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.83132000779733,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 61,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.91074500139803,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 60,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.94748398894444,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 63,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.802017005276866,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 65,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.09140599577222,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 64,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.92437100736424,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 66,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.781756999436766,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 68,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.76470700057689,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 69,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.74035799386911,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 70,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.98844700457994,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 67,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.973482004133984,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 71,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.76418499427382,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 73,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.886178007000126,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 72,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.96695699810516,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 74,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.85968999972101,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 75,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.66946900822222,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 78,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.780393004766665,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 76,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.67012100154534,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 77,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.58905800594948,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 81,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.67075999593362,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 80,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 59.90200299129356,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 79,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.918179007363506,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 82,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.89578500681091,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 83,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.72560401074588,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 85,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.799656990217045,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 84,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.945225997362286,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 86,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.90630500833504,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 88,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 50.025511998683214,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 87,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "datasets_search",
+      "error": null,
+      "latency_ms": 49.88408999633975,
+      "method": "POST",
+      "path": "/api/3.0/mlflow/datasets/search",
+      "response": {
+        "datasets": [
+          {
+            "created_time": 1784462314840,
+            "dataset_id": "d-1a4f0a08bab44b4199900140a4804ab5",
+            "digest": "c61ecb0d",
+            "last_update_time": 1784462314840,
+            "name": "t23-smoke-dataset-2301",
+            "tags": "{\"phase\": \"23\", \"seed\": \"2301\"}"
+          }
+        ]
+      },
+      "sequence": 89,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 105.29843799304217,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-981c\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"cb533321 8\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"cb41d84\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":7,\"total_tokens\":28},\"provider\":\"openai\"}"
+      ],
+      "sequence": 90,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          104.76945700065698,
+          104.84439998981543,
+          104.9971589964116
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-981c\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"cb533321 8\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-981ccb5333218cb41d84\",\"object\":\"chat.completion.chunk\",\"created\":2552023891,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"cb41d84\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":7,\"total_tokens\":28},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.0749429891584441,
+          0.15275900659617037
+        ],
+        "time_to_first_event_ms": 104.76945700065698
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 9.547745998133905,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-1ee6\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"cec4d481 8\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2ea7abd\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+      ],
+      "sequence": 91,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          9.0584480058169,
+          9.148754004854709,
+          9.343815996544436
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-1ee6\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"cec4d481 8\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-1ee6cec4d48182ea7abd\",\"object\":\"chat.completion.chunk\",\"created\":518442692,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2ea7abd\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.09030599903780967,
+          0.1950619916897267
+        ],
+        "time_to_first_event_ms": 9.0584480058169
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 8.974903990747407,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-a992\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"6091f2a5 3\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"035095d\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":13,\"completion_tokens\":8,\"total_tokens\":21},\"provider\":\"openai\"}"
+      ],
+      "sequence": 92,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          8.655680998344906,
+          8.69376098853536,
+          8.798409995506518
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-a992\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"6091f2a5 3\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-a9926091f2a53035095d\",\"object\":\"chat.completion.chunk\",\"created\":2844942481,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"035095d\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":13,\"completion_tokens\":8,\"total_tokens\":21},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.03807999019045383,
+          0.10464900697115809
+        ],
+        "time_to_first_event_ms": 8.655680998344906
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 105.28455299208872,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-4a5a\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"885a811b 2\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2bc39eb\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+      ],
+      "sequence": 93,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          104.83399400254712,
+          104.90750099415891,
+          105.0883919961052
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-4a5a\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"885a811b 2\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-4a5a885a811b22bc39eb\",\"object\":\"chat.completion.chunk\",\"created\":1247447130,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"2bc39eb\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":8,\"total_tokens\":24},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.07350699161179364,
+          0.18089100194629282
+        ],
+        "time_to_first_event_ms": 104.83399400254712
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 9.981470997445285,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-9fd7\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"15bed709 b\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"6cd6dab\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":6,\"completion_tokens\":5,\"total_tokens\":11},\"provider\":\"openai\"}"
+      ],
+      "sequence": 94,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          9.527128990157507,
+          9.560583988786675,
+          9.77926999621559
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-9fd7\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"15bed709 b\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-9fd715bed709b6cd6dab\",\"object\":\"chat.completion.chunk\",\"created\":2681673150,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"6cd6dab\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":6,\"completion_tokens\":5,\"total_tokens\":11},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.033454998629167676,
+          0.2186860074289143
+        ],
+        "time_to_first_event_ms": 9.527128990157507
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "gateway_chat_sse",
+      "error": null,
+      "latency_ms": 9.474360995227471,
+      "method": "POST",
+      "path": "/gateway/t23-smoke-endpoint-2301/mlflow/invocations",
+      "response": [
+        "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-a1df\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"e56fbaa4 d\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+        "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"84130c6\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":6,\"completion_tokens\":7,\"total_tokens\":13},\"provider\":\"openai\"}"
+      ],
+      "sequence": 95,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          9.030499000800774,
+          9.106705998419784,
+          9.292649003327824
+        ],
+        "frames": [
+          "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":\"assistant\",\"content\":\"bench-a1df\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":null,\"delta\":{\"role\":null,\"content\":\"e56fbaa4 d\",\"tool_calls\":null}}],\"usage\":null,\"provider\":\"openai\"}",
+          "data: {\"id\":\"chatcmpl-a1dfe56fbaa4d84130c6\",\"object\":\"chat.completion.chunk\",\"created\":2715805039,\"model\":\"genai-bench-model\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":null,\"content\":\"84130c6\",\"tool_calls\":null}}],\"usage\":{\"prompt_tokens\":6,\"completion_tokens\":7,\"total_tokens\":13},\"provider\":\"openai\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.07620699761901051,
+          0.18594300490804017
+        ],
+        "time_to_first_event_ms": 9.030499000800774
+      },
+      "status": 200
+    },
+    {
+      "endpoint": "scorer_job_submit",
+      "error": null,
+      "latency_ms": 45.046901010209695,
+      "method": "POST",
+      "path": "/ajax-api/3.0/mlflow/scorer/invoke",
+      "response": {
+        "jobs": [
+          {
+            "job_id": "2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+            "trace_ids": [
+              "tr-543b89339de361bc463b56b3eb999832"
+            ]
+          }
+        ]
+      },
+      "sequence": 96,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 16.20583100884687,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "PENDING",
+        "status_details": null
+      },
+      "sequence": 1001,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 16.864003002410755,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1002,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 4.621723011950962,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1003,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 4.183754994301125,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1004,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 17.989635991398245,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1005,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 4.095686002983712,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1006,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 3.6211200058460236,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1007,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 3.9803899999242276,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1008,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 3.9520639984402806,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": null,
+        "status": "RUNNING",
+        "status_details": null
+      },
+      "sequence": 1009,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "job_poll",
+      "error": null,
+      "latency_ms": 3.922670002793893,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/jobs/2145d4e6-3bf7-4c24-86e9-e67efcfe5916",
+      "response": {
+        "result": {
+          "tr-543b89339de361bc463b56b3eb999832": {
+            "assessments": [
+              {
+                "assessment_name": "concise_answer",
+                "create_time": "2026-07-19T11:58:37.766Z",
+                "feedback": {
+                  "value": "yes"
+                },
+                "last_update_time": "2026-07-19T11:58:37.766Z",
+                "metadata": {
+                  "guideline": "Return 'yes' when {{ outputs }} is concise, otherwise return 'no'.",
+                  "mlflow.assessment.judgeInputTokens": "14",
+                  "mlflow.assessment.judgeOutputTokens": "5"
+                },
+                "rationale": "deterministic judge rationale 2fc1989fbe30",
+                "source": {
+                  "source_id": "gateway:/t23-smoke-endpoint-2301",
+                  "source_type": "LLM_JUDGE"
+                },
+                "trace_id": "",
+                "valid": true
+              }
+            ],
+            "failures": []
+          }
+        },
+        "status": "SUCCEEDED",
+        "status_details": null
+      },
+      "sequence": 1010,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "assistant_message",
+      "error": null,
+      "latency_ms": 2.277360006701201,
+      "method": "POST",
+      "path": "/ajax-api/3.0/mlflow/assistant/message",
+      "response": {
+        "session_id": "f89e52f1-fb24-493b-95db-ab9c13dac533",
+        "stream_url": "/ajax-api/3.0/mlflow/assistant/stream/f89e52f1-fb24-493b-95db-ab9c13dac533"
+      },
+      "sequence": 97,
+      "sse": null,
+      "status": 200
+    },
+    {
+      "endpoint": "assistant_stream",
+      "error": null,
+      "latency_ms": 22.55737299856264,
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/assistant/sessions/f89e52f1-fb24-493b-95db-ab9c13dac533/stream",
+      "response": [
+        "event: message\ndata: {\"message\": {\"role\": \"assistant\", \"content\": [{\"text\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\"}]}}",
+        "event: stream_event\ndata: {\"event\": {\"type\": \"usage\", \"usage\": {\"prompt_tokens\": 8, \"completion_tokens\": 24, \"total_tokens\": 32, \"total_cost_usd\": 0.0}}}",
+        "event: done\ndata: {\"result\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\", \"session_id\": \"mlflow-dev-stub-a6eb8ec8de2c\"}"
+      ],
+      "sequence": 98,
+      "sse": {
+        "frame_count": 3,
+        "frame_elapsed_ms": [
+          20.126725008594804,
+          20.28147500823252,
+          20.31114800774958
+        ],
+        "frames": [
+          "event: message\ndata: {\"message\": {\"role\": \"assistant\", \"content\": [{\"text\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\"}]}}",
+          "event: stream_event\ndata: {\"event\": {\"type\": \"usage\", \"usage\": {\"prompt_tokens\": 8, \"completion_tokens\": 24, \"total_tokens\": 32, \"total_cost_usd\": 0.0}}}",
+          "event: done\ndata: {\"result\": \"This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.\", \"session_id\": \"mlflow-dev-stub-a6eb8ec8de2c\"}"
+        ],
+        "inter_frame_gap_ms": [
+          0.15474999963771552,
+          0.029672999517060816
+        ],
+        "time_to_first_event_ms": 20.126725008594804
+      },
+      "status": 200
+    }
+  ],
+  "resources": {
+    "method": "1 s /proc whole-process-tree VmRSS and stat utime/stime sum",
+    "samples": [
+      {
+        "elapsed_seconds": 0.00019079000048805028,
+        "process_count": 15,
+        "rss_bytes": 2441170944,
+        "stime_seconds": 1.18,
+        "timestamp": "2026-07-19T11:58:33.663660+00:00",
+        "utime_seconds": 24.46
+      },
+      {
+        "elapsed_seconds": 1.0002767359983409,
+        "process_count": 15,
+        "rss_bytes": 3191537664,
+        "stime_seconds": 1.65,
+        "timestamp": "2026-07-19T11:58:34.663752+00:00",
+        "utime_seconds": 34.28
+      },
+      {
+        "elapsed_seconds": 2.000272256002063,
+        "process_count": 15,
+        "rss_bytes": 3269148672,
+        "stime_seconds": 1.67,
+        "timestamp": "2026-07-19T11:58:35.663746+00:00",
+        "utime_seconds": 35.14
+      },
+      {
+        "elapsed_seconds": 3.0002462120028213,
+        "process_count": 16,
+        "rss_bytes": 3321675776,
+        "stime_seconds": 1.7,
+        "timestamp": "2026-07-19T11:58:36.663722+00:00",
+        "utime_seconds": 35.76
+      },
+      {
+        "elapsed_seconds": 4.000283821005723,
+        "process_count": 16,
+        "rss_bytes": 3543937024,
+        "stime_seconds": 1.82,
+        "timestamp": "2026-07-19T11:58:37.663759+00:00",
+        "utime_seconds": 40.06
+      },
+      {
+        "elapsed_seconds": 5.00029455900949,
+        "process_count": 15,
+        "rss_bytes": 3294584832,
+        "stime_seconds": 1.71,
+        "timestamp": "2026-07-19T11:58:38.663771+00:00",
+        "utime_seconds": 35.8
+      }
+    ]
+  },
+  "run": {
+    "concurrency": 8,
+    "finished_at": "2026-07-19T11:58:39.519092+00:00",
+    "seed": 2301,
+    "started_at": "2026-07-19T11:58:33.663474+00:00",
+    "target": "python",
+    "warmup_requests": 6,
+    "workload": "smoke"
+  },
+  "schema_version": "1.0.0",
+  "summary": {
+    "endpoints": {
+      "assistant_message": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 2.277360006701201,
+          "p50": 2.277360006701201,
+          "p95": 2.277360006701201,
+          "p99": 2.277360006701201
+        },
+        "requests": 1,
+        "rps": 0.29753451965624994,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "streams": 0,
+          "time_to_first_event_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        },
+        "statuses": {
+          "200": 1
+        }
+      },
+      "assistant_stream": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 22.55737299856264,
+          "p50": 22.55737299856264,
+          "p95": 22.55737299856264,
+          "p99": 22.55737299856264
+        },
+        "requests": 1,
+        "rps": 0.29753451965624994,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": 0.15474999963771552,
+            "p50": 0.029672999517060816,
+            "p95": 0.15474999963771552,
+            "p99": 0.15474999963771552
+          },
+          "streams": 1,
+          "time_to_first_event_ms": {
+            "max": 20.126725008594804,
+            "p50": 20.126725008594804,
+            "p95": 20.126725008594804,
+            "p99": 20.126725008594804
+          }
+        },
+        "statuses": {
+          "200": 1
+        }
+      },
+      "datasets_search": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 290.0940469990019,
+          "p50": 49.94748398894444,
+          "p95": 150.60657801222987,
+          "p99": 265.9893719974207
+        },
+        "requests": 90,
+        "rps": 26.778106769062497,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "streams": 0,
+          "time_to_first_event_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        },
+        "statuses": {
+          "200": 90
+        }
+      },
+      "gateway_chat_sse": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 105.29843799304217,
+          "p50": 9.547745998133905,
+          "p95": 105.29843799304217,
+          "p99": 105.29843799304217
+        },
+        "requests": 6,
+        "rps": 1.7852071179374998,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": 0.2186860074289143,
+            "p50": 0.10464900697115809,
+            "p95": 0.1950619916897267,
+            "p99": 0.2186860074289143
+          },
+          "streams": 6,
+          "time_to_first_event_ms": {
+            "max": 104.83399400254712,
+            "p50": 9.0584480058169,
+            "p95": 104.83399400254712,
+            "p99": 104.83399400254712
+          }
+        },
+        "statuses": {
+          "200": 6
+        }
+      },
+      "job_poll": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 17.989635991398245,
+          "p50": 4.095686002983712,
+          "p95": 17.989635991398245,
+          "p99": 17.989635991398245
+        },
+        "requests": 10,
+        "rps": 2.9753451965624995,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "streams": 0,
+          "time_to_first_event_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        },
+        "statuses": {
+          "200": 10
+        }
+      },
+      "scorer_job_submit": {
+        "error_rate": 0.0,
+        "errors": 0,
+        "latency_ms": {
+          "max": 45.046901010209695,
+          "p50": 45.046901010209695,
+          "p95": 45.046901010209695,
+          "p99": 45.046901010209695
+        },
+        "requests": 1,
+        "rps": 0.29753451965624994,
+        "sse": {
+          "inter_frame_gap_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "streams": 0,
+          "time_to_first_event_ms": {
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        },
+        "statuses": {
+          "200": 1
+        }
+      }
+    },
+    "overall": {
+      "duration_seconds": 3.3609545579965925,
+      "error_rate": 0.0,
+      "errors": 0,
+      "requests": 109,
+      "rps": 32.431262642531244
+    }
+  }
+}

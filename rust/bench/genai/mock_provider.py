@@ -1,0 +1,294 @@
+"""Hermetic, seeded OpenAI/Anthropic-compatible benchmark provider."""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import json
+import random
+import threading
+import time
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Iterator
+
+
+def canonical_request(body: bytes) -> bytes:
+    """Canonicalize JSON so harmless client formatting does not alter a response."""
+    try:
+        value = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return body
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def _json_bytes(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+@dataclass
+class ProviderObservation:
+    route: str
+    request_sha256: str
+    response_sha256: str
+    response_bytes: int
+
+
+@dataclass
+class ProviderState:
+    seed: int
+    route_latency_ms: dict[str, float] = field(default_factory=dict)
+    observations: list[ProviderObservation] = field(default_factory=list)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def digest(self, route: str, request: bytes) -> str:
+        material = f"{self.seed}:{route}:".encode() + canonical_request(request)
+        return hashlib.sha256(material).hexdigest()
+
+    def observe(self, route: str, request: bytes, response: bytes) -> None:
+        with self.lock:
+            self.observations.append(
+                ProviderObservation(
+                    route=route,
+                    request_sha256=hashlib.sha256(canonical_request(request)).hexdigest(),
+                    response_sha256=hashlib.sha256(response).hexdigest(),
+                    response_bytes=len(response),
+                )
+            )
+
+
+class DeterministicProvider(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(
+        self,
+        address: tuple[str, int],
+        seed: int,
+        route_latency_ms: dict[str, float] | None = None,
+    ) -> None:
+        self.state = ProviderState(seed, route_latency_ms or {})
+        super().__init__(address, ProviderHandler)
+
+
+class ProviderHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    @property
+    def provider(self) -> DeterministicProvider:
+        return self.server  # type: ignore[return-value]
+
+    def log_message(self, _format: str, *_args: Any) -> None:
+        return
+
+    def do_GET(self) -> None:
+        if self.path.rstrip("/").endswith("/models"):
+            self._send_json(200, {"data": [{"id": "genai-bench-model", "object": "model"}]})
+        else:
+            self._send_json(404, {"error": {"message": "mock provider route not found"}})
+
+    def do_POST(self) -> None:
+        size = int(self.headers.get("content-length", "0"))
+        request = self.rfile.read(size)
+        try:
+            body = json.loads(request)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._send_json(400, {"error": {"message": "invalid JSON"}})
+            return
+
+        route = self._route()
+        if route is None:
+            self._send_json(404, {"error": {"message": "mock provider route not found"}})
+            return
+        latency = self.provider.state.route_latency_ms.get(route, 0.0)
+        if latency > 0:
+            time.sleep(latency / 1000)
+        digest = self.provider.state.digest(route, request)
+        if route == "embeddings":
+            response = self._embedding_response(body, digest)
+        elif route == "anthropic_messages":
+            response = self._anthropic_response(body, digest)
+        else:
+            response = self._openai_response(body, digest)
+        self.provider.state.observe(route, request, response)
+        self._send_bytes(
+            200, response, "text/event-stream" if body.get("stream") else "application/json"
+        )
+
+    def _route(self) -> str | None:
+        path = self.path.split("?", 1)[0]
+        if path.endswith("/embeddings"):
+            return "embeddings"
+        if path.endswith("/messages"):
+            return "anthropic_messages"
+        if path.endswith("/chat/completions"):
+            return "chat_completions"
+        return None
+
+    def _openai_response(self, body: dict[str, Any], digest: str) -> bytes:
+        model = str(body.get("model") or "genai-bench-model")
+        if body.get("response_format"):
+            text = json.dumps(
+                {
+                    "rationale": f"deterministic judge rationale {digest[:12]}",
+                    "result": "yes",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        else:
+            text = f"bench-{digest[:12]} {digest[12:20]}"
+        prompt_tokens = 5 + int(digest[20:22], 16) % 19
+        completion_tokens = 2 + int(digest[22:24], 16) % 7
+        usage = {
+            "completion_tokens": completion_tokens,
+            "prompt_tokens": prompt_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+        if body.get("stream"):
+            pieces = [text[:10], text[10:20], text[20:]]
+            frames = []
+            for index, piece in enumerate(pieces):
+                chunk: dict[str, Any] = {
+                    "choices": [
+                        {
+                            "delta": {
+                                "content": piece,
+                                **({"role": "assistant"} if index == 0 else {}),
+                            },
+                            "finish_reason": "stop" if index == len(pieces) - 1 else None,
+                            "index": 0,
+                        }
+                    ],
+                    "created": int(digest[:8], 16),
+                    "id": f"chatcmpl-{digest[:20]}",
+                    "model": model,
+                    "object": "chat.completion.chunk",
+                }
+                if index == len(pieces) - 1:
+                    chunk["usage"] = usage
+                frames.append(b"data: " + _json_bytes(chunk) + b"\n\n")
+            frames.append(b"data: [DONE]\n\n")
+            return b"".join(frames)
+        return _json_bytes({
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "index": 0,
+                    "message": {"content": text, "role": "assistant"},
+                }
+            ],
+            "created": int(digest[:8], 16),
+            "id": f"chatcmpl-{digest[:20]}",
+            "model": model,
+            "object": "chat.completion",
+            "usage": usage,
+        })
+
+    def _embedding_response(self, body: dict[str, Any], digest: str) -> bytes:
+        inputs = body.get("input", [])
+        if not isinstance(inputs, list):
+            inputs = [inputs]
+        data = []
+        for index, _value in enumerate(inputs):
+            item_digest = hashlib.sha256(f"{digest}:{index}".encode()).digest()
+            embedding = [round((byte - 127.5) / 127.5, 8) for byte in item_digest[:12]]
+            data.append({"embedding": embedding, "index": index, "object": "embedding"})
+        prompt_tokens = sum(max(1, len(str(value).split())) for value in inputs)
+        return _json_bytes({
+            "data": data,
+            "model": str(body.get("model") or "genai-bench-embedding"),
+            "object": "list",
+            "usage": {"prompt_tokens": prompt_tokens, "total_tokens": prompt_tokens},
+        })
+
+    def _anthropic_response(self, body: dict[str, Any], digest: str) -> bytes:
+        model = str(body.get("model") or "genai-bench-model")
+        text = f"bench-{digest[:12]} {digest[12:20]}"
+        input_tokens = 5 + int(digest[20:22], 16) % 19
+        output_tokens = 2 + int(digest[22:24], 16) % 7
+        if body.get("stream"):
+            events = [
+                (
+                    "message_start",
+                    {
+                        "message": {
+                            "content": [],
+                            "id": f"msg-{digest[:20]}",
+                            "model": model,
+                            "role": "assistant",
+                            "usage": {"input_tokens": input_tokens, "output_tokens": 0},
+                        },
+                        "type": "message_start",
+                    },
+                ),
+                (
+                    "content_block_delta",
+                    {
+                        "delta": {"text": text, "type": "text_delta"},
+                        "index": 0,
+                        "type": "content_block_delta",
+                    },
+                ),
+                (
+                    "message_delta",
+                    {
+                        "delta": {"stop_reason": "end_turn"},
+                        "type": "message_delta",
+                        "usage": {"output_tokens": output_tokens},
+                    },
+                ),
+                ("message_stop", {"type": "message_stop"}),
+            ]
+            return b"".join(
+                f"event: {event}\n".encode() + b"data: " + _json_bytes(value) + b"\n\n"
+                for event, value in events
+            )
+        return _json_bytes({
+            "content": [{"text": text, "type": "text"}],
+            "id": f"msg-{digest[:20]}",
+            "model": model,
+            "role": "assistant",
+            "stop_reason": "end_turn",
+            "type": "message",
+            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+        })
+
+    def _send_json(self, status: int, value: Any) -> None:
+        self._send_bytes(status, _json_bytes(value), "application/json")
+
+    def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("content-type", content_type)
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        self.wfile.flush()
+
+
+@contextlib.contextmanager
+def provider_server(
+    seed: int,
+    route_latency_ms: dict[str, float] | None = None,
+) -> Iterator[DeterministicProvider]:
+    server = DeterministicProvider(("127.0.0.1", 0), seed, route_latency_ms)
+    thread = threading.Thread(target=server.serve_forever, name="genai-mock-provider", daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def deterministic_payloads(seed: int, count: int) -> list[dict[str, Any]]:
+    """Small public fixture helper used by tests and future scenario cells."""
+    rng = random.Random(seed)
+    return [
+        {
+            "messages": [{"content": f"prompt-{index}-{rng.randrange(1_000_000)}", "role": "user"}],
+            "model": "genai-bench-model",
+            "stream": bool(index % 2),
+        }
+        for index in range(count)
+    ]
