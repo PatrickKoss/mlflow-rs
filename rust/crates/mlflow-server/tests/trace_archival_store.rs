@@ -141,17 +141,24 @@ async fn archive_read_delete_cycle_preserves_payload_and_state() {
 }
 
 #[test]
-fn python_sqlite_archive_cycle_matches_rust_contract() {
+fn python_backend_archive_cycle_matches_rust_contract() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let output = Command::new("uv")
-        .args([
-            "run",
-            "--frozen",
-            "python",
-            "rust/tools/trace_archival_store_differential.py",
-            "--content",
-            root_content(),
-        ])
+    let mut command = Command::new("uv");
+    command.args(["run", "--frozen"]);
+    if std::env::var("MLFLOW_RUST_TEST_DIALECT").ok().as_deref() == Some("postgres") {
+        command.args(["--extra", "db"]);
+        command.env(
+            "MLFLOW_TRACE_ARCHIVAL_PYTHON_BACKEND_URI",
+            std::env::var("MLFLOW_RUST_TEST_PG_URI").expect("Postgres test URI"),
+        );
+    }
+    command.args([
+        "python",
+        "rust/tools/trace_archival_store_differential.py",
+        "--content",
+        root_content(),
+    ]);
+    let output = command
         .current_dir(&root)
         .output()
         .expect("run Python archival store differential");
@@ -315,17 +322,18 @@ async fn inherited_workspace_config_scopes_archive_repository_path() {
     let connected = db.connect().await;
     let store = TrackingStore::new(connected.clone(), "file:///tmp/mlruns-unused");
     let workspace_store = WorkspaceStore::new(connected, db.uri());
+    let workspace = format!("team-a-{}", std::process::id());
     workspace_store
-        .create_workspace(Workspace::named("team-a"))
+        .create_workspace(Workspace::named(&workspace))
         .await
         .unwrap();
     let experiment_id = store
-        .create_experiment("team-a", "archive-workspace", None, &[])
+        .create_experiment(&workspace, "archive-workspace", None, &[])
         .await
         .unwrap();
     store
         .start_trace(
-            "team-a",
+            &workspace,
             &StartTraceInput {
                 trace_id: TRACE_ID.to_string(),
                 experiment_id: experiment_id.clone(),
@@ -344,7 +352,7 @@ async fn inherited_workspace_config_scopes_archive_repository_path() {
         .unwrap();
     store
         .log_spans(
-            "team-a",
+            &workspace,
             &experiment_id,
             &[SpanInput {
                 trace_id: TRACE_ID.to_string(),
@@ -378,17 +386,17 @@ async fn inherited_workspace_config_scopes_archive_repository_path() {
         max_traces_per_pass: Some(10),
     };
     assert_eq!(
-        archive_traces_for_workspace(&store, Some(&workspace_store), "team-a", &config, Some(1),)
+        archive_traces_for_workspace(&store, Some(&workspace_store), &workspace, &config, Some(1),)
             .await
             .unwrap(),
         1
     );
-    let info = store.get_trace_info("team-a", TRACE_ID).await.unwrap();
+    let info = store.get_trace_info(&workspace, TRACE_ID).await.unwrap();
     assert!(info
         .tag(TRACE_TAG_ARCHIVE_LOCATION)
         .unwrap()
         .contains(&format!(
-            "/workspaces/team-a/{experiment_id}/traces/{TRACE_ID}/artifacts"
+            "/workspaces/{workspace}/{experiment_id}/traces/{TRACE_ID}/artifacts"
         )));
     assert!(store.get_trace_info(WORKSPACE, TRACE_ID).await.is_err());
 }
