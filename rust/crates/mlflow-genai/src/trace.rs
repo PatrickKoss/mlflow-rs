@@ -427,7 +427,12 @@ pub(crate) fn conversation(
                     .pointer("/info/execution_duration_ms")
                     .and_then(Value::as_f64)
                 {
-                    content.push_str(&format!("\n[Response duration: {:.2}s]", duration / 1000.0));
+                    content.push_str(&format!("\n[Response duration: {:.2}s", duration / 1000.0));
+                    if let Some(slowest) = slowest_spans(trace) {
+                        content.push_str(", slowest spans: ");
+                        content.push_str(&slowest);
+                    }
+                    content.push(']');
                 }
             }
             if !content.trim().is_empty() {
@@ -436,6 +441,36 @@ pub(crate) fn conversation(
         }
     }
     messages
+}
+
+fn slowest_spans(trace: &Value) -> Option<String> {
+    let spans = trace.pointer("/data/spans")?.as_array()?;
+    let mut completed = spans
+        .iter()
+        .filter_map(|span| {
+            let start = span_time(span.get("start_time_unix_nano")?)?;
+            let end = span_time(span.get("end_time_unix_nano")?)?;
+            Some((
+                span.get("name").and_then(Value::as_str).unwrap_or(""),
+                end - start,
+            ))
+        })
+        .collect::<Vec<_>>();
+    completed.sort_by(|left, right| right.1.cmp(&left.1));
+    let formatted = completed
+        .into_iter()
+        .take(3)
+        .map(|(name, duration)| format!("{name} ({:.2}s)", duration as f64 / 1_000_000_000.0))
+        .collect::<Vec<_>>();
+    (!formatted.is_empty()).then(|| formatted.join(", "))
+}
+
+fn span_time(value: &Value) -> Option<i128> {
+    value
+        .as_i64()
+        .map(i128::from)
+        .or_else(|| value.as_u64().map(i128::from))
+        .or_else(|| value.as_str()?.parse().ok())
 }
 
 pub(crate) fn parse_inputs_to_str(value: &Value) -> String {

@@ -158,6 +158,7 @@ struct JudgeCompletion {
     content: String,
     prompt_tokens: u64,
     completion_tokens: u64,
+    cost_usd: f64,
 }
 
 impl JudgeCompletion {
@@ -185,6 +186,12 @@ impl JudgeCompletion {
             metadata.insert(
                 "mlflow.assessment.judgeOutputTokens".to_string(),
                 json!(self.completion_tokens),
+            );
+        }
+        if self.cost_usd != 0.0 {
+            metadata.insert(
+                "mlflow.assessment.judgeCost".to_string(),
+                json!(self.cost_usd),
             );
         }
         let _ = self.body;
@@ -225,6 +232,7 @@ async fn invoke(
         .unwrap_or(20);
     let mut prompt_tokens = 0;
     let mut completion_tokens = 0;
+    let mut cost_usd = 0.0;
     for _ in 0..max_iterations {
         let mut request = Map::new();
         request.insert("model".to_string(), Value::String(model.to_string()));
@@ -259,6 +267,11 @@ async fn invoke(
         completion_tokens += body
             .pointer("/usage/completion_tokens")
             .and_then(Value::as_u64)
+            .unwrap_or_default();
+        cost_usd += body
+            .pointer("/_hidden_params/response_cost")
+            .or_else(|| body.get("response_cost"))
+            .and_then(Value::as_f64)
             .unwrap_or_default();
         let message = body
             .pointer("/choices/0/message")
@@ -301,6 +314,7 @@ async fn invoke(
             content,
             prompt_tokens,
             completion_tokens,
+            cost_usd,
         });
     }
     Err(EngineError::Gateway(format!(

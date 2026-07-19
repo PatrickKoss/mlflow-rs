@@ -9,6 +9,12 @@ use tokio::process::Command;
 
 use crate::{WorkerRequest, WorkerResponse, NATIVE_WORKER_PROTOCOL_VERSION};
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkerOutput {
+    pub result: serde_json::Value,
+    pub status_details: Option<serde_json::Value>,
+}
+
 const DEFAULT_MAX_INPUT_BYTES: usize = 4 * 1024 * 1024;
 const DEFAULT_MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
 const TRUNCATION_MARKER: &str = "\n...[truncated]";
@@ -85,6 +91,13 @@ impl WorkerLauncher {
         &self,
         request: &WorkerRequest,
     ) -> Result<serde_json::Value, WorkerLaunchError> {
+        Ok(self.run_with_status(request).await?.result)
+    }
+
+    pub async fn run_with_status(
+        &self,
+        request: &WorkerRequest,
+    ) -> Result<WorkerOutput, WorkerLaunchError> {
         let encoded = serde_json::to_vec(request)
             .map_err(|error| WorkerLaunchError::Protocol(error.to_string()))?;
         if encoded.len() > self.max_input_bytes {
@@ -211,13 +224,17 @@ pub enum WorkerLaunchError {
     #[error("native worker timed out after {timeout:?}: {stderr}")]
     Timeout { timeout: Duration, stderr: String },
     #[error("native worker execution failed ({code}): {message}")]
-    Execution { code: String, message: String },
+    Execution {
+        code: String,
+        message: String,
+        status_details: Option<serde_json::Value>,
+    },
 }
 
 fn validate_response(
     request: &WorkerRequest,
     response: WorkerResponse,
-) -> Result<serde_json::Value, WorkerLaunchError> {
+) -> Result<WorkerOutput, WorkerLaunchError> {
     let (protocol_version, job_id) = match &response {
         WorkerResponse::Succeeded {
             protocol_version,
@@ -243,10 +260,22 @@ fn validate_response(
         )));
     }
     match response {
-        WorkerResponse::Succeeded { result, .. } => Ok(result),
-        WorkerResponse::Failed { error, .. } => Err(WorkerLaunchError::Execution {
+        WorkerResponse::Succeeded {
+            result,
+            status_details,
+            ..
+        } => Ok(WorkerOutput {
+            result,
+            status_details: status_details.map(|details| *details),
+        }),
+        WorkerResponse::Failed {
+            error,
+            status_details,
+            ..
+        } => Err(WorkerLaunchError::Execution {
             code: error.code,
             message: error.message,
+            status_details: status_details.map(|details| *details),
         }),
     }
 }

@@ -17,6 +17,7 @@ pub(crate) struct TraceRecord {
     pub trace_id: String,
     pub experiment_id: String,
     pub timestamp_ms: i64,
+    pub execution_duration_ms: Option<i64>,
     pub metadata: BTreeMap<String, String>,
     pub assessments: Vec<Value>,
     pub root_span_id: Option<String>,
@@ -42,9 +43,21 @@ pub(crate) struct TrackingClient {
 
 impl TrackingClient {
     pub fn from_request(request: &WorkerRequest) -> Result<Self, EngineError> {
-        let base = std::env::var("MLFLOW_TRACKING_URI").map_err(|_| {
-            EngineError::Store("MLFLOW_TRACKING_URI is required for native job execution".into())
-        })?;
+        Self::from_request_at(request, None)
+    }
+
+    pub fn from_request_at(
+        request: &WorkerRequest,
+        injected_base: Option<&str>,
+    ) -> Result<Self, EngineError> {
+        let base = match injected_base {
+            Some(base) => base.to_string(),
+            None => std::env::var("MLFLOW_TRACKING_URI").map_err(|_| {
+                EngineError::Store(
+                    "MLFLOW_TRACKING_URI is required for native job execution".into(),
+                )
+            })?,
+        };
         Ok(Self {
             base: base.trim_end_matches('/').to_string(),
             client: reqwest::Client::builder()
@@ -195,6 +208,73 @@ impl TrackingClient {
         Ok(response.get("assessment").cloned().unwrap_or(Value::Null))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_issue(
+        &self,
+        experiment_id: &str,
+        name: &str,
+        description: &str,
+        severity: &str,
+        root_cause: &str,
+        source_run_id: &str,
+        categories: &[String],
+    ) -> Result<Value, EngineError> {
+        let response = self
+            .send_json(
+                Method::POST,
+                "/api/3.0/mlflow/issues",
+                Some(&json!({
+                    "experiment_id": experiment_id,
+                    "name": name,
+                    "description": description,
+                    "status": "pending",
+                    "severity": severity,
+                    "root_causes": [root_cause],
+                    "source_run_id": source_run_id,
+                    "categories": categories,
+                })),
+            )
+            .await?;
+        response
+            .get("issue")
+            .cloned()
+            .ok_or_else(|| EngineError::Store("createIssue response omitted issue".to_string()))
+    }
+
+    pub async fn log_issue_reference(
+        &self,
+        trace_id: &str,
+        issue_id: &str,
+        issue_name: &str,
+        model: &str,
+        rationale: &str,
+        session_id: Option<&str>,
+    ) -> Result<Value, EngineError> {
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let metadata = session_id
+            .map(|session_id| json!({"mlflow.trace.session": session_id}))
+            .unwrap_or_else(|| json!({}));
+        let assessment = json!({
+            "assessment_name": issue_id,
+            "trace_id": trace_id,
+            "source": {"source_type": "LLM_JUDGE", "source_id": model},
+            "issue": {"issue_name": issue_name},
+            "rationale": rationale,
+            "metadata": metadata,
+            "create_time": now,
+            "last_update_time": now,
+            "valid": true,
+        });
+        let response = self
+            .send_json(
+                Method::POST,
+                &format!("/api/3.0/mlflow/traces/{trace_id}/assessments"),
+                Some(&json!({"assessment": assessment})),
+            )
+            .await?;
+        Ok(response.get("assessment").cloned().unwrap_or(Value::Null))
+    }
+
     pub async fn delete_assessment(
         &self,
         trace_id: &str,
@@ -256,6 +336,50 @@ impl TrackingClient {
             Some(&json!({"run_id": run_id, "metrics": metrics, "params": [], "tags": []})),
         )
         .await?;
+        Ok(())
+    }
+
+    pub async fn set_run_tag(
+        &self,
+        run_id: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), EngineError> {
+        self.send_json(
+            Method::POST,
+            "/api/2.0/mlflow/runs/set-tag",
+            Some(&json!({"run_id": run_id, "key": key, "value": value})),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn log_text(
+        &self,
+        run_id: &str,
+        artifact_path: &str,
+        content: &str,
+    ) -> Result<(), EngineError> {
+        let path =
+            format!("/ajax-api/2.0/mlflow/upload-artifact?run_uuid={run_id}&path={artifact_path}");
+        let request = self.request(Method::POST, &path);
+        let response = request
+            .header(reqwest::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(content.to_string())
+            .send()
+            .await
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| EngineError::Store(error.to_string()))?;
+        if !status.is_success() {
+            return Err(EngineError::Store(format!(
+                "HTTP {status}: {}",
+                String::from_utf8_lossy(&bytes)
+            )));
+        }
         Ok(())
     }
 
@@ -418,6 +542,9 @@ fn trace_record(trace: &Value) -> Result<TraceRecord, EngineError> {
         .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.timestamp_millis())
         .unwrap_or_default();
+    let execution_duration_ms = info
+        .get("execution_duration")
+        .and_then(parse_duration_millis);
     let experiment_id = info
         .get("trace_location")
         .and_then(|location| location.pointer("/mlflow_experiment/experiment_id"))
@@ -466,6 +593,7 @@ fn trace_record(trace: &Value) -> Result<TraceRecord, EngineError> {
             "trace_location": info.get("trace_location").cloned().unwrap_or(Value::Null),
             "request_time": info.get("request_time").cloned().unwrap_or(Value::Null),
             "timestamp_ms": timestamp_ms,
+            "execution_duration_ms": execution_duration_ms,
             "trace_metadata": metadata,
             "tags": tags,
             "assessments": assessments,
@@ -476,6 +604,7 @@ fn trace_record(trace: &Value) -> Result<TraceRecord, EngineError> {
         trace_id,
         experiment_id,
         timestamp_ms,
+        execution_duration_ms,
         metadata,
         assessments,
         root_span_id,
@@ -488,6 +617,15 @@ fn trace_record(trace: &Value) -> Result<TraceRecord, EngineError> {
             memory_examples: None,
         },
     })
+}
+
+fn parse_duration_millis(value: &Value) -> Option<i64> {
+    if let Some(number) = value.as_i64() {
+        return Some(number);
+    }
+    let raw = value.as_str()?;
+    let seconds = raw.strip_suffix('s')?.parse::<f64>().ok()?;
+    Some((seconds * 1000.0).round() as i64)
 }
 
 fn string_map(value: Option<&Value>) -> BTreeMap<String, String> {
@@ -520,6 +658,33 @@ fn convert_span(span: &Value) -> Value {
                 .collect::<Map<_, _>>()
         })
         .or_else(|| span.get("attributes").and_then(Value::as_object).cloned())
+        .unwrap_or_default();
+    result.insert("attributes".to_string(), Value::Object(attributes));
+    if let Some(events) = span.get("events").and_then(Value::as_array) {
+        result.insert(
+            "events".to_string(),
+            Value::Array(events.iter().map(convert_event).collect()),
+        );
+    }
+    Value::Object(result)
+}
+
+fn convert_event(event: &Value) -> Value {
+    let mut result = event.as_object().cloned().unwrap_or_default();
+    let attributes = event
+        .get("attributes")
+        .and_then(Value::as_array)
+        .map(|attributes| {
+            attributes
+                .iter()
+                .filter_map(|attribute| {
+                    let key = attribute.get("key")?.as_str()?.to_string();
+                    let value = attribute.get("value").map(any_value)?;
+                    Some((key, value))
+                })
+                .collect::<Map<_, _>>()
+        })
+        .or_else(|| event.get("attributes").and_then(Value::as_object).cloned())
         .unwrap_or_default();
     result.insert("attributes".to_string(), Value::Object(attributes));
     Value::Object(result)

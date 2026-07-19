@@ -146,24 +146,46 @@ pub enum WorkerResponse {
         protocol_version: u32,
         job_id: String,
         result: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        status_details: Option<Box<Value>>,
     },
     Failed {
         protocol_version: u32,
         job_id: String,
         error: ExecutionFailure,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        status_details: Option<Box<Value>>,
     },
 }
 
 impl WorkerResponse {
     pub fn succeeded(job_id: String, result: Value) -> Self {
+        Self::succeeded_with_status(job_id, result, None)
+    }
+
+    pub fn succeeded_with_status(
+        job_id: String,
+        result: Value,
+        status_details: Option<Value>,
+    ) -> Self {
         Self::Succeeded {
             protocol_version: NATIVE_WORKER_PROTOCOL_VERSION,
             job_id,
             result,
+            status_details: status_details.map(Box::new),
         }
     }
 
     pub fn failed(job_id: String, code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::failed_with_status(job_id, code, message, None)
+    }
+
+    pub fn failed_with_status(
+        job_id: String,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        status_details: Option<Value>,
+    ) -> Self {
         Self::Failed {
             protocol_version: NATIVE_WORKER_PROTOCOL_VERSION,
             job_id,
@@ -171,6 +193,7 @@ impl WorkerResponse {
                 code: code.into(),
                 message: message.into(),
             },
+            status_details: status_details.map(Box::new),
         }
     }
 }
