@@ -1,7 +1,7 @@
 # Rust MLflow Server — Implementation Plan
 
 **Part I** (§1–§10, Phases 0–14): everything except genai. **Part II** (§11–§18,
-Phases 15–22): the genai port — added 2026-07-17; goal is full Python-app parity
+Phases 15–23): the genai port — added 2026-07-17; goal is full Python-app parity
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
@@ -2849,11 +2849,13 @@ runner uses.
 
 ---
 
-## 16. Work breakdown (Phases 15–22)
+## 16. Work breakdown (Phases 15–23)
 
 Same legend as §7: AC = acceptance criteria, VER = verification. Phases 16–18
 are parallelizable once Phase 15 lands; Phase 19 needs 17 (runner) and
 benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
+Phase 23 (genai perf evaluation) needs both servers runnable — run it before
+T22.4 deletes the Python container, or use the bench compose which keeps both.
 
 ### Phase 15 — Part II foundations
 
@@ -3802,6 +3804,117 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       scorer/provider/GEPA manifest upgrades, Redis budget tracker option,
       assistant CLI prerequisites, and the archival runbook.
       **AC/VER:** fresh-operator walkthrough.
+
+### Phase 23 — GenAI performance & resource evaluation (Python vs Rust)
+
+*Added 2026-07-19 per user directive: a Phase 14-style comparative evaluation
+of ALL genai features — latency, error rates, memory, CPU (and whatever else
+fits) — Python vs Rust on identical infrastructure and identical seeded data,
+with every external dependency replaced by deterministic fakes we control so
+neither side's numbers include third-party flakiness. Reasonable volume:
+1,000–10,000+ requests per scenario cell. Must run while the Python server
+still exists (before T22.4 cutover), or via the bench compose which keeps
+both servers regardless of deploy-compose state.*
+
+**Shared method (all tasks):** postgres:16 + MinIO in docker (T14.2 infra),
+fresh DB + bucket prefix per target; Python = 4 uvicorn workers + its real
+job-execution runtime, Rust = release build + native workers; identical
+request streams generated from one seeded generator (fixed seed → same
+payloads, same order, same think-times) driven by the same client harness
+against each server in turn; whole-process-tree RSS + CPU (utime/stime)
+sampled from /proc at 1 s cadence per the T14.1 method (WSL2 cgroup caveat
+documented there); per-request latency recorded client-side with endpoint
+tags. Every LLM/provider dependency is a local deterministic fake (T23.1) —
+zero live provider calls anywhere in this phase.
+
+- [ ] **T23.1 Bench harness + deterministic fake dependencies**: extend
+      `rust/bench/` (T14.2's `soak.py` / compose patterns) with a genai bench
+      harness:
+      (a) a local mock provider HTTP server (in-process thread, no docker)
+      serving OpenAI/Anthropic-compatible chat + embeddings + SSE streaming
+      with seeded-deterministic bodies (response derived from request hash +
+      run seed), configurable fixed artificial latency (default 0) and
+      deterministic token counts — used as the gateway provider target AND
+      the judge/scorer LLM target for BOTH servers; reuse the Phase 18/20
+      scripted-provider + fake-CLI stubs (`dev/dev_stubs/`, recorder scripted
+      providers) for the assistant rather than reinventing them;
+      (b) a seeded workload generator + client harness (async, configurable
+      concurrency, warm-up phase excluded from stats) emitting identical
+      request streams to either target;
+      (c) a metrics collector producing per-endpoint p50/p95/p99/max latency,
+      RPS, error rate, SSE time-to-first-event + inter-frame gaps, job
+      submit→terminal wall time split into queue-wait vs execution, RSS/CPU
+      time series, DB pool stats;
+      (d) an equivalence checker: a deterministic sample of responses (and
+      all job terminal states) from the two runs compared after
+      normalization (ids/uuids/timestamps/durations) — proof both sides did
+      the same work before any numbers count.
+      **AC:** 100-request smoke cell runs green against both servers with
+      0 errors and byte-stable mock-provider responses across repeated seeds;
+      equivalence checker passes on the smoke cell.
+      **VER:** `rust/bench/genai/` harness + smoke-cell CI-runnable script,
+      exit 0.
+- [ ] **T23.2 CRUD + read-path matrix (Tier A families)**: scenario cells for
+      every §12 CRUD family — datasets incl. record batches (12.1), scorers +
+      versions (12.3), issues (12.4), label schemas (12.5), review queues
+      (12.6), prompt-optimization CRUD (12.7), gateway admin CRUD incl.
+      secrets crypto path (12.8) — each crossed with:
+      payload size **small** (~1 KiB) vs **large** (dataset record batches
+      256 KiB–1 MiB, big trace/inputs payloads where the family allows);
+      concurrency **1 / 16 / 128** clients; mix **write-heavy (90/10)** vs
+      **read-heavy (10/90)** incl. search/list endpoints against a
+      pre-seeded 10k-row corpus. 1,000–10,000 requests per cell (small
+      payloads → 10k, large → 1k; document per-cell counts).
+      **AC:** every family has ≥ small+large / low+high-concurrency cells;
+      error rate < 0.01% per cell on both sides; sampled-response
+      equivalence green; side-by-side per-cell tables.
+      **VER:** harness cell definitions + emitted `genai_eval` raw metrics
+      (JSON) checked into `rust/bench/genai/results/` (or artifacted).
+- [ ] **T23.3 Jobs + native-engine matrix**: every job kind in the worker
+      dispatch (evaluation/invoke, scorer runs incl. online scoring, judges,
+      issue detection/discovery, prompt optimization — the full
+      six-kind set) driven through the public invoke/jobs APIs with the mock
+      provider behind judges/scorers:
+      **high fan-out** (1k–5k tiny jobs, small datasets) vs **large-payload**
+      (~10 jobs over 1k-row datasets); **burst saturation** (submit burst ≫
+      worker concurrency → queue-wait vs execution split, fairness);
+      **steady drip** (submit ≤ capacity). Measure end-to-end completion
+      throughput (jobs/min), per-kind wall-time percentiles, worker-pool
+      RSS/CPU (Python job runtime vs Rust worker subprocesses), and leak
+      checks across ≥1k completed jobs (process/thread counts + RSS trend
+      flat).
+      **AC:** all kinds covered both sides from identical seeds; terminal
+      states + normalized results equivalence-checked; no worker/process
+      leaks; side-by-side tables.
+      **VER:** harness job-matrix module + raw metrics as in T23.2.
+- [ ] **T23.4 Streaming + interactive matrix (SSE) + archival**: gateway
+      runtime (12.9) chat completions streaming AND non-streaming,
+      embeddings, passthrough with guardrails + budget tracking enabled;
+      assistant (12.10) sessions + streamed turns via the scripted CLI /
+      OpenAI-compatible stubs; promptlab create-run (12.11); trace archival
+      (12.12): archive passes over 1k–10k seeded traces (traces/s, finalize
+      transaction latency) + archived-read p50/p95 (`getTrace` /
+      `get-trace-artifact` from ARCHIVE_REPO).
+      Streaming cells at **1 / 16 / 64 concurrent streams**: time-to-first-
+      event, inter-frame p95, frames/s, stream-completion error rate.
+      **AC:** SSE frame sequences equivalent (recorder-style normalization)
+      while under measurement; archival pass covers ≥1k traces per side;
+      side-by-side tables incl. TTFE.
+      **VER:** harness streaming module + raw metrics as in T23.2.
+- [ ] **T23.5 Mixed soak + final report**: one realistic mixed genai
+      workload combining all of the above (dataset upserts + evaluation/
+      scorer jobs + gateway chat traffic incl. streams + assistant sessions
+      + review-queue/labeling reads + a background archival pass), ≥10,000
+      total requests per target, run identically against Python then Rust;
+      then the Phase 14-style report `rust/bench/genai_eval.md`: per-family
+      side-by-side latency/throughput/error tables, RSS + CPU over time
+      graphs/tables, key ratios (à la T14.2's "49.9/50.3 → 1.0/1.3 ms"),
+      every regression or Rust-slower cell called out honestly, limitations
+      documented, one-command repro (compose + runner script) included.
+      **AC:** no monotonic RSS growth over the mixed run on either side;
+      error rate < 0.01% both; report covers EVERY §12 family with at least
+      one measured cell; results reproducible from the documented command.
+      **VER:** `rust/bench/genai_eval.md` + raw metrics + repro script.
 
 ---
 
