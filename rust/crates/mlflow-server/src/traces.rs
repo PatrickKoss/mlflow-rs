@@ -23,15 +23,12 @@ use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::request::Parts;
 use axum::response::Response;
-use base64::Engine;
 use mlflow_error::{ErrorCode, MlflowError};
 use mlflow_proto::mlflow as pb;
-use mlflow_proto::opentelemetry::proto::common::v1 as otel_common;
-use mlflow_proto::opentelemetry::proto::trace::v1 as otel_trace;
 use mlflow_store::{
     Assessment, AssessmentError, AssessmentSource, AssessmentValue, MetricAggregation,
-    MetricDataPoint, MetricViewType, StoredSpan, TraceAssessment, TraceInfo, TraceState,
-    TraceWithSpans, MAX_RESULTS_QUERY_TRACE_METRICS,
+    MetricDataPoint, MetricViewType, TraceAssessment, TraceInfo, TraceState, TraceWithSpans,
+    MAX_RESULTS_QUERY_TRACE_METRICS,
 };
 
 use crate::proto_http::{
@@ -573,7 +570,10 @@ fn start_trace_input_from_proto(
 fn to_proto_trace(trace: &TraceWithSpans) -> Result<pb::Trace, MlflowError> {
     let mut spans = Vec::with_capacity(trace.spans.len());
     for span in &trace.spans {
-        spans.push(to_otel_span(span)?);
+        spans.push(
+            crate::trace_archival::stored_span_to_otel_span(span)
+                .map_err(|error| MlflowError::new(error.to_string(), ErrorCode::InternalError))?,
+        );
     }
     Ok(pb::Trace {
         trace_info: Some(to_proto_trace_info(&trace.info)),
@@ -674,187 +674,6 @@ fn trace_assessment_to_entity(assessment: &TraceAssessment) -> Assessment {
     }
 }
 
-/// Reconstruct a stored span's JSON `content` (the mlflow span dict) into an
-/// OTLP `Span` proto, mirroring `mlflow.entities.Span.to_otel_proto`.
-///
-/// The stored dict carries base64 ids, integer ns times, an OTLP status-code
-/// *name* string, and JSON-string attribute values. Attribute values are
-/// written as `AnyValue`s following `_set_otel_proto_anyvalue` (mlflow stores
-/// each value as a JSON string, so the common case is `string_value`).
-fn to_otel_span(span: &StoredSpan) -> Result<otel_trace::Span, MlflowError> {
-    let content: serde_json::Value = serde_json::from_str(&span.content).map_err(|e| {
-        MlflowError::new(
-            format!("Failed to parse stored span content: {e}"),
-            ErrorCode::InternalError,
-        )
-    })?;
-
-    let trace_id = content
-        .get("trace_id")
-        .and_then(|v| v.as_str())
-        .map(decode_base64)
-        .transpose()?
-        .unwrap_or_default();
-    let span_id = content
-        .get("span_id")
-        .and_then(|v| v.as_str())
-        .map(decode_base64)
-        .transpose()?
-        .unwrap_or_default();
-    let parent_span_id = content
-        .get("parent_span_id")
-        .and_then(|v| v.as_str())
-        .map(decode_base64)
-        .transpose()?
-        .unwrap_or_default();
-
-    let name = content
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let start = content
-        .get("start_time_unix_nano")
-        .and_then(json_u64)
-        .unwrap_or(0);
-    let end = content.get("end_time_unix_nano").and_then(json_u64);
-
-    let status = content.get("status").map(|s| otel_trace::Status {
-        message: s
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        code: status_code_from_name(s.get("code").and_then(|v| v.as_str())),
-    });
-
-    let attributes = content
-        .get("attributes")
-        .and_then(|v| v.as_object())
-        .map(|obj| {
-            obj.iter()
-                .map(|(k, v)| otel_common::KeyValue {
-                    key: k.clone(),
-                    value: Some(any_value_from_json(&decode_stored_attribute(v))),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let events = content
-        .get("events")
-        .and_then(|v| v.as_array())
-        .map(|evs| evs.iter().map(otel_event_from_json).collect())
-        .unwrap_or_default();
-
-    Ok(otel_trace::Span {
-        trace_id,
-        span_id,
-        trace_state: String::new(),
-        parent_span_id,
-        flags: 0,
-        name,
-        kind: 0,
-        start_time_unix_nano: start,
-        end_time_unix_nano: end.unwrap_or(0),
-        attributes,
-        dropped_attributes_count: 0,
-        events,
-        dropped_events_count: 0,
-        // Link reconstruction is uncommon for tracking-store traces; the store
-        // preserves them in `content` but full link decode is deferred.
-        links: Vec::new(),
-        dropped_links_count: 0,
-        status,
-    })
-}
-
-/// Map an OTLP status-code *name* string (`"STATUS_CODE_OK"` etc.) to its int.
-fn status_code_from_name(name: Option<&str>) -> i32 {
-    match name {
-        Some("STATUS_CODE_OK") => otel_trace::status::StatusCode::Ok as i32,
-        Some("STATUS_CODE_ERROR") => otel_trace::status::StatusCode::Error as i32,
-        _ => otel_trace::status::StatusCode::Unset as i32,
-    }
-}
-
-/// Build an OTLP `Event` from the stored event dict.
-fn otel_event_from_json(ev: &serde_json::Value) -> otel_trace::span::Event {
-    let attributes = ev
-        .get("attributes")
-        .and_then(|v| v.as_object())
-        .map(|obj| {
-            obj.iter()
-                .map(|(k, v)| otel_common::KeyValue {
-                    key: k.clone(),
-                    value: Some(any_value_from_json(&decode_stored_attribute(v))),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    otel_trace::span::Event {
-        time_unix_nano: ev.get("time_unix_nano").and_then(json_u64).unwrap_or(0),
-        name: ev
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        attributes,
-        dropped_attributes_count: 0,
-    }
-}
-
-/// Decode a stored span/event attribute value into the logical value MLflow's
-/// `Span.attributes` exposes. MLflow stores every attribute value JSON-encoded
-/// (`to_dict` saves `dict(self._span.attributes)`, which are the
-/// `json.dumps`-ed values, `span.py:534`); on read, the `attributes` property
-/// `json.loads` each one before `_set_otel_proto_anyvalue` builds the OTLP
-/// `AnyValue` (`span.py:586-589`). So a stored `"\"apple\""` becomes the raw
-/// `apple`. We mirror that: if the stored value is a string that parses as JSON,
-/// use the parsed value; otherwise fall back to the value as stored (robust to
-/// any not-double-encoded legacy content).
-fn decode_stored_attribute(v: &serde_json::Value) -> serde_json::Value {
-    match v {
-        serde_json::Value::String(s) => serde_json::from_str(s).unwrap_or_else(|_| v.clone()),
-        other => other.clone(),
-    }
-}
-
-/// Encode a JSON attribute value as an OTLP `AnyValue`, mirroring
-/// `_set_otel_proto_anyvalue`. mlflow stores attribute values as JSON strings,
-/// so strings are the common case, but numbers/bools/arrays/objects are handled
-/// for fidelity.
-fn any_value_from_json(v: &serde_json::Value) -> otel_common::AnyValue {
-    use otel_common::any_value::Value as AV;
-    let value = match v {
-        serde_json::Value::Null => None,
-        serde_json::Value::Bool(b) => Some(AV::BoolValue(*b)),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Some(AV::IntValue(i))
-            } else {
-                Some(AV::DoubleValue(n.as_f64().unwrap_or(0.0)))
-            }
-        }
-        serde_json::Value::String(s) => Some(AV::StringValue(s.clone())),
-        serde_json::Value::Array(items) => {
-            let values = items.iter().map(any_value_from_json).collect();
-            Some(AV::ArrayValue(otel_common::ArrayValue { values }))
-        }
-        serde_json::Value::Object(map) => {
-            let values = map
-                .iter()
-                .map(|(k, v)| otel_common::KeyValue {
-                    key: k.clone(),
-                    value: Some(any_value_from_json(v)),
-                })
-                .collect();
-            Some(AV::KvlistValue(otel_common::KeyValueList { values }))
-        }
-    };
-    otel_common::AnyValue { value }
-}
-
 /// Map a `MetricDataPoint` store entity to the wire proto.
 fn to_proto_data_point(dp: &MetricDataPoint) -> pb::MetricDataPoint {
     pb::MetricDataPoint {
@@ -945,21 +764,6 @@ fn aggregation_from_proto(agg: &pb::MetricAggregation) -> Result<MetricAggregati
         )),
         _ => Err(missing_param("aggregation_type")),
     }
-}
-
-fn decode_base64(s: &str) -> Result<Vec<u8>, MlflowError> {
-    base64::engine::general_purpose::STANDARD
-        .decode(s)
-        .map_err(|e| {
-            MlflowError::new(
-                format!("Invalid base64 in stored span content: {e}"),
-                ErrorCode::InternalError,
-            )
-        })
-}
-
-fn json_u64(v: &serde_json::Value) -> Option<u64> {
-    v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))
 }
 
 /// Same required/non-empty check as [`crate::experiments::require_non_empty`].

@@ -53,6 +53,7 @@ pub mod scorers;
 pub mod security;
 pub mod server_info;
 pub mod state;
+pub mod trace_archival;
 pub mod trace_artifact;
 pub mod traces;
 pub mod traces_v2;

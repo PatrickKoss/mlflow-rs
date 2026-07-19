@@ -1,0 +1,83 @@
+{
+  "generator": {
+    "command": "uv run --frozen python rust/tools/gen_trace_archival_fixtures.py rust/crates/mlflow-server/tests/fixtures/trace_archival",
+    "python": "3.10.18",
+    "protobuf": "6.33.6",
+    "opentelemetry-proto": "1.43.0",
+    "opentelemetry-sdk": "1.43.0"
+  },
+  "expected_order": [
+    "root",
+    "child-a",
+    "child-b"
+  ],
+  "resource_attributes": [
+    [
+      "service.name",
+      "archive-fixture"
+    ],
+    [
+      "service.version",
+      "1.2.3"
+    ],
+    [
+      "replica",
+      2
+    ],
+    [
+      "enabled",
+      true
+    ],
+    [
+      "ratios",
+      [
+        0.25,
+        0.75
+      ]
+    ]
+  ],
+  "stored_spans": [
+    {
+      "trace_id": "tr-00112233445566778899aabbccddeeff",
+      "experiment_id": 7,
+      "span_id": "1020304050607020",
+      "parent_span_id": "1020304050607080",
+      "name": "child-b",
+      "span_type": "TOOL",
+      "status": "UNSET",
+      "start_time_unix_nano": 1000,
+      "end_time_unix_nano": 1700,
+      "duration_ns": 700,
+      "content": "{\"trace_id\": \"ABEiM0RVZneImaq7zN3u/w==\", \"span_id\": \"ECAwQFBgcCA=\", \"parent_span_id\": \"ECAwQFBgcIA=\", \"name\": \"child-b\", \"start_time_unix_nano\": 1000, \"end_time_unix_nano\": 1700, \"events\": [], \"status\": {\"code\": \"STATUS_CODE_UNSET\", \"message\": \"\"}, \"attributes\": {\"mlflow.traceRequestId\": \"\\\"tr-00112233445566778899aabbccddeeff\\\"\", \"mlflow.spanType\": \"\\\"TOOL\\\"\", \"text\": \"\\\"h\\u00e9llo\\\"\", \"integer\": \"42\", \"double\": \"1.25\", \"boolean\": \"true\", \"array\": \"[\\\"first\\\", 2, false]\", \"object\": \"{\\\"z\\\": 1, \\\"a\\\": \\\"two\\\"}\", \"empty_array\": \"[]\", \"empty_object\": \"{}\", \"nothing\": \"null\"}, \"links\": []}",
+      "dimension_attributes": null
+    },
+    {
+      "trace_id": "tr-00112233445566778899aabbccddeeff",
+      "experiment_id": 7,
+      "span_id": "1020304050607080",
+      "parent_span_id": null,
+      "name": "root",
+      "span_type": "CHAIN",
+      "status": "ERROR",
+      "start_time_unix_nano": 2000,
+      "end_time_unix_nano": 4000,
+      "duration_ns": 2000,
+      "content": "{\"trace_id\": \"ABEiM0RVZneImaq7zN3u/w==\", \"span_id\": \"ECAwQFBgcIA=\", \"parent_span_id\": null, \"name\": \"root\", \"start_time_unix_nano\": 2000, \"end_time_unix_nano\": 4000, \"events\": [{\"name\": \"exception\", \"time_unix_nano\": 2050, \"attributes\": {\"message\": \"boom\", \"attempt\": 3, \"retryable\": false, \"ratio\": 0.5, \"labels\": [\"red\", \"blue\"]}}], \"status\": {\"code\": \"STATUS_CODE_ERROR\", \"message\": \"root failed\"}, \"attributes\": {\"mlflow.traceRequestId\": \"\\\"tr-00112233445566778899aabbccddeeff\\\"\", \"mlflow.spanType\": \"\\\"CHAIN\\\"\", \"text\": \"\\\"h\\u00e9llo\\\"\", \"integer\": \"42\", \"double\": \"1.25\", \"boolean\": \"true\", \"array\": \"[\\\"first\\\", 2, false]\", \"object\": \"{\\\"z\\\": 1, \\\"a\\\": \\\"two\\\"}\", \"empty_array\": \"[]\", \"empty_object\": \"{}\", \"nothing\": \"null\"}, \"links\": [{\"trace_id\": \"tr-ffeeddccbbaa99887766554433221100\", \"span_id\": \"8877665544332211\", \"attributes\": {\"relationship\": \"causal\", \"weight\": 7, \"active\": true}}]}",
+      "dimension_attributes": null
+    },
+    {
+      "trace_id": "tr-00112233445566778899aabbccddeeff",
+      "experiment_id": 7,
+      "span_id": "1020304050607010",
+      "parent_span_id": "1020304050607080",
+      "name": "child-a",
+      "span_type": "TOOL",
+      "status": "OK",
+      "start_time_unix_nano": 1000,
+      "end_time_unix_nano": 1500,
+      "duration_ns": 500,
+      "content": "{\"trace_id\": \"ABEiM0RVZneImaq7zN3u/w==\", \"span_id\": \"ECAwQFBgcBA=\", \"parent_span_id\": \"ECAwQFBgcIA=\", \"name\": \"child-a\", \"start_time_unix_nano\": 1000, \"end_time_unix_nano\": 1500, \"events\": [], \"status\": {\"code\": \"STATUS_CODE_OK\", \"message\": \"\"}, \"attributes\": {\"mlflow.traceRequestId\": \"\\\"tr-00112233445566778899aabbccddeeff\\\"\", \"mlflow.spanType\": \"\\\"TOOL\\\"\", \"text\": \"\\\"h\\u00e9llo\\\"\", \"integer\": \"42\", \"double\": \"1.25\", \"boolean\": \"true\", \"array\": \"[\\\"first\\\", 2, false]\", \"object\": \"{\\\"z\\\": 1, \\\"a\\\": \\\"two\\\"}\", \"empty_array\": \"[]\", \"empty_object\": \"{}\", \"nothing\": \"null\"}, \"links\": []}",
+      "dimension_attributes": null
+    }
+  ]
+}

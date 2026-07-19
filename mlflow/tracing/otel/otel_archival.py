@@ -85,7 +85,7 @@ def spans_to_traces_data_pb(spans: list[Span]) -> bytes:
     resource_spans = traces_data.resource_spans.add()
     resource_spans.resource.CopyFrom(resource_proto)
     scope_spans = resource_spans.scope_spans.add()
-    scope_spans.spans.extend(span.to_otel_proto() for span in spans)
+    scope_spans.spans.extend(span.to_otel_proto() for span in _sort_spans_for_trace_output(spans))
     return traces_data.SerializeToString()
 
 
@@ -113,9 +113,13 @@ def traces_data_pb_to_spans(data: bytes) -> list[Span]:
         raise MlflowException.invalid_parameter_value(
             "Archived trace payload must contain exactly one ScopeSpans group."
         )
+    resource_spans = traces_data.resource_spans[0]
     spans = [
-        Span.from_otel_proto(otel_span, preserve_request_id=True)
-        for resource_spans in traces_data.resource_spans
+        Span.from_otel_proto(
+            otel_span,
+            preserve_request_id=True,
+            resource=resource_spans.resource,
+        )
         for scope_spans in resource_spans.scope_spans
         for otel_span in scope_spans.spans
     ]
