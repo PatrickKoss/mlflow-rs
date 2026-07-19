@@ -1,0 +1,279 @@
+{
+  "clustering": {
+    "groups": [
+      [
+        0,
+        2
+      ],
+      [
+        1
+      ],
+      [
+        3
+      ]
+    ],
+    "label_count": 4,
+    "max_issues": 3,
+    "raw": {
+      "groups": [
+        {
+          "indices": [
+            0,
+            2,
+            99
+          ],
+          "name": "Issue: Shared"
+        }
+      ]
+    }
+  },
+  "dedup": {
+    "inputs": [
+      {
+        "categories": [
+          "correctness"
+        ],
+        "category_rationale": "",
+        "description": "Wrong city returned",
+        "example_indices": [
+          0
+        ],
+        "name": "Issue: Wrong city",
+        "root_cause": "lookup tool",
+        "severity": "low"
+      },
+      {
+        "categories": [
+          "latency"
+        ],
+        "category_rationale": "",
+        "description": "Tool timed out",
+        "example_indices": [
+          1
+        ],
+        "name": "Issue: Timeout",
+        "root_cause": "weather tool",
+        "severity": "medium"
+      },
+      {
+        "categories": [
+          "execution",
+          "correctness"
+        ],
+        "category_rationale": "",
+        "description": "Incorrect city returned",
+        "example_indices": [
+          2
+        ],
+        "name": "Issue: Incorrect city",
+        "root_cause": "lookup tool",
+        "severity": "high"
+      }
+    ],
+    "issues": [
+      {
+        "categories": [
+          "correctness",
+          "execution"
+        ],
+        "category_rationale": "",
+        "description": "The lookup returns the wrong city.",
+        "example_indices": [
+          0,
+          2
+        ],
+        "name": "Issue: City lookup incorrect",
+        "root_cause": "lookup tool mapping",
+        "severity": "high"
+      },
+      {
+        "categories": [
+          "latency"
+        ],
+        "category_rationale": "",
+        "description": "Tool timed out",
+        "example_indices": [
+          1
+        ],
+        "name": "Issue: Timeout",
+        "root_cause": "weather tool",
+        "severity": "medium"
+      }
+    ],
+    "raw": {
+      "groups": [
+        {
+          "description": "The lookup returns the wrong city.",
+          "indices": [
+            0,
+            2
+          ],
+          "name": "Issue: City lookup incorrect",
+          "root_cause": "lookup tool mapping"
+        }
+      ]
+    }
+  },
+  "e2e": {
+    "affected_trace_ids": [
+      "tr-1"
+    ],
+    "artifact_count": 3,
+    "assessment_count": 2,
+    "model_calls": 5,
+    "result": {
+      "issues": 1,
+      "summary": "Analyzed **1** traces. Found **1** issues:\n\n### 1. Incorrect capital answer (severity: high)\n\nThe response names the wrong capital.\n\n**Root causes:** agent response generation\n\n**Categories:** correctness\n",
+      "total_cost_usd": 0.4,
+      "total_traces_analyzed": 1
+    },
+    "sampling_count": 1,
+    "status_details": {
+      "stage": "Generating summary..."
+    }
+  },
+  "latency": {
+    "count": 4,
+    "p50": 0.3,
+    "p75": 0.55,
+    "p90": 0.82,
+    "p95": 0.91,
+    "p99": 0.98,
+    "seconds": [
+      0.1,
+      0.2,
+      0.4,
+      1.0
+    ]
+  },
+  "live_provider_calls": 0,
+  "sampling": [
+    {
+      "population": 10,
+      "sample_size": 4,
+      "selected": [
+        1,
+        0,
+        4,
+        9
+      ]
+    },
+    {
+      "population": 120,
+      "sample_size": 5,
+      "selected": [
+        81,
+        14,
+        3,
+        94,
+        35
+      ]
+    },
+    {
+      "population": 5000,
+      "sample_size": 100,
+      "selected": [
+        912,
+        204,
+        2253,
+        2006,
+        1828,
+        1143,
+        839,
+        4467,
+        712,
+        4837,
+        3456,
+        260,
+        244,
+        767,
+        1791,
+        1905,
+        4139,
+        4931,
+        217,
+        4597,
+        1628,
+        4464,
+        3436,
+        1805,
+        3679,
+        4827,
+        2278,
+        53,
+        1307,
+        3462,
+        2787,
+        2276,
+        1273,
+        1763,
+        2757,
+        837,
+        759,
+        3112,
+        792,
+        2940,
+        2817,
+        4945,
+        2166,
+        355,
+        3763,
+        4392,
+        1022,
+        3100,
+        645,
+        4522,
+        2401,
+        2962,
+        4729,
+        1575,
+        569,
+        375,
+        1866,
+        2370,
+        653,
+        1907,
+        827,
+        3113,
+        2277,
+        3714,
+        2988,
+        1332,
+        3032,
+        2910,
+        1716,
+        2187,
+        584,
+        4990,
+        1401,
+        4375,
+        2005,
+        1338,
+        3786,
+        3108,
+        2211,
+        4562,
+        1799,
+        2656,
+        458,
+        1876,
+        262,
+        2584,
+        3286,
+        2193,
+        542,
+        1728,
+        4646,
+        2577,
+        1741,
+        4089,
+        3241,
+        3758,
+        1170,
+        2169,
+        2020,
+        4598
+      ]
+    }
+  ]
+}

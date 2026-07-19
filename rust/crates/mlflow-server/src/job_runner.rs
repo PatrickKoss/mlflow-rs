@@ -48,6 +48,10 @@ pub struct JobExecutionRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub enum JobExecutionResult {
     Succeeded(Value),
+    SucceededWithDetails {
+        result: Value,
+        details: Value,
+    },
     Failed {
         error: String,
         transient: bool,
@@ -474,6 +478,18 @@ async fn finish_execution(
     match outcome {
         Ok(JobExecutionResult::Succeeded(value)) => {
             let result = python_json_dumps(&value, false);
+            let outcome = finalize_with_retry(&job.job_id, "finish_job", || {
+                store.finish_job(&job.workspace, &job.job_id, &result)
+            })
+            .await;
+            if let Err(error) = outcome {
+                tracing::error!(job_id = %job.job_id, %error, "failed to finish job");
+            }
+            JobCompletion { retry: None }
+        }
+        Ok(JobExecutionResult::SucceededWithDetails { result, details }) => {
+            record_execution_details(store, job, Some(&details)).await;
+            let result = python_json_dumps(&result, false);
             let outcome = finalize_with_retry(&job.job_id, "finish_job", || {
                 store.finish_job(&job.workspace, &job.job_id, &result)
             })

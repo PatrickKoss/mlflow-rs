@@ -475,6 +475,7 @@ mod tests {
             trace_id: id.to_string(),
             experiment_id: "0".to_string(),
             timestamp_ms: timestamp,
+            execution_duration_ms: None,
             metadata: session
                 .map(|session| {
                     std::collections::BTreeMap::from([(

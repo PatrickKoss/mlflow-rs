@@ -181,8 +181,14 @@ impl JobExecutor for NativeWorkerExecutor {
             subject: request.subject,
         };
         Box::pin(async move {
-            match launcher.run(&envelope).await {
-                Ok(result) => JobExecutionResult::Succeeded(result),
+            match launcher.run_with_status(&envelope).await {
+                Ok(output) => match output.status_details {
+                    Some(details) => JobExecutionResult::SucceededWithDetails {
+                        result: output.result,
+                        details,
+                    },
+                    None => JobExecutionResult::Succeeded(output.result),
+                },
                 Err(error) => map_launch_error(job_kind, error),
             }
         })
@@ -221,7 +227,11 @@ fn map_launch_error(job_kind: JobKind, error: WorkerLaunchError) -> JobExecution
             format!("Native worker timed out after {} ms", timeout.as_millis()),
             json!({"failure_type": "timeout", "timeout_ms": timeout.as_millis(), "stderr": stderr}),
         ),
-        WorkerLaunchError::Execution { code, message } => {
+        WorkerLaunchError::Execution {
+            code,
+            message,
+            status_details,
+        } => {
             let failure_type = match code.as_str() {
                 "UNSUPPORTED_PROTOCOL_VERSION" => "protocol_version_mismatch",
                 "UNKNOWN_JOB_KIND" => "unknown_job_kind",
@@ -229,7 +239,9 @@ fn map_launch_error(job_kind: JobKind, error: WorkerLaunchError) -> JobExecution
             };
             (
                 format!("Native worker execution failed ({code}): {message}"),
-                json!({"failure_type": failure_type, "code": code, "message": message}),
+                status_details.unwrap_or_else(|| {
+                    json!({"failure_type": failure_type, "code": code, "message": message})
+                }),
             )
         }
         WorkerLaunchError::Spawn(message) => (

@@ -5,6 +5,7 @@
 //! and subprocess-launcher types are the foundations expanded by T17/T18.
 
 mod builtins;
+mod discovery;
 mod engine;
 mod evaluation;
 mod jobs;
@@ -35,7 +36,7 @@ pub use protocol::{
     WorkerResponse, NATIVE_WORKER_PROTOCOL_VERSION,
 };
 pub use third_party::{supported_third_party_metrics, ThirdPartyFamily, ThirdPartyMetric};
-pub use worker::{WorkerLaunchError, WorkerLauncher};
+pub use worker::{WorkerLaunchError, WorkerLauncher, WorkerOutput};
 
 pub const MLFLOW_GENAI_WORKER_FIXTURE: &str = "MLFLOW_GENAI_WORKER_FIXTURE";
 
@@ -53,6 +54,21 @@ pub async fn execute_worker_request(request: &WorkerRequest) -> WorkerResponse {
     }
 
     let fixture_enabled = std::env::var(MLFLOW_GENAI_WORKER_FIXTURE).as_deref() == Ok("1");
+    if !fixture_enabled && request.job_kind == JobKind::InvokeIssueDetection {
+        return match discovery::execute(request).await {
+            Ok((result, stage)) => WorkerResponse::succeeded_with_status(
+                request.job_id.clone(),
+                result,
+                Some(serde_json::json!({"stage": stage})),
+            ),
+            Err((error, stage)) => WorkerResponse::failed_with_status(
+                request.job_id.clone(),
+                "ENGINE_ERROR",
+                error.to_string(),
+                Some(serde_json::json!({"stage": stage})),
+            ),
+        };
+    }
     let result = if fixture_enabled {
         execute_fixture(request)
     } else {
@@ -69,8 +85,7 @@ pub async fn execute_worker_request(request: &WorkerRequest) -> WorkerResponse {
             JobKind::RunOnlineSessionScorer => jobs::execute_online_session(request).await,
             // Phase 19: native prompt-optimization execution lands here.
             JobKind::OptimizePrompts => Err(EngineError::UnsupportedJobKind(request.job_kind)),
-            // Phase 19: native issue-discovery execution lands here.
-            JobKind::InvokeIssueDetection => Err(EngineError::UnsupportedJobKind(request.job_kind)),
+            JobKind::InvokeIssueDetection => unreachable!("native discovery returned above"),
             JobKind::InvokeGenaiEvaluate => jobs::execute_evaluate(request).await,
         }
     };
