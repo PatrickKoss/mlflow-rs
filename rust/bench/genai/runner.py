@@ -181,6 +181,7 @@ def launch_server(
     provider_url: str,
     artifact_prefix: str,
     stub_path: Path,
+    extra_env: dict[str, str] | None = None,
 ) -> ServerHandle:
     port = free_port()
     home = workdir / "home"
@@ -262,6 +263,7 @@ def launch_server(
         "TMPDIR": str(workdir / "tmp"),
         "T23_MOCK_PROVIDER_URL": provider_url,
     }
+    env.update(extra_env or {})
     Path(env["TMPDIR"]).mkdir()
     process = subprocess.Popen(
         command,
@@ -844,6 +846,10 @@ def parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser("validate", help="validate raw result JSON")
     validate_parser.add_argument("files", nargs="+", type=Path)
     validate_parser.set_defaults(func=validate_command)
+    from rust.bench.genai.t23_2 import add_arguments
+
+    matrix_parser = subparsers.add_parser("t23-2", help="run the Tier-A CRUD/read matrix")
+    add_arguments(matrix_parser)
     return value
 
 

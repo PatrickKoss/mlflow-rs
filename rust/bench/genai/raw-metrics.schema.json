@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mlflow.org/schemas/rust-bench-genai-raw-metrics-1.0.0.json",
+  "$id": "https://mlflow.org/schemas/rust-bench-genai-raw-metrics-1.1.0.json",
   "title": "MLflow Phase 23 GenAI raw benchmark metrics",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
     "equivalence"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"enum": ["1.0.0", "1.1.0"]},
     "run": {
       "type": "object",
       "additionalProperties": false,
@@ -26,9 +26,25 @@
         "workload": {"type": "string"},
         "seed": {"type": "integer"},
         "concurrency": {"type": "integer", "minimum": 1},
+        "db_pool_config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pool_size", "max_overflow", "postgres_max_connections"],
+          "properties": {
+            "pool_size": {"type": "integer", "minimum": 1},
+            "max_overflow": {"type": "integer", "minimum": 0},
+            "postgres_max_connections": {"type": "integer", "minimum": 1}
+          }
+        },
         "warmup_requests": {"type": "integer", "minimum": 0},
         "started_at": {"type": "string", "format": "date-time"},
-        "finished_at": {"type": "string", "format": "date-time"}
+        "finished_at": {"type": "string", "format": "date-time"},
+        "family": {"type": "string"},
+        "payload_size": {"enum": ["small", "large"]},
+        "mix": {"enum": ["write-heavy", "read-heavy"]},
+        "measured_requests": {"type": "integer", "minimum": 1},
+        "canonical_requests": {"type": "integer", "minimum": 1},
+        "large_definition": {"type": "string"}
       }
     },
     "summary": {
@@ -49,7 +65,8 @@
             "requests": {"type": "integer", "minimum": 0},
             "errors": {"type": "integer", "minimum": 0},
             "error_rate": {"type": "number", "minimum": 0, "maximum": 1},
-            "rps": {"type": "number", "minimum": 0}
+            "rps": {"type": "number", "minimum": 0},
+            "latency_ms": {"$ref": "#/$defs/percentiles"}
           }
         }
       }
@@ -101,6 +118,27 @@
         }
       }
     },
+    "machine_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "load_average", "pids_current", "process_count", "target_tree_pids", "matching_processes"],
+      "properties": {
+        "timestamp": {"type": "string", "format": "date-time"},
+        "load_average": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "number"}], "items": false},
+        "pids_current": {"type": ["integer", "null"], "minimum": 0},
+        "process_count": {"type": "integer", "minimum": 0},
+        "target_tree_pids": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "matching_processes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pid", "command"],
+            "properties": {"pid": {"type": "integer", "minimum": 1}, "command": {"type": "string"}}
+          }
+        }
+      }
+    },
     "equivalence": {
       "type": "object",
       "additionalProperties": false,
@@ -108,7 +146,8 @@
       "properties": {
         "sample_seed": {"type": "integer"},
         "samples": {"type": "array", "items": {"type": "object"}},
-        "jobs": {"type": "array", "items": {"$ref": "#/$defs/job"}}
+        "jobs": {"type": "array", "items": {"$ref": "#/$defs/job"}},
+        "verdict": {"enum": ["PENDING", "PASS", "FAIL"]}
       }
     }
   },
@@ -172,6 +211,7 @@
         "latency_ms": {"type": "number", "minimum": 0},
         "error": {"type": ["string", "null"]},
         "response": {},
+        "request_bytes": {"type": ["integer", "null"], "minimum": 0},
         "sse": {"$ref": "#/$defs/sse"}
       }
     },

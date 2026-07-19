@@ -13,7 +13,10 @@ UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b"
 )
 TRACE_RE = re.compile(r"\btr-[0-9a-fA-F]{16,}\b")
+PREFIXED_ID_RE = re.compile(r"\b[a-zA-Z]{1,5}-[0-9a-fA-F]{16,64}\b")
 STUB_SESSION_RE = re.compile(r"mlflow-dev-stub-[A-Za-z0-9-]+")
+CONCURRENT_GATEWAY_MODEL_RE = re.compile(r"\bobvious-fake-model-\d+\b")
+LOOPBACK_PORT_RE = re.compile(r"http://127\.0\.0\.1:\d+")
 ID_KEYS = {
     "assessment_id",
     "digest",
@@ -26,6 +29,10 @@ ID_KEYS = {
 }
 VOLATILE_FRAGMENTS = (
     "timestamp",
+    "created_at",
+    "updated_at",
+    "creation_time",
+    "update_time",
     "duration",
     "latency",
     "elapsed",
@@ -40,7 +47,13 @@ VOLATILE_FRAGMENTS = (
 def _normalize_string(value: str) -> str:
     value = UUID_RE.sub("<uuid>", value)
     value = TRACE_RE.sub("<trace-id>", value)
+    value = PREFIXED_ID_RE.sub("<id>", value)
     value = STUB_SESSION_RE.sub("<provider-session-id>", value)
+    # Endpoint create/update responses embed the current write-side model.
+    # Under concurrent model updates that joined state can legitimately come
+    # from a different sequence even though both requests succeed identically.
+    value = CONCURRENT_GATEWAY_MODEL_RE.sub("<concurrent-model-state>", value)
+    value = LOOPBACK_PORT_RE.sub("http://127.0.0.1:<port>", value)
     return value.replace("/assistant/stream/<uuid>", "/assistant/sessions/<uuid>/stream")
 
 
@@ -55,7 +68,11 @@ def normalize(value: Any, key: str = "") -> Any:
     if lower.endswith("_time") or any(fragment in lower for fragment in VOLATILE_FRAGMENTS):
         return "<time>" if value is not None else None
     if isinstance(value, dict):
-        normalized = {name: normalize(item, name) for name, item in sorted(value.items())}
+        normalized = {
+            name: normalized_item
+            for name, item in sorted(value.items())
+            if (normalized_item := normalize(item, name)) is not None
+        }
         if normalized.get("metadata") == {}:
             normalized.pop("metadata")
         return normalized
@@ -80,6 +97,13 @@ def normalize(value: Any, key: str = "") -> Any:
                 else:
                     lines.append(_normalize_string(line))
             return "\n".join(lines)
+        if value.startswith(("{", "[")):
+            try:
+                return json.dumps(
+                    normalize(json.loads(value)), sort_keys=True, separators=(",", ":")
+                )
+            except json.JSONDecodeError:
+                pass
         return _normalize_string(value)
     return value
 
