@@ -10,6 +10,7 @@ mod judge;
 mod memory;
 mod payload;
 mod protocol;
+mod third_party;
 mod trace;
 mod worker;
 
@@ -24,6 +25,7 @@ pub use protocol::{
     decode_worker_request, ExecutionFailure, InvokeScorerParams, JobKind, WorkerRequest,
     WorkerResponse, NATIVE_WORKER_PROTOCOL_VERSION,
 };
+pub use third_party::{supported_third_party_metrics, ThirdPartyFamily, ThirdPartyMetric};
 pub use worker::{WorkerLaunchError, WorkerLauncher};
 
 pub const MLFLOW_GENAI_WORKER_FIXTURE: &str = "MLFLOW_GENAI_WORKER_FIXTURE";

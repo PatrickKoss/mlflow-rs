@@ -96,6 +96,8 @@ pub enum EngineError {
     Tool(String),
     #[error("result serialization failed: {0}")]
     Serialization(String),
+    #[error("{0}")]
+    ThirdParty(String),
 }
 
 /// Shared native scorer/judge execution surface used by workers and inline guardrails.
@@ -148,9 +150,11 @@ impl ScorerExecutor {
             SerializedScorer::MemoryAugmented { common, data } => {
                 crate::memory::execute(self, common, data, item, gateway_url, embedding_url).await
             }
-            SerializedScorer::Decorator { .. } | SerializedScorer::ThirdParty { .. } => {
-                Err(EngineError::UnsupportedScorer)
+            SerializedScorer::ThirdParty { common, data } => {
+                crate::third_party::execute(self, common, data, item, gateway_url, embedding_url)
+                    .await
             }
+            SerializedScorer::Decorator { .. } => Err(EngineError::UnsupportedScorer),
         }
     }
 
