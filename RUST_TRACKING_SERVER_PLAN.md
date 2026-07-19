@@ -32,8 +32,13 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   tasks native, Python-free, with six pinned oracles as gates. Also
   2026-07-19: root-caused the day's "load-correlated flakes"/ICEs to
   leaked uvicorn reference servers exhausting the WSL2 cgroup pid limit
-  (see T19.5 note); post-cleanup full suite 1,353 tests green. Next:
-  Phase 20 (assistant §12.10 + promptlab §12.11).
+  (see T19.5 note); post-cleanup full suite 1,353 tests green. Phase 20
+  (assistant + promptlab) COMPLETE 2026-07-19: all four tasks — sessions +
+  9 routes with SSE/localhost parity, CLI providers (20/20 stub-frame
+  differentials), OpenAI-compatible provider + openat2 tool sandbox with
+  all-negative escape suite, promptlab + demo routes with cross-language
+  pyfunc load. ALL §12 external route families now implemented — zero
+  planned routes remain. Next: Phase 21 (trace archival, closes D6).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3614,7 +3619,7 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       all health modes) incl. one real dev-stub session. NOTE: not yet
       wired into T20.1's `AssistantProvider` trait (which also needs
       list_models) — first work item of T20.3. Post-merge gates 14/14.
-- [ ] **T20.3 OpenAI-compatible provider + tool executor**: tool loop,
+- [x] **T20.3 OpenAI-compatible provider + tool executor**: tool loop,
       permission pause/resume, session-in-session_id encoding + 500 KB
       trim-by-turn-groups, sandboxed Bash/Read/Write/Edit with the
       confinement checks ported exactly + adversarial escape tests.
@@ -3622,6 +3627,27 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       negative.
       **VER:** `rust/tests/assistant_tools.rs` incl. traversal/symlink
       matrix.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge from f96444704):** AC
+      MET. Also closed the T20.1×T20.2 wiring debt: `CliProvider` adapter
+      implements `AssistantProvider` over the T20.2 module (spawn/health,
+      PID persistence for route-level cancel, all six event types mapped);
+      list_models stays unsupported matching Python's inherited impl;
+      route-level stub-CLI chat frame-identical end to end (CLI
+      differential now 21/21). OpenAI-compatible provider: tool loop with
+      chunked tool-call accumulation, <think> stripping across split
+      frames, permission pause/resume semantics (allow overrides static
+      restrictions per-call; deny records error tool result; abandoned
+      calls closed "Tool call cancelled by user."), history-in-session_id
+      encoding, exact 500 KiB oldest-turn-group trimming — 3/3 transcript
+      differentials match frames AND outbound model payloads. Tool sandbox
+      in `assistant_tools.rs`/`openai_compatible.rs`: openat2
+      RESOLVE_BENEATH+NO_SYMLINKS+NO_MAGICLINKS descriptor-relative I/O,
+      race-safe mkdirat/O_NOFOLLOW, 120s/1MiB Bash caps, command
+      allowlist rejecting expansion/substitution/chaining/redirection;
+      escape suite ALL NEGATIVE (traversal, symlink pre-create + rename
+      swap races, write-through-symlink, ~, $VAR/$()/backticks, Python
+      fs tricks) against temp sandbox roots only. Post-merge gates 12/12
+      (1,386 tests; assistant differentials 25/25).
 - [x] **T20.4 Promptlab** per D19: run creation parity + pyfunc promptlab
       model artifact + `eval_results_table.json`, loadable by the Python
       client.
