@@ -38,7 +38,17 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   differentials), OpenAI-compatible provider + openat2 tool sandbox with
   all-negative escape suite, promptlab + demo routes with cross-language
   pyfunc load. ALL §12 external route families now implemented — zero
-  planned routes remain. Next: Phase 21 (trace archival, closes D6).
+  planned routes remain. Phase 21 (trace archival) COMPLETE 2026-07-19,
+  **D6 CLOSED**: config/flag with 20/20 byte-identical error parity +
+  5 s-TTL cache, store paths (archive→read→delete cycle matching Python
+  on sqlite + live Postgres 16, T4.1/T4.5 stubs removed), OTLP traces.pb
+  codec with cross-language golden fixtures byte-exact both directions,
+  scheduler with same-seed decision differential (fairness = name-sort +
+  shuffle, shared per-pass budget). Phase 23 added 2026-07-19 per user
+  directive: genai perf/resource evaluation Python-vs-Rust (Phase 14
+  style, deterministic fake providers, 1k–10k+ reqs/cell). Next:
+  Phase 23 T23.1 (bench harness), then Phase 22 (compliance & cutover;
+  Phase 23 must finish before T22.4 removes the Python container).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row).
@@ -3766,9 +3776,33 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       `rust/tools/trace_archival_cross_language.py` exact. Post-merge
       gates 13/13 green (incl. new otel-archival pytest step; 1,392 Rust
       tests / 120 suites, route parity 372/372, replay 188).
-- [ ] **T21.4 Scheduler task**: minute tick + interval gate + workspace
+- [x] **T21.4 Scheduler task**: minute tick + interval gate + workspace
       fairness + per-pass budget on the §14.6 scheduler.
       **AC/VER:** same-seed scheduling decisions match Python.
+      **DONE 2026-07-19** (codex agent, merged aebb9bd25; **Phase 21
+      COMPLETE**): `trace_archival_scheduler.rs` + main.rs wiring.
+      Python semantics mapped (trace_archival_service.py, jobs/utils.py,
+      workspace store): Huey checks immediately at consumer startup then
+      every 60 s, no jitter, missed checks skipped; config read through
+      the 5 s stale-on-error cache before interval admission; interval
+      anchor starts at monotonic 0.0, admits when now-last >=
+      interval_seconds, anchor updates BEFORE work; disabled/unconfigured/
+      invalid-without-stale returns zero without moving the anchor;
+      fairness = name-sort + random.shuffle every admitted pass
+      (randomized rotation, NOT round-robin); max_traces_per_pass shared
+      across workspaces, only successful archives consume budget; overlap
+      prevented via the shared DB scheduler lock (same task name);
+      per-workspace failure isolation; shutdown cancels without drain.
+      Deterministic tests: one injected monotonic clock drives interval
+      admission + config TTL; run_once_at/archive_traces_at for cutoffs;
+      real-store tests for budget sharing, seeded fairness, overlap,
+      stale/disabled config, failure isolation. Differential
+      `rust/tools/trace_archival_scheduler_differential.py` (in cargo
+      test): seeded workspace order, interval timelines, workspace/
+      experiment/trace selections, failures, remaining budgets — exact,
+      incl. >32-bit seeds. One additive API extension:
+      archive_traces_for_workspace_at. Post-merge gates 13/13 green
+      (1,421 Rust tests / 98 suites; route parity 372/372; replay 188).
 
 ### Phase 22 — Compliance & cutover
 
