@@ -199,6 +199,20 @@ IMPLEMENTED_EXTERNAL_ROUTES = {
         ("POST", "/ajax-api/2.0/mlflow/runs/create-promptlab-run"),
     ),
     **route_info(
+        "12.10",
+        "T20.1",
+        "assistant/api.py",
+        ("POST", "/ajax-api/3.0/mlflow/assistant/message"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/stream"),
+        ("PATCH", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}"),
+        ("POST", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/permission"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/health"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/config"),
+        ("PUT", "/ajax-api/3.0/mlflow/assistant/config"),
+        ("POST", "/ajax-api/3.0/mlflow/assistant/skills/install"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"),
+    ),
+    **route_info(
         "12.8",
         "T18.2",
         "server/__init__.py",
@@ -227,22 +241,9 @@ IMPLEMENTED_EXTERNAL_ROUTES = {
     ),
 }
 
-PLANNED_EXTERNAL_ROUTES = {
-    **planned(
-        "12.10",
-        "T20.1",
-        "assistant/api.py",
-        ("POST", "/ajax-api/3.0/mlflow/assistant/message"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/stream"),
-        ("PATCH", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}"),
-        ("POST", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/permission"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/health"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/config"),
-        ("PUT", "/ajax-api/3.0/mlflow/assistant/config"),
-        ("POST", "/ajax-api/3.0/mlflow/assistant/skills/install"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"),
-    ),
-}
+# All §12 external route families are implemented as of T20.1/T20.4; nothing
+# remains planned. Keep the dict so the parity report shape is stable.
+PLANNED_EXTERNAL_ROUTES: dict = {}
 
 
 def python_endpoints() -> set[tuple[str, str]]:

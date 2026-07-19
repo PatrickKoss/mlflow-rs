@@ -30,6 +30,7 @@ use mlflow_registry::RegistryStore;
 use mlflow_store::{JobStore, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
 
+use crate::assistant::AssistantRuntime;
 use crate::auth_api::signup::CsrfSecret;
 use crate::budget::BudgetTracker;
 
@@ -95,6 +96,10 @@ struct AppStateInner {
     proxied_artifacts_repo: Option<Arc<dyn ArtifactRepo>>,
     /// The raw `--artifacts-destination` URI (for error messages / diagnostics).
     artifacts_destination: Option<String>,
+    /// Native assistant storage and provider registry. The default resolves
+    /// Python's process-level paths; tests and provider ports replace it via
+    /// [`AppState::with_assistant_runtime`].
+    assistant_runtime: AssistantRuntime,
 }
 
 impl AppState {
@@ -130,6 +135,7 @@ impl AppState {
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
+                assistant_runtime: inner.assistant_runtime.clone(),
             }),
         }
     }
@@ -157,6 +163,7 @@ impl AppState {
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
+                assistant_runtime: inner.assistant_runtime.clone(),
             }),
         }
     }
@@ -180,6 +187,7 @@ impl AppState {
                 serve_artifacts: inner.serve_artifacts,
                 proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
                 artifacts_destination: inner.artifacts_destination.clone(),
+                assistant_runtime: inner.assistant_runtime.clone(),
             }),
         }
     }
@@ -245,6 +253,30 @@ impl AppState {
                 serve_artifacts,
                 proxied_artifacts_repo,
                 artifacts_destination,
+                assistant_runtime: AssistantRuntime::from_env(),
+            }),
+        }
+    }
+
+    /// Replace the assistant runtime without changing any tracking-plane
+    /// state. This is the integration seam for T20.2 providers and hermetic
+    /// scripted HTTP tests.
+    pub fn with_assistant_runtime(self, assistant_runtime: AssistantRuntime) -> Self {
+        let inner = &self.inner;
+        Self {
+            inner: Arc::new(AppStateInner {
+                tracking_store: inner.tracking_store.clone(),
+                budget_tracker: inner.budget_tracker.clone(),
+                registry_store: inner.registry_store.clone(),
+                webhook_store: inner.webhook_store.clone(),
+                webhook_dispatcher: inner.webhook_dispatcher.clone(),
+                auth_store: inner.auth_store.clone(),
+                csrf_secret: inner.csrf_secret.clone(),
+                workspace_store: inner.workspace_store.clone(),
+                serve_artifacts: inner.serve_artifacts,
+                proxied_artifacts_repo: inner.proxied_artifacts_repo.clone(),
+                artifacts_destination: inner.artifacts_destination.clone(),
+                assistant_runtime,
             }),
         }
     }
@@ -292,6 +324,10 @@ impl AppState {
     /// the underlying pool handles.
     pub fn job_store(&self) -> JobStore {
         JobStore::new(self.inner.tracking_store.db().clone())
+    }
+
+    pub fn assistant_runtime(&self) -> &AssistantRuntime {
+        &self.inner.assistant_runtime
     }
 
     /// The model-registry store (`_get_model_registry_store()`,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import json
 import os
 import shlex
 import shutil
@@ -66,6 +67,7 @@ def on_signal(signum: int, _frame: object) -> None:
 def start_backend(port: int) -> tuple[subprocess.Popen[bytes], list[Path]]:
     backend_args: list[str] = []
     tmp_paths: list[Path] = []
+    server_type = os.environ.get("MLFLOW_SERVER_TYPE", "python").lower()
     if tracking_uri := os.environ.get("MLFLOW_TRACKING_URI"):
         backend_args += ["--backend-store-uri", tracking_uri, "--default-artifact-root", "mlruns"]
     elif backend_uri := os.environ.get("MLFLOW_BACKEND_STORE_URI"):
@@ -74,6 +76,20 @@ def start_backend(port: int) -> tuple[subprocess.Popen[bytes], list[Path]]:
         db_fd, db_path_str = tempfile.mkstemp(prefix="mlflow-dev-", suffix=".db")
         os.close(db_fd)
         db_path = Path(db_path_str)
+        if server_type == "rust":
+            fixture_db = (
+                REPO_ROOT
+                / "rust"
+                / "crates"
+                / "mlflow-server"
+                / "tests"
+                / "fixtures"
+                / "tracking.db"
+            )
+            shutil.copyfile(
+                fixture_db,
+                db_path,
+            )
         artifacts_path = Path(tempfile.mkdtemp(prefix="mlflow-dev-artifacts-"))
         tmp_paths += [db_path, artifacts_path]
         backend_args += [
@@ -86,7 +102,31 @@ def start_backend(port: int) -> tuple[subprocess.Popen[bytes], list[Path]]:
     if registry_uri := os.environ.get("MLFLOW_REGISTRY_URI"):
         backend_args += ["--registry-store-uri", registry_uri]
 
-    cmd = [sys.executable, "-m", "mlflow", "server", *backend_args, "--dev", "--port", str(port)]
+    if server_type == "rust":
+        rust_manifest = REPO_ROOT / "rust" / "Cargo.toml"
+        cmd = [
+            "cargo",
+            "run",
+            "--manifest-path",
+            str(rust_manifest),
+            "--bin",
+            "mlflow-server",
+            "--",
+            *backend_args,
+            "--port",
+            str(port),
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "mlflow",
+            "server",
+            *backend_args,
+            "--dev",
+            "--port",
+            str(port),
+        ]
     print(f"Running tracking server: {shlex.join(cmd)}")
     proc = subprocess.Popen(cmd, cwd=REPO_ROOT, start_new_session=True)
     wait_ready(f"http://localhost:{port}/health", "tracking server")
@@ -125,6 +165,43 @@ def wait_ready(url: str, label: str, timeout: float = 60.0) -> None:
     raise SystemExit(f"Failed to launch {label} (gave up after {timeout:.0f}s)")
 
 
+def smoke_assistant_backend(port: int) -> None:
+    """Assert the credential-free Assistant HTTP/SSE surface used by the UI."""
+    prefix = f"http://localhost:{port}/ajax-api/3.0/mlflow/assistant"
+
+    def request(path: str, method: str = "GET", body: dict | None = None):
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {"Content-Type": "application/json"} if data is not None else {}
+        return urllib.request.urlopen(
+            urllib.request.Request(prefix + path, data=data, headers=headers, method=method),
+            timeout=10,
+        )
+
+    with request("/providers/claude_code/health") as response:
+        assert response.status == 200
+        assert json.load(response) == {"status": "ok"}
+    with request(
+        "/config",
+        method="PUT",
+        body={"providers": {"claude_code": {"selected": True}}},
+    ) as response:
+        assert response.status == 200
+        assert json.load(response)["providers"]["claude_code"]["selected"] is True
+    with request("/message", method="POST", body={"message": "dev stub smoke"}) as response:
+        assert response.status == 200
+        sent = json.load(response)
+    session_id = sent["session_id"]
+    assert sent["stream_url"].endswith(f"/sessions/{session_id}/stream")
+    with request(f"/sessions/{session_id}/stream") as response:
+        assert response.status == 200
+        assert response.headers.get_content_type() == "text/event-stream"
+        stream = response.read()
+    for frame in (b"event: message\n", b"event: stream_event\n", b"event: done\n"):
+        assert frame in stream
+    assert b"synthetic reply from the MLflow dev stub Claude CLI" in stream
+    print("Assistant Rust dev-stub smoke passed (health/config/message/SSE)")
+
+
 def main() -> None:
     # Line-buffer prints so progress shows up live when stdout is redirected to a file.
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
@@ -139,10 +216,16 @@ def main() -> None:
             f"Available: {', '.join(dev_stubs.AVAILABLE_STUBS)}."
         ),
     )
+    parser.add_argument(
+        "--assistant-smoke",
+        action="store_true",
+        help="Probe the backend Assistant dev-stub surface and exit without launching React.",
+    )
     args = parser.parse_args()
     stub_names = [s.strip() for s in args.stub_providers.split(",") if s.strip()]
 
-    subprocess.check_call(["yarn", "install"], cwd=JS_DIR)
+    if not args.assistant_smoke:
+        subprocess.check_call(["yarn", "install"], cwd=JS_DIR)
 
     backend_port = find_free_port(5000)
     frontend_port = find_free_port(3000, avoid=frozenset({backend_port}))
@@ -151,6 +234,14 @@ def main() -> None:
 
     children: list[subprocess.Popen[bytes]] = []
     tmp_paths: list[Path] = []
+
+    if args.assistant_smoke:
+        original_home = Path.home()
+        os.environ.setdefault("CARGO_HOME", str(original_home / ".cargo"))
+        os.environ.setdefault("RUSTUP_HOME", str(original_home / ".rustup"))
+        smoke_home = Path(tempfile.mkdtemp(prefix="mlflow-assistant-smoke-home-"))
+        os.environ["HOME"] = str(smoke_home)
+        tmp_paths.append(smoke_home)
 
     atexit.register(cleanup, children, tmp_paths)
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -164,10 +255,15 @@ def main() -> None:
         tmp_paths.extend(stubs.cleanup_paths)
         for message in stubs.messages:
             print(message)
+        if os.environ.get("MLFLOW_SERVER_TYPE", "python").lower() == "rust":
+            os.environ["MLFLOW_ASSISTANT_DEV_STUB_PROVIDERS"] = ",".join(stub_names)
 
     backend_proc, backend_tmp = start_backend(backend_port)
     children.append(backend_proc)
     tmp_paths.extend(backend_tmp)
+    if args.assistant_smoke:
+        smoke_assistant_backend(backend_port)
+        return
     children.append(start_frontend(backend_port, frontend_port))
 
     # Block until any child exits; atexit reaps the rest.
