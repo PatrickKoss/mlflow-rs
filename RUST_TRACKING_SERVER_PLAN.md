@@ -3583,6 +3583,19 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       cross-server tests leak the reference server when the test binary
       dies uncleanly (Drop never runs) — consider process-group spawn +
       stale-server reaper in mlflow-test-support.
+      **Backlog CLOSED 2026-07-19** (codex agent, merged ac362f918):
+      `mlflow-test-support/src/reference_server.rs` centralizes both
+      cross-server spawn sites — setsid process groups, group-kill Drop
+      (SIGTERM→SIGKILL), best-effort PDEATHSIG on the direct child,
+      owner PID+start-time tags (PID-reuse safe); reaper runs on every
+      reference-server start + standalone
+      `cargo run -p mlflow-test-support --bin reap-reference-servers`.
+      Conservative: tagged servers reaped only when same-UID owner dead;
+      untagged only on exact cmdline + adoption by PID 1/WSL init relay;
+      dev servers/live owners never touched. 5 unit + 3 integration
+      tests + live SIGKILL demonstration (zero orphans after). Reaped
+      the box's 40 accumulated orphans (pids.current 2144→121).
+      Post-merge gates 13/13 green.
 
 ### Phase 20 — Assistant + promptlab
 
