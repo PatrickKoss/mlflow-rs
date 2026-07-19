@@ -8,8 +8,8 @@
 use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::{Map, Value};
 
@@ -65,9 +65,35 @@ pub struct SystemMonotonicClock;
 
 impl TraceArchivalConfigClock for SystemMonotonicClock {
     fn now(&self) -> Duration {
-        static ORIGIN: OnceLock<Instant> = OnceLock::new();
-        ORIGIN.get_or_init(Instant::now).elapsed()
+        monotonic_now()
     }
+}
+
+#[cfg(unix)]
+fn monotonic_now() -> Duration {
+    let mut value = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // `CLOCK_MONOTONIC` is Python `time.monotonic()`'s Unix clock source. It
+    // also preserves Python's initial scheduler comparison against 0.0; an
+    // `Instant` origin created on first use would incorrectly delay the first
+    // archival pass by a full configured interval.
+    let result = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut value) };
+    if result == 0 {
+        Duration::new(value.tv_sec.max(0) as u64, value.tv_nsec.max(0) as u32)
+    } else {
+        Duration::ZERO
+    }
+}
+
+#[cfg(not(unix))]
+fn monotonic_now() -> Duration {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    static ORIGIN: OnceLock<Instant> = OnceLock::new();
+    ORIGIN.get_or_init(Instant::now).elapsed()
 }
 
 type Loader =

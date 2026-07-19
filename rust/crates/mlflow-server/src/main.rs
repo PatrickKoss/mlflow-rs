@@ -59,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
     // the ops-only app (health/version/metrics). The store is verified against
     // the expected Alembic head at connect time.
     let mut online_scoring_scheduler = None;
+    let mut trace_archival_scheduler = None;
     let (app, job_runner) = match &config.backend_store_uri {
         Some(uri) => {
             let db = Db::connect_and_verify_with(uri, PoolConfig::from_env()).await?;
@@ -153,6 +154,13 @@ async fn main() -> anyhow::Result<()> {
                         app_state.workspace_store().cloned(),
                     ),
                 );
+                trace_archival_scheduler = Some(
+                    mlflow_server::trace_archival_scheduler::TraceArchivalScheduler::new(
+                        app_state.tracking_store().clone(),
+                        app_state.workspace_store().cloned(),
+                        config.clone(),
+                    ),
+                );
             }
             let job_runner = if config.job_execution_enabled {
                 let worker = resolve_worker_program().map_err(|error| {
@@ -190,6 +198,8 @@ async fn main() -> anyhow::Result<()> {
 
     let scheduler_task =
         online_scoring_scheduler.map(|scheduler| tokio::spawn(scheduler.run_periodic()));
+    let trace_archival_scheduler_task =
+        trace_archival_scheduler.map(|scheduler| tokio::spawn(scheduler.run_periodic()));
     let serve_result = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -197,6 +207,9 @@ async fn main() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await;
     if let Some(task) = scheduler_task {
+        task.abort();
+    }
+    if let Some(task) = trace_archival_scheduler_task {
         task.abort();
     }
     if let Some(runner) = job_runner {
