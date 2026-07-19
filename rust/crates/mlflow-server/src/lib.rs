@@ -14,6 +14,7 @@
 
 pub mod artifacts;
 pub mod assessments;
+pub mod assistant;
 pub mod auth_api;
 pub mod auth_middleware;
 pub mod budget;
@@ -414,6 +415,10 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
         axum::routing::post(invoke::invoke_issue_detection),
     );
     // ---- end GenAI invoke submissions ----
+
+    // ---- Assistant (T20.1, §12.10) ----
+    router = router.merge(assistant::routes());
+    // ---- end Assistant ----
 
     // ---- Gateway runtime (T18.3/T18.4, §12.9) ----
     router = router.route(

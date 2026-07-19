@@ -17,6 +17,7 @@ use mlflow_server::native_worker::{
 use mlflow_server::{build_app, build_app_with_state, AppState, Cli, ServerConfig};
 use mlflow_store::{Db, PoolConfig, TrackingStore, WorkspaceStore};
 use mlflow_webhooks::{WebhookDispatcher, WebhookStore};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -189,9 +190,12 @@ async fn main() -> anyhow::Result<()> {
 
     let scheduler_task =
         online_scoring_scheduler.map(|scheduler| tokio::spawn(scheduler.run_periodic()));
-    let serve_result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await;
+    let serve_result = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await;
     if let Some(task) = scheduler_task {
         task.abort();
     }

@@ -193,6 +193,20 @@ PLANNED_GET_ENDPOINT_ROUTES = {
 # accounting.
 IMPLEMENTED_EXTERNAL_ROUTES = {
     **route_info(
+        "12.10",
+        "T20.1",
+        "assistant/api.py",
+        ("POST", "/ajax-api/3.0/mlflow/assistant/message"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/stream"),
+        ("PATCH", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}"),
+        ("POST", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/permission"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/health"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/config"),
+        ("PUT", "/ajax-api/3.0/mlflow/assistant/config"),
+        ("POST", "/ajax-api/3.0/mlflow/assistant/skills/install"),
+        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"),
+    ),
+    **route_info(
         "12.8",
         "T18.2",
         "server/__init__.py",
@@ -222,20 +236,6 @@ IMPLEMENTED_EXTERNAL_ROUTES = {
 }
 
 PLANNED_EXTERNAL_ROUTES = {
-    **planned(
-        "12.10",
-        "T20.1",
-        "assistant/api.py",
-        ("POST", "/ajax-api/3.0/mlflow/assistant/message"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/stream"),
-        ("PATCH", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}"),
-        ("POST", "/ajax-api/3.0/mlflow/assistant/sessions/{session_id}/permission"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/health"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/config"),
-        ("PUT", "/ajax-api/3.0/mlflow/assistant/config"),
-        ("POST", "/ajax-api/3.0/mlflow/assistant/skills/install"),
-        ("GET", "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"),
-    ),
     **planned(
         "12.11",
         "T20.4",

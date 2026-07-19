@@ -753,9 +753,14 @@ async fn bad_max_results_is_invalid_parameter_value() {
 async fn unimplemented_endpoint_returns_404() {
     let server = TestServer::start("unimpl").await;
     // An unimplemented hand-registered family still falls through with no route
-    // match. Assistant routes (§12.10) remain planned for T20.1, so this
-    // sentinel moves forward from gateway discovery now that T18.2 has landed.
-    let res = get(&server, "/ajax-api/3.0", "/mlflow/assistant/config").await;
+    // match. Promptlab (§12.11) remains planned for T20.4, so this sentinel
+    // moves forward from Assistant now that T20.1 has landed.
+    let res = get(
+        &server,
+        "/ajax-api/2.0",
+        "/mlflow/runs/create-promptlab-run",
+    )
+    .await;
     assert_eq!(res.status, StatusCode::NOT_FOUND);
     // Route miss, not a JSON error body from a matched handler.
     assert!(res.body.is_empty(), "{}", res.body);
