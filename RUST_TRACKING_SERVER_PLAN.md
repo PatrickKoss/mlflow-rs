@@ -3591,13 +3591,29 @@ benefits from 18 (gateway, for judge LLM calls); 20–21 are independent of 19.
       flip + PLANNED_EXTERNAL_ROUTES now empty (all §12 implemented);
       404 sentinel repointed to a permanently-nonexistent path.
       Post-merge gates 13/13 green (incl. new assistant differential).
-- [ ] **T20.2 CLI providers**: claude/codex subprocess spawn (exact flag
+- [x] **T20.2 CLI providers**: claude/codex subprocess spawn (exact flag
       construction, permission modes), NDJSON parsing, message filtering,
       usage events, SIGKILL→interrupted, cancellation, health probes with
       the 501/412/401 mapping.
       **AC:** stub-CLI streams frame-identical to Python; real-CLI manual
       smoke.
       **VER:** SSE recorder vs Python with the stub.
+      **DONE 2026-07-19 (codex gpt-5.6-sol, merge 880a1354d):** AC MET
+      (stub part; real-CLI manual smoke deferred to the browser/manual
+      backlog with T14.3). Self-contained `assistant_providers/` module:
+      byte-exact argv per permission mode for claude+codex (incl. ordered
+      allowed-tools, bypassPermissions, resume, health-probe invocations),
+      copied byte-compatible system prompts, 100 MiB NDJSON line limit,
+      Claude skill-message filtering + rate-limit surfacing + authoritative
+      total_cost_usd, Codex thread capture + pinned OpenAI pricing with
+      cache-read subset semantics, SIGTERM cancel = "Process exited with
+      code -15", SIGKILL→interrupted, stream-drop kills child; health
+      501/412/401 bodies exact. Differential recorder
+      `test_assistant_cli_provider_differential.py`: 20/20 sessions
+      frame-identical (permission matrix, resume, cancellation, SIGKILL,
+      all health modes) incl. one real dev-stub session. NOTE: not yet
+      wired into T20.1's `AssistantProvider` trait (which also needs
+      list_models) — first work item of T20.3. Post-merge gates 14/14.
 - [ ] **T20.3 OpenAI-compatible provider + tool executor**: tool loop,
       permission pause/resume, session-in-session_id encoding + 500 KB
       trim-by-turn-groups, sandboxed Bash/Read/Write/Edit with the
