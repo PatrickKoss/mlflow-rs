@@ -87,6 +87,21 @@ def test_deserialize_normalizes_spans_to_root_first_order():
     assert [span.name for span in restored] == ["root_span", "child_span"]
 
 
+def test_serialize_normalizes_spans_to_root_first_order():
+    traces_data = TracesData()
+    traces_data.ParseFromString(
+        spans_to_traces_data_pb([
+            _make_span(trace_id=1, span_id=20, name="child_span", parent_span_id=30),
+            _make_span(trace_id=1, span_id=30, name="root_span"),
+        ])
+    )
+
+    assert [span.name for span in traces_data.resource_spans[0].scope_spans[0].spans] == [
+        "root_span",
+        "child_span",
+    ]
+
+
 def test_serialized_traces_data_preserves_resource_attributes():
     resource = OTelResource.create({
         "service.name": "test-service",
@@ -107,6 +122,19 @@ def test_serialized_traces_data_preserves_resource_attributes():
     assert attrs["service.name"] == "test-service"
     assert attrs["service.version"] == "1.0.0"
     assert attrs["deployment.environment.name"] == "test"
+
+
+def test_round_trip_preserves_resource_attributes():
+    resource = OTelResource({
+        "service.name": "test-service",
+        "service.version": "1.0.0",
+    })
+    original = [_make_span(trace_id=1, span_id=10, resource=resource)]
+
+    restored = traces_data_pb_to_spans(spans_to_traces_data_pb(original))
+
+    assert restored[0]._span.resource.attributes == resource.attributes
+    assert spans_to_traces_data_pb(restored) == spans_to_traces_data_pb(original)
 
 
 def test_rejects_multiple_otlp_trace_ids_even_with_same_request_id():
