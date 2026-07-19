@@ -22,3 +22,5 @@ GET /ajax-api/3.0/mlflow/gateway/provider-config     # gateway discovery (T18.2)
 GET /ajax-api/3.0/mlflow/gateway/secrets/config      # gateway discovery (T18.2) — hand-registered Flask route, not a proto RPC
 GET /ajax-api/3.0/mlflow/gateway/supported-models    # gateway discovery (T18.2) — hand-registered Flask route, not a proto RPC
 GET /ajax-api/3.0/mlflow/gateway/supported-providers # gateway discovery (T18.2) — hand-registered Flask route, not a proto RPC
+POST /ajax-api/3.0/mlflow/demo/generate              # demo generation (T20.4) — hand-registered Flask route, not a proto RPC
+POST /ajax-api/3.0/mlflow/demo/delete                # demo deletion (T20.4) — hand-registered Flask route, not a proto RPC

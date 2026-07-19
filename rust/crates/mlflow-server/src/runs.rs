@@ -778,7 +778,7 @@ fn run_status_to_string(status: i32) -> String {
 /// Map a store [`Run`] to the proto message (`Run.to_proto`): info + data +
 /// inputs + outputs, each section always emitted (Python's `MergeFrom` on a
 /// truthy sub-entity; the store always returns all four).
-fn to_proto_run(run: Run) -> pb::Run {
+pub(crate) fn to_proto_run(run: Run) -> pb::Run {
     pb::Run {
         info: Some(to_proto_run_info(run.info)),
         data: Some(to_proto_run_data(run.data)),

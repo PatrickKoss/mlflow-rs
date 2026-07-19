@@ -260,7 +260,7 @@ where
 
 /// `_validate_content_type(request, ["application/json"])`, applied to POST/PUT
 /// only (`mlflow/server/validation.py:5-30`).
-fn validate_content_type(parts: &Parts) -> Result<(), MlflowError> {
+pub(crate) fn validate_content_type(parts: &Parts) -> Result<(), MlflowError> {
     if parts.method != Method::POST && parts.method != Method::PUT {
         return Ok(());
     }
