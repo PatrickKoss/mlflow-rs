@@ -89,9 +89,9 @@ publishes:
 The Rust version advances independently of upstream MLflow's version. The fork
 does not publish its path-dependent workspace crates to crates.io; use release
 binaries or `cargo install --git` for native installs. It tracks upstream master
-through periodic syncs; the
-[sync documentation](../docs/rust-sync/README.md) is a forward reference to a
-sibling branch that adds the sync state and process.
+through periodic syncs; see the
+[sync documentation](../docs/rust-sync/README.md) for the sync state and
+process.
 
 ## Layout
 
