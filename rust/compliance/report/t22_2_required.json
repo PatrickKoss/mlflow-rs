@@ -2,14 +2,14 @@
   "coverage_note": "Required Rust repointable and client-only runs are present on both backends; repointable tests used a fresh server and database per test.",
   "coverage_status": "complete",
   "ledger_counts": {
-    "client_only": 346,
+    "client_only": 375,
     "dead": 0,
     "server_reachable": 1546
   },
   "ledger_reference": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
   "ledger_test_counts": {
-    "client_only": 183,
-    "python_internal": 3344,
+    "client_only": 184,
+    "python_internal": 3433,
     "server_reachable": 35
   },
   "profile": "required",

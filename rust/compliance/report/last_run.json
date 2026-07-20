@@ -1,6 +1,6 @@
 {
   "summary": {
-    "cases_run": 308,
+    "cases_run": 313,
     "non_allowlisted_diffs": 0,
     "allowlisted_diffs": 11,
     "status_mismatches": 0,
@@ -30,7 +30,7 @@
       "errors": 0
     },
     "gateway": {
-      "cases": 47,
+      "cases": 50,
       "status_mismatch": 0,
       "diffs": 0,
       "allowlisted": 0,
@@ -113,13 +113,6 @@
       "allowlisted": 0,
       "errors": 0
     },
-    "traces": {
-      "cases": 12,
-      "status_mismatch": 0,
-      "diffs": 0,
-      "allowlisted": 3,
-      "errors": 0
-    },
     "webhooks": {
       "cases": 7,
       "status_mismatch": 0,
@@ -132,6 +125,13 @@
       "status_mismatch": 0,
       "diffs": 0,
       "allowlisted": 0,
+      "errors": 0
+    },
+    "traces": {
+      "cases": 14,
+      "status_mismatch": 0,
+      "diffs": 0,
+      "allowlisted": 3,
       "errors": 0
     },
     "gateway_proxy_validation": {
@@ -683,7 +683,7 @@
       "allowlisted": [
         {
           "json_pointer": "/message",
-          "python_value": "Experiment(name=exp_alpha) already exists. Error: (sqlite3.IntegrityError) UNIQUE constraint failed: experiments.workspace, experiments.name\n[SQL: INSERT INTO experiments (name, workspace, artifact_location, lifecycle_stage, creation_time, last_update_time) VALUES (?, ?, ?, ?, ?, ?)]\n[parameters: ('exp_alpha', 'default', '', 'active', 1784584351327, 1784584351327)]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+          "python_value": "Experiment(name=exp_alpha) already exists. Error: (sqlite3.IntegrityError) UNIQUE constraint failed: experiments.workspace, experiments.name\n[SQL: INSERT INTO experiments (name, workspace, artifact_location, lifecycle_stage, creation_time, last_update_time) VALUES (?, ?, ?, ?, ?, ?)]\n[parameters: ('exp_alpha', 'default', '', 'active', 1784587917089, 1784587917089)]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
           "rust_value": "Experiment(name=exp_alpha) already exists. Error: (workspace, name) must be unique",
           "kind": "value",
           "reason": "Python leaks the raw SQLAlchemy IntegrityError into the message, including the INSERT statement and its bound parameters (which contain the request's creation_time) \u2014 the text differs even between two Python runs, so byte-parity is impossible by construction. Rust returns the same leading \"Experiment(name=...) already exists.\" sentence with a stable tail. Error code and status match."
@@ -720,6 +720,45 @@
     },
     {
       "name": "gateway_supported_models_openai",
+      "section": "gateway",
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/gateway/supported-models",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "gateway_supported_models_gemini",
+      "section": "gateway",
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/gateway/supported-models",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "gateway_supported_models_vertex_ai",
+      "section": "gateway",
+      "method": "GET",
+      "path": "/ajax-api/3.0/mlflow/gateway/supported-models",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "gateway_supported_models_fireworks_ai",
       "section": "gateway",
       "method": "GET",
       "path": "/ajax-api/3.0/mlflow/gateway/supported-models",
@@ -3067,186 +3106,6 @@
       "note": null
     },
     {
-      "name": "traces_setup_experiment",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/2.0/mlflow/experiments/create",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_start_v3",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_get_info_v3",
-      "section": "traces",
-      "method": "GET",
-      "path": "/api/3.0/mlflow/traces/tr-compliance-1/info",
-      "py_status": 404,
-      "rust_status": 404,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [
-        {
-          "json_pointer": "/__raw_text__",
-          "python_value": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
-          "rust_value": "",
-          "kind": "value",
-          "reason": "Flask default HTML 404 page vs empty axum body on an unmatched route; status matches."
-        }
-      ],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_start_v3_with_assessment",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_get_info_v3_with_assessment",
-      "section": "traces",
-      "method": "GET",
-      "path": "/api/3.0/mlflow/traces/tr-compliance-assessment",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_set_tag_v3",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces/tr-compliance-1/tags",
-      "py_status": 405,
-      "rust_status": 405,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [
-        {
-          "json_pointer": "/__raw_text__",
-          "python_value": "<!doctype html>\n<html lang=en>\n<title>405 Method Not Allowed</title>\n<h1>Method Not Allowed</h1>\n<p>The method is not allowed for the requested URL.</p>\n",
-          "rust_value": "",
-          "kind": "value",
-          "reason": "Flask default HTML 405 page vs empty axum body; status matches."
-        }
-      ],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_search_v3",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces/search",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_start_v3_second",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_search_v3_walk",
-      "section": "traces",
-      "method": "POST",
-      "path": "/api/3.0/mlflow/traces/search",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_delete_tag_v3",
-      "section": "traces",
-      "method": "DELETE",
-      "path": "/api/3.0/mlflow/traces/tr-compliance-1/tags",
-      "py_status": 400,
-      "rust_status": 400,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_search_v2_deprecated",
-      "section": "traces",
-      "method": "GET",
-      "path": "/api/2.0/mlflow/traces",
-      "py_status": 200,
-      "rust_status": 200,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [],
-      "error": null,
-      "note": null
-    },
-    {
-      "name": "trace_get_info_missing",
-      "section": "traces",
-      "method": "GET",
-      "path": "/api/3.0/mlflow/traces/tr-does-not-exist/info",
-      "py_status": 404,
-      "rust_status": 404,
-      "status_match": true,
-      "diffs": [],
-      "allowlisted": [
-        {
-          "json_pointer": "/__raw_text__",
-          "python_value": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
-          "rust_value": "",
-          "kind": "value",
-          "reason": "Flask default HTML 404 page vs empty axum body on an unmatched route; status matches."
-        }
-      ],
-      "error": null,
-      "note": null
-    },
-    {
       "name": "webhook_create",
       "section": "webhooks",
       "method": "POST",
@@ -3342,20 +3201,6 @@
           "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
         },
         {
-          "json_pointer": "/sqlstate",
-          "python_value": null,
-          "rust_value": "KAM00",
-          "kind": "missing_in_python",
-          "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
-        },
-        {
-          "json_pointer": "/error_class",
-          "python_value": null,
-          "rust_value": "INVALID_PARAMETER_VALUE",
-          "kind": "missing_in_python",
-          "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
-        },
-        {
           "json_pointer": "/error_code",
           "python_value": null,
           "rust_value": "INVALID_PARAMETER_VALUE",
@@ -3370,10 +3215,24 @@
           "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
         },
         {
+          "json_pointer": "/error_class",
+          "python_value": null,
+          "rust_value": "INVALID_PARAMETER_VALUE",
+          "kind": "missing_in_python",
+          "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
+        },
+        {
           "json_pointer": "/__raw_text__",
           "python_value": "<!doctype html>\n<html lang=en>\n<title>500 Internal Server Error</title>\n<h1>Internal Server Error</h1>\n<p>The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>\n",
           "rust_value": null,
           "kind": "missing_in_rust",
+          "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
+        },
+        {
+          "json_pointer": "/sqlstate",
+          "python_value": null,
+          "rust_value": "KAM00",
+          "kind": "missing_in_python",
           "reason": "DELIBERATE DEVIATION - Python raises an unhandled exception on an unknown webhook entity (HTTP 500 with the Flask HTML error page); Rust returns a clean 400 INVALID_PARAMETER_VALUE naming the bad entity. Revisit if the Phase 12 Python-suite run asserts the 500."
         }
       ],
@@ -3507,6 +3366,212 @@
       "status_match": true,
       "diffs": [],
       "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "traces_setup_experiment",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/2.0/mlflow/experiments/create",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_start_v3",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_get_info_v3",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/3.0/mlflow/traces/tr-compliance-1/info",
+      "py_status": 404,
+      "rust_status": 404,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [
+        {
+          "json_pointer": "/__raw_text__",
+          "python_value": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+          "rust_value": "",
+          "kind": "value",
+          "reason": "Flask default HTML 404 page vs empty axum body on an unmatched route; status matches."
+        }
+      ],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_start_v3_with_assessment",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_get_info_v3_with_assessment",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/3.0/mlflow/traces/tr-compliance-assessment",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_otlp_rollup_parent_token_usage",
+      "section": "traces",
+      "method": "POST",
+      "path": "/v1/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_get_otlp_rollup_parent_token_usage",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/3.0/mlflow/traces/tr-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_set_tag_v3",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces/tr-compliance-1/tags",
+      "py_status": 405,
+      "rust_status": 405,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [
+        {
+          "json_pointer": "/__raw_text__",
+          "python_value": "<!doctype html>\n<html lang=en>\n<title>405 Method Not Allowed</title>\n<h1>Method Not Allowed</h1>\n<p>The method is not allowed for the requested URL.</p>\n",
+          "rust_value": "",
+          "kind": "value",
+          "reason": "Flask default HTML 405 page vs empty axum body; status matches."
+        }
+      ],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_search_v3",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces/search",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_start_v3_second",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_search_v3_walk",
+      "section": "traces",
+      "method": "POST",
+      "path": "/api/3.0/mlflow/traces/search",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_delete_tag_v3",
+      "section": "traces",
+      "method": "DELETE",
+      "path": "/api/3.0/mlflow/traces/tr-compliance-1/tags",
+      "py_status": 400,
+      "rust_status": 400,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_search_v2_deprecated",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/2.0/mlflow/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_get_info_missing",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/3.0/mlflow/traces/tr-does-not-exist/info",
+      "py_status": 404,
+      "rust_status": 404,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [
+        {
+          "json_pointer": "/__raw_text__",
+          "python_value": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+          "rust_value": "",
+          "kind": "value",
+          "reason": "Flask default HTML 404 page vs empty axum body on an unmatched route; status matches."
+        }
+      ],
       "error": null,
       "note": null
     },

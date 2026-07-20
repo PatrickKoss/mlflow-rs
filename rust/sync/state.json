@@ -1,6 +1,15 @@
 {
-  "last_synced_upstream_commit": "ee51c63ca0f541a47eb65a811b627755717da0a2",
-  "last_synced_at": "2026-07-20",
-  "note": "Rewrite parity baseline (merge-base at rewrite completion, plan closed 2026-07-20)",
-  "history": []
+  "last_synced_upstream_commit": "9f872c10cd88eaa062e612b6726b06cedbd75084",
+  "last_synced_at": "2026-07-21",
+  "note": "First post-rewrite upstream sync (41 commits, 13 server-api); plan docs/rust-sync/2026-07-20-ee51c63ca-9f872c10c/plan.md",
+  "history": [
+    {
+      "from": "ee51c63ca0f541a47eb65a811b627755717da0a2",
+      "to": "9f872c10cd88eaa062e612b6726b06cedbd75084",
+      "date": "2026-07-21",
+      "plan_doc": "docs/rust-sync/2026-07-20-ee51c63ca-9f872c10c/plan.md",
+      "commits_total": 41,
+      "commits_relevant": 13
+    }
+  ]
 }

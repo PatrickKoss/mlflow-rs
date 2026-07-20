@@ -27,10 +27,10 @@ The required profile is the dependency-light HTTP/SDK core used on every Rust CI
 ## Ledger invariants
 
 - Server-reachable symbols/surfaces: 1546
-- Client-only symbols: 346
+- Client-only symbols: 375
 - Dead symbols: 0
 - Repointable server tests: 35
-- Client-only SDK tests: 183
-- Python-internal tests: 3344
+- Client-only SDK tests: 184
+- Python-internal tests: 3433
 - Unclassified paths: 0
 - Server-reachable entries missing native owners: 0

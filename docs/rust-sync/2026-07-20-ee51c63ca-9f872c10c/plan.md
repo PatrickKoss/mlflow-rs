@@ -1,6 +1,6 @@
 # Rust upstream sync plan — 2026-07-20
 
-Status: **OPEN** · From: `ee51c63ca0f541a47eb65a811b627755717da0a2` · To: `9f872c10cd88eaa062e612b6726b06cedbd75084`
+Status: **COMPLETE (2026-07-21)** · From: `ee51c63ca0f541a47eb65a811b627755717da0a2` · To: `9f872c10cd88eaa062e612b6726b06cedbd75084`
 
 | Bucket | Commits |
 |---|---:|
@@ -53,7 +53,7 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
   - **AC:** Rust's native job runner exhibits the behaviors upstream fixed in the Huey implementation: orphaned job processes are shut down when the runner stops, and stale periodic-task locks are recovered after an unclean crash (no permanently wedged periodic tasks). Where Rust's design already guarantees this (kill_on_drop, DB-lock lease expiry), prove it with a test instead of porting code.
   - **VER:** Rust job-runner tests covering orphan-on-shutdown and stale-lock recovery (mirror upstream's `test_jobs.py` additions where applicable).
 
-- [ ] T-S7 Rebuild the upstream UI and run UI smoke
+- [x] T-S7 Rebuild the upstream UI and run UI smoke — DONE 2026-07-21: production UI rebuilt in Phase 1; `bash rust/e2e/run.sh` all three phases green twice (16 genai + 16 part-1 + 1 auth, ×2). Two spec updates for upstream-intended behavior changes (assistant `/config` now 200 remotely with `remote_access_allowed:false` per a716c25e78; resizable dataset column headers per e518ac6b3) — no Rust changes needed; zero `X-MLflow-Backend: python`, no unexpected 4xx.
   - **Upstream refs:** all 9 `ui` commits + js portions of `7240aa5a2` (saved-view tag envelopes — client-side encoding over existing tag APIs), `a716c25e78`, `abc652d7c`, `49408bd845`
   - **Rust target:** production React static build served by the Rust deployment
   - **AC:** The merged UI builds cleanly and all e2e-covered surfaces work against Rust with zero `X-MLflow-Backend: python` responses and no unexpected 4xx.
@@ -66,9 +66,9 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
 
 ## Completion checklist
 
-- [ ] All port tasks ticked with dated DONE notes and evidence
-- [ ] `uv run --no-sync python rust/compliance/replay.py` — exit 0
-- [ ] `uv run --no-sync python rust/genai-inventory/run_conformance.py --profile required` — matrix identical
-- [ ] `uv run --no-sync pytest -q rust/compliance/recorders/` — green
-- [ ] `bash rust/e2e/run.sh` — three phases green
-- [ ] `rust/sync/state.json` advanced to `9f872c10cd88eaa062e612b6726b06cedbd75084` with history entry
+- [x] All port tasks ticked with dated DONE notes and evidence
+- [x] `uv run --no-sync python rust/compliance/replay.py` — exit 0 (313 cases, 0 non-allowlisted diffs, 0 status mismatches, 0 errors; 2026-07-21)
+- [x] `uv run --no-sync python rust/genai-inventory/run_conformance.py --profile required` — exit 0, 11 passed; MCP suite 35/35 sqlite + 35/35 postgres, 0 diffs
+- [x] `uv run --no-sync pytest -q rust/compliance/recorders/` — 31 passed
+- [x] `bash rust/e2e/run.sh` — three phases green, twice
+- [x] `rust/sync/state.json` advanced to `9f872c10cd88eaa062e612b6726b06cedbd75084` with history entry
