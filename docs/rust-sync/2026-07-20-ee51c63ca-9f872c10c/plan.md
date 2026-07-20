@@ -28,13 +28,13 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
   - **AC:** Logging spans where a parent span rolls up child token usage yields the same trace-level token totals as merged Python (no double count), for both single-batch and incremental log_spans; matches upstream's `test_sqlalchemy_store_traces.py` additions.
   - **VER:** Rust store test mirroring upstream's regression test + corpus replay case exercising rollup-parent span ingestion, zero non-allowlisted diffs.
 
-- [ ] T-S3 Assistant server behavior parity
+- [x] T-S3 Assistant server behavior parity — DONE 2026-07-20 (`1b4ffb39c`): per-route remote-access policies (`MLFLOW_ENABLE_REMOTE_ASSISTANT` + API-based mlflow_gateway provider only; CLI providers localhost-only), empty-error fallback, prompt text byte-identical (claude 14,156 B / codex 14,528 B). Coordinator-verified: full recorder suite 31 passed, twice.
   - **Upstream refs:** `a716c25e78` Allow remote access for API-based providers (#24040; `MLFLOW_ENABLE_REMOTE_ASSISTANT`, localhost-gating rework in `mlflow/server/assistant/api.py`, provider `supports_remote` capability); `2dd3419be` Never surface an empty error message (#24417); `2447f582e` Prompt scope guard + response-length discipline (#24445)
   - **Rust target:** `rust/crates/mlflow-server/src/assistant_providers/` + assistant API routes
   - **AC:** Remote (non-localhost) assistant requests are allowed iff the env flag is set AND the selected provider is API-based (CLI providers remain localhost-only); error payloads never carry an empty message; provider system prompts match upstream's updated text.
   - **VER:** `uv run --no-sync pytest -q rust/compliance/recorders/` (assistant SSE recorder cases extended for the remote-access matrix + empty-error case); conformance rows for the localhost/remote × provider-type matrix.
 
-- [ ] T-S4 Gateway trace kvlist normalization
+- [x] T-S4 Gateway trace kvlist normalization — DONE 2026-07-20 (`5854dc738`): real divergence found — Rust materialized optional `null` fields into stored span inputs where Python strips them (`model_dump(exclude_none=True)`); recursive normalization added + persisted-spanInputs differential. Coordinator-verified in the full recorder suite.
   - **Upstream refs:** `abc652d7c` Fix gateway Try-in-Browser traces rendering as raw `kvlist` data (#24400; `mlflow/gateway/tracing_utils.py`)
   - **Rust target:** Rust gateway trace-emission path (`rust/crates/mlflow-server`/`mlflow-genai` gateway tracing utils)
   - **AC:** Traces produced by gateway Try-in-Browser store normalized attribute values (not raw kvlist protobuf shapes), matching merged Python's span attribute JSON.
