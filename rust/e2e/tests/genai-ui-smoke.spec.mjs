@@ -104,7 +104,9 @@ test("datasets", async ({ page }) => {
 test("dataset-records", async ({ page }) => {
   const definition = await openSurface(page, "dataset-records");
   await expect(page.getByText("T22.5 evaluation dataset", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Inputs", exact: true })).toBeVisible();
+  // Upstream e518ac6b3 made dataset-record columns resizable; the header cell
+  // now carries extra resize affordances, so match on containment.
+  await expect(page.getByRole("columnheader", { name: /Inputs/ }).first()).toBeVisible();
   await expect(page.getByText("What stack answered this request?", { exact: false })).toBeVisible();
   await capture(page, definition);
 });
@@ -170,7 +172,11 @@ test("assistant", async ({ page }) => {
   );
   const definition = await openSurface(page, "assistant");
   const response = await assistantConfigResponse;
-  expect(response.status()).toBe(403);
+  // Upstream a716c25e78: GET /assistant/config is no longer localhost-gated
+  // (policy NONE — secrets are redacted instead); remote reads return 200.
+  expect(response.status()).toBe(200);
+  const configBody = await response.json();
+  expect(configBody.remote_access_allowed).toBe(false);
   const toggle = page.locator('[data-assistant-ui="true"]').first();
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();

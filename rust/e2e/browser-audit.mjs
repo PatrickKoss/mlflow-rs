@@ -61,7 +61,8 @@ export function createAuditedTest({ baseURL, expectedFailures = [] }) {
 }
 
 export const SHARED_CAPABILITY_FAILURES = [
-  "/ajax-api/3.0/mlflow/assistant/config|403",
+  // assistant/config stopped 403ing remotely after upstream a716c25e78
+  // (policy NONE with secret redaction) — no assistant entry needed.
   "/ajax-api/3.0/mlflow/ui-telemetry|404",
 ];
 
