@@ -10,14 +10,14 @@
 #      |         to start against an unmigrated DB (`Db::connect_and_verify`), so
 #      |         this init step MUST complete before `rust` boots.
 #      v  (service_completed_successfully)
-#   rust  +  python   --  both wait on `migrate` finishing; they share the one
-#      |                  migrated Postgres DB and the `artifacts` volume.
-#      v  (service_healthy on both)
-#   nginx  --  reverse proxy on :80 implementing the §2.2 routing split.
+#   rust  --  waits on `migrate`, then serves every API route and launches the
+#      |       co-installed native GenAI worker for all six job kinds.
+#      v  (service_healthy)
+#   nginx  --  reverse proxy on :80; serves the built React assets directly.
 #
-# The single Alembic-migrated Postgres DB backs BOTH servers (parity with a real
-# split deployment: Rust owns tracking/registry writes, Python is only hit for
-# the genai/gateway surface, but they read the same schema).
+# The Python-based `migrate` service is a deliberate one-shot init exception:
+# Alembic owns MLflow's schema. It exits before the Python-free Rust serving
+# image starts and is never part of the request-serving plane.
 
 services:
   postgres:
@@ -35,15 +35,20 @@ services:
 
   # One-shot: migrate the empty DB to the Alembic head, then exit 0.
   migrate:
-    image: ghcr.io/mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow@sha256:73365f742d67ef9e59e50118010bf14ff825a157c8244051baea887b8587e772
     depends_on:
       postgres:
         condition: service_healthy
+    # The pinned release supplies Python/Alembic; the read-only overlay supplies
+    # migrations added on this branch after that release.
+    volumes:
+      - ../../mlflow/store/db_migrations/versions:/cutover-migrations:ro
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - mlflow
-      - db
-      - upgrade
-      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+      - >-
+        migration_dir="$$(python -c 'import mlflow.store.db_migrations, os; print(os.path.join(os.path.dirname(mlflow.store.db_migrations.__file__), "versions"))')";
+        cp /cutover-migrations/*.py "$$migration_dir/";
+        exec mlflow db upgrade postgresql://mlflow:mlflow@postgres:5432/mlflow
     restart: "no"
 
   rust:
@@ -78,42 +83,10 @@ services:
       timeout: 3s
       retries: 20
 
-  python:
-    image: ghcr.io/mlflow/mlflow:latest
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    command:
-      - mlflow
-      - server
-      - --host
-      - 0.0.0.0
-      - --port
-      - "5001"
-      - --backend-store-uri
-      - postgresql://mlflow:mlflow@postgres:5432/mlflow
-      - --serve-artifacts
-      - --artifacts-destination
-      - /mlartifacts
-      - --default-artifact-root
-      - /mlartifacts
-    volumes:
-      - artifacts:/mlartifacts
-    healthcheck:
-      # The mlflow image has no `curl`; use the bundled Python instead.
-      test:
-        - CMD-SHELL
-        - python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5001/health').status==200 else 1)"
-      interval: 3s
-      timeout: 5s
-      retries: 30
-
   nginx:
     image: nginx:1.27-alpine
     depends_on:
       rust:
-        condition: service_healthy
-      python:
         condition: service_healthy
     ports:
       - "80:80"
@@ -121,9 +94,7 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       # T11.4: the React build, served directly by nginx (see nginx.conf's
       # `/` and `/static-files/*` locations). Populate this with `yarn build`
-      # (see README.md "Building the UI"); if the dir doesn't exist yet, the
-      # bind mount comes up as an empty directory and nginx's `try_files`
-      # fallback proxies to Python instead, so the stack still comes up.
+      # or `build_placeholder_ui.sh` (see README.md "Building the UI").
       - ../../mlflow/server/js/build:/usr/share/mlflow-ui:ro
 
 volumes:

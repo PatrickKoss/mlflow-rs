@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-# Frontend-split smoke test (T11.4).
+# Frontend smoke test for the all-Rust cutover (T22.4).
 #
 # Two things this asserts that smoke.sh doesn't:
 #   1. The UI (`/`, `/static-files/*`) is served by nginx directly from the
-#      mounted build dir — attributed `X-MLflow-Backend: static`, not `python` —
+#      mounted build dir — attributed `X-MLflow-Backend: static` —
 #      with the cache-header matrix from RUST_TRACKING_SERVER_PLAN.md T11.4:
 #      hashed assets get a 28-day `Cache-Control`, `index.html` gets `no-cache`.
-#   2. AC: "UI fully loads with the Python container stopped, except genai
-#      pages." — stops the `python` compose service, re-checks `/` and the
-#      hashed asset both still 200 (nginx serves them with Python down), then
-#      confirms a genai request now fails (502/504, Python unreachable) while
-#      a plain Rust-backed API request still works. Restarts `python` at the end
-#      (best-effort, even on failure) so a later `smoke.sh` run isn't left broken.
+#   2. GenAI hash routes load the static SPA shell and a deterministic GenAI
+#      discovery API succeeds from Rust. There is no Python service to stop.
 #
 # Requires: the compose stack already up (`docker compose ... up -d --wait`)
 # AND a UI build populated at `mlflow/server/js/build/` — run
@@ -21,7 +17,6 @@
 set -u
 
 BASE_URL="${BASE_URL:-http://localhost:80}"
-COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-compose.yml}"
 PASS=0
 FAIL=0
 
@@ -67,19 +62,7 @@ fetch() {
   rm -f "$tmp_headers" "$tmp_body"
 }
 
-restart_python() {
-  bold "Restarting python container..."
-  docker compose -f "$COMPOSE_FILE" start python >/dev/null
-  local tries=60
-  while (( tries-- > 0 )); do
-    fetch GET "/python/health"
-    [[ "$STATUS" == "200" ]] && { echo "  python back up."; return 0; }
-    sleep 2
-  done
-  echo "  WARNING: python did not come back healthy in time" >&2
-}
-
-bold "== Static UI, Python up (baseline) =="
+bold "== Static UI =="
 
 fetch GET "/"
 check "GET / -> 200" "$STATUS" "200"
@@ -101,28 +84,21 @@ fetch GET "/api/2.0/mlflow/experiments/search"
 check_status_in "GET tracking API still 200/4xx (rust up)" "$STATUS" "200" "400" "422"
 check "GET tracking API -> backend=rust" "$HDR_BACKEND" "rust"
 
-bold "== Stopping python (AC: UI loads except genai) =="
-docker compose -f "$COMPOSE_FILE" stop python >/dev/null
-trap restart_python EXIT
-
-fetch GET "/"
-check "python down: GET / -> 200" "$STATUS" "200"
-check "python down: GET / -> backend=static" "$HDR_BACKEND" "static"
+bold "== GenAI UI and API after all-Rust cutover =="
+# React uses hash routing, so a GenAI deep link fetches the same static shell.
+fetch GET "/#/gateway"
+check "GenAI deep link shell -> 200" "$STATUS" "200"
+check "GenAI deep link shell -> backend=static" "$HDR_BACKEND" "static"
 
 if [[ -n "$ASSET_PATH" ]]; then
   fetch GET "$ASSET_PATH"
-  check "python down: GET \$asset -> 200" "$STATUS" "200"
-  check "python down: GET \$asset -> backend=static" "$HDR_BACKEND" "static"
+  check "GenAI page asset -> 200" "$STATUS" "200"
+  check "GenAI page asset -> backend=static" "$HDR_BACKEND" "static"
 fi
 
-fetch GET "/api/2.0/mlflow/experiments/search"
-check_status_in "python down: tracking API still works (rust)" "$STATUS" "200" "400" "422"
-check "python down: tracking API -> backend=rust" "$HDR_BACKEND" "rust"
-
-# Expected failure: genai lives only on Python. With Python stopped, nginx's
-# upstream connect fails -> 502 (connection refused) or 504 (timeout).
-fetch GET "/api/3.0/mlflow/genai/does-not-exist"
-check_status_in "python down: genai request now fails (expected)" "$STATUS" "502" "503" "504"
+fetch GET "/ajax-api/3.0/mlflow/gateway/supported-providers"
+check "GenAI discovery API -> 200" "$STATUS" "200"
+check "GenAI discovery API -> backend=rust" "$HDR_BACKEND" "rust"
 
 echo
 bold "== Summary =="

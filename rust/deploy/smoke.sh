@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Smoke test for the MLflow reference deployment (T11.3).
+# Smoke test for the all-Rust MLflow reference deployment (T22.4).
 #
 # Drives the SDK surface through nginx on :80 and asserts, for each request,
-# that the `X-MLflow-Backend` response header matches the upstream §2.2 says
-# should serve it (rust for everything, python for the genai/gateway surface).
-# Exits non-zero on the first attribution mismatch or unexpected HTTP failure.
+# that the `X-MLflow-Backend` response header is `rust`. It also submits and
+# completes a deterministic native scorer job through the co-installed worker,
+# then globally rejects any recorded `X-MLflow-Backend: python` response.
 #
 # Usage: BASE_URL=http://localhost:80 bash smoke.sh
 set -u
@@ -12,16 +12,25 @@ set -u
 BASE_URL="${BASE_URL:-http://localhost:80}"
 PASS=0
 FAIL=0
+TMP_DIR="$(mktemp -d)"
+ALL_HEADERS="${TMP_DIR}/all-headers"
+: >"$ALL_HEADERS"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 
 # wait_for_health: block until nginx -> rust /health returns 200 (or timeout).
 wait_for_health() {
-  local tries=60
+  local tries=60 tmp_headers
   while (( tries-- > 0 )); do
-    if curl -fsS "${BASE_URL}/health" >/dev/null 2>&1; then
+    tmp_headers="$(mktemp "${TMP_DIR}/health.XXXXXX")"
+    if curl -fsS -D "$tmp_headers" "${BASE_URL}/health" >/dev/null 2>&1; then
+      cat "$tmp_headers" >>"$ALL_HEADERS"
+      rm -f "$tmp_headers"
       return 0
     fi
+    cat "$tmp_headers" >>"$ALL_HEADERS"
+    rm -f "$tmp_headers"
     sleep 2
   done
   echo "ERROR: ${BASE_URL}/health never became ready" >&2
@@ -30,25 +39,39 @@ wait_for_health() {
 
 # req METHOD PATH EXPECTED_BACKEND [DESC] [curl-args...]
 # Performs the request, prints status + attributed backend, asserts the backend
-# header equals EXPECTED_BACKEND. HTTP status is informational (a genai 404/501
-# from Python still counts as correct ATTRIBUTION). Sets global BODY.
+# header equals EXPECTED_BACKEND. HTTP status is informational unless the caller
+# explicitly checks global STATUS. Sets global BODY and STATUS.
 req() {
   local method="$1" path="$2" expect="$3" desc="${4:-$path}"; shift 4 || shift $#
-  local tmp_headers tmp_body status backend
-  tmp_headers="$(mktemp)"; tmp_body="$(mktemp)"
-  status="$(curl -s -o "$tmp_body" -D "$tmp_headers" -w '%{http_code}' \
+  local tmp_headers tmp_body backend
+  tmp_headers="$(mktemp "${TMP_DIR}/headers.XXXXXX")"
+  tmp_body="$(mktemp "${TMP_DIR}/body.XXXXXX")"
+  STATUS="$(curl -s -o "$tmp_body" -D "$tmp_headers" -w '%{http_code}' \
              -X "$method" "$@" "${BASE_URL}${path}")"
   backend="$(grep -i '^x-mlflow-backend:' "$tmp_headers" | tail -1 \
              | tr -d '\r' | awk '{print tolower($2)}')"
   BODY="$(cat "$tmp_body")"
+  cat "$tmp_headers" >>"$ALL_HEADERS"
   rm -f "$tmp_headers" "$tmp_body"
 
   if [[ "$backend" == "$expect" ]]; then
-    printf '  \033[32mPASS\033[0m %-6s %-55s http=%s backend=%s\n' "$method" "$path" "$status" "$backend"
+    printf '  \033[32mPASS\033[0m %-6s %-55s http=%s backend=%s (%s)\n' "$method" "$path" "$STATUS" "$backend" "$desc"
     ((PASS++))
   else
     printf '  \033[31mFAIL\033[0m %-6s %-55s http=%s backend=%s (expected %s)\n' \
-      "$method" "$path" "$status" "${backend:-<none>}" "$expect"
+      "$method" "$path" "$STATUS" "${backend:-<none>}" "$expect"
+    ((FAIL++))
+  fi
+}
+
+check_equal() {
+  local desc="$1" actual="$2" expected="$3"
+  if [[ "$actual" == "$expected" ]]; then
+    printf '  \033[32mPASS\033[0m %-55s got=%s\n' "$desc" "$actual"
+    ((PASS++))
+  else
+    printf '  \033[31mFAIL\033[0m %-55s got=%s expected=%s\n' \
+      "$desc" "${actual:-<empty>}" "$expected"
     ((FAIL++))
   fi
 }
@@ -91,10 +114,12 @@ req POST "/api/2.0/mlflow/runs/search"               rust "search runs" \
   -d "$(json "{\"experiment_ids\":[\"${EXP_ID}\"],\"max_results\":10}")"
 
 bold "== Traces (Rust) =="
-# V3 trace start (StartTraceV3). A 200 or a validation 4xx both attribute to Rust.
+# This concrete trace is reused by the deterministic native scorer exercise.
+TRACE_ID="smoke-trace-$(date +%s)-$$"
 req POST "/api/3.0/mlflow/traces"                    rust "start trace v3" \
   -H 'Content-Type: application/json' \
-  -d "$(json "{\"trace\":{\"trace_info\":{\"trace_id\":\"smoke-trace-1\",\"trace_location\":{\"type\":\"MLFLOW_EXPERIMENT\",\"mlflow_experiment\":{\"experiment_id\":\"${EXP_ID}\"}},\"request_time\":\"1970-01-01T00:00:00Z\",\"state\":\"OK\"}}}")"
+  -d "$(json "{\"trace\":{\"trace_info\":{\"trace_id\":\"${TRACE_ID}\",\"trace_location\":{\"type\":\"MLFLOW_EXPERIMENT\",\"mlflow_experiment\":{\"experiment_id\":\"${EXP_ID}\"}},\"request_time\":\"1970-01-01T00:00:00Z\",\"state\":\"OK\"}}}")"
+check_equal "start trace v3 status" "$STATUS" "200"
 # OTLP trace ingest endpoint (root path -> Rust).
 req POST "/v1/traces"                                rust "otlp /v1/traces" \
   -H 'Content-Type: application/json' -d '{}'
@@ -130,25 +155,63 @@ else
 fi
 req GET  "/api/2.0/mlflow-artifacts/artifacts?path=smoke" rust "artifact list (proxy)"
 
-bold "== GenAI / gateway surface (MUST attribute to Python) =="
-# These prefixes are the ONLY ones §2.2 routes to Python. A 404/501/4xx from the
-# Python container is fine — ATTRIBUTION to python is the assertion.
-req GET  "/api/3.0/mlflow/genai/does-not-exist"      python "genai -> python"
-req POST "/api/3.0/mlflow/gateway/anything"          python "gateway -> python" \
+bold "== GenAI / gateway surface (Rust cutover) =="
+# Some probes intentionally return a Rust 4xx/404; attribution proves every
+# formerly split route family now reaches Rust.
+req GET  "/api/3.0/mlflow/genai/does-not-exist"      rust "genai -> rust"
+req POST "/api/3.0/mlflow/gateway/anything"          rust "gateway -> rust" \
   -H 'Content-Type: application/json' -d '{}'
-req GET  "/api/3.0/mlflow/scorers/list"              python "scorers -> python"
-req GET  "/api/3.0/mlflow/label-schemas/list"        python "label-schemas -> python"
-req GET  "/ajax-api/3.0/jobs/list"                   python "jobs -> python"
-req POST "/api/3.0/mlflow/scorer/invoke"             python "scorer/invoke -> python" \
+req GET  "/api/3.0/mlflow/scorers/list"              rust "scorers -> rust"
+req GET  "/api/3.0/mlflow/label-schemas/list"        rust "label-schemas -> rust"
+req GET  "/ajax-api/3.0/jobs/list"                   rust "jobs -> rust"
+req POST "/api/3.0/mlflow/scorer/invoke"             rust "scorer/invoke -> rust" \
   -H 'Content-Type: application/json' -d '{}'
-req POST "/ajax-api/2.0/mlflow/runs/create-promptlab-run" python "create-promptlab-run -> python" \
+req POST "/ajax-api/2.0/mlflow/runs/create-promptlab-run" rust "create-promptlab-run -> rust" \
   -H 'Content-Type: application/json' -d '{}'
+
+bold "== Native GenAI job (Rust server -> mlflow-genai-worker) =="
+SCORER_JSON='{"name":"smoke-response-length","builtin_scorer_class":"ResponseLength","builtin_scorer_pydantic_data":{"max_length":100,"unit":"chars"}}'
+SCORER_ESCAPED="${SCORER_JSON//\\/\\\\}"
+SCORER_ESCAPED="${SCORER_ESCAPED//\"/\\\"}"
+req POST "/ajax-api/3.0/mlflow/scorer/invoke" rust "submit native scorer job" \
+  -H 'Content-Type: application/json' \
+  -d "$(json "{\"experiment_id\":\"${EXP_ID}\",\"serialized_scorer\":\"${SCORER_ESCAPED}\",\"trace_ids\":[\"${TRACE_ID}\"],\"log_assessments\":false}")"
+check_equal "native scorer submission status" "$STATUS" "200"
+JOB_ID="$(printf '%s' "$BODY" | sed -n 's/.*"job_id"[: ]*"\([^"]*\)".*/\1/p' | head -1)"
+if [[ -n "$JOB_ID" ]]; then
+  printf '    job_id=%s\n' "$JOB_ID"
+else
+  echo "  FAIL native scorer response omitted job_id" >&2
+  ((FAIL++))
+fi
+
+JOB_STATUS=""
+if [[ -n "$JOB_ID" ]]; then
+  for _ in $(seq 1 30); do
+    req GET "/ajax-api/3.0/jobs/${JOB_ID}" rust "poll native scorer job"
+    JOB_STATUS="$(printf '%s' "$BODY" | sed -n 's/.*"status"[: ]*"\([A-Z]*\)".*/\1/p' | head -1)"
+    case "$JOB_STATUS" in
+      SUCCEEDED | FAILED | TIMEOUT | CANCELED) break ;;
+    esac
+    sleep 1
+  done
+fi
+check_equal "native scorer job completed via worker" "$JOB_STATUS" "SUCCEEDED"
+
+bold "== Global Python attribution audit =="
+if grep -qi '^X-MLflow-Backend:[[:space:]]*python[[:space:]]*$' "$ALL_HEADERS"; then
+  echo "  FAIL at least one smoke response carried X-MLflow-Backend: python" >&2
+  ((FAIL++))
+else
+  echo "  PASS zero smoke responses carried X-MLflow-Backend: python"
+  ((PASS++))
+fi
 
 echo
 bold "== Summary =="
 echo "  PASS=${PASS}  FAIL=${FAIL}"
 if (( FAIL > 0 )); then
-  echo "SMOKE FAILED: ${FAIL} attribution mismatch(es)." >&2
+  echo "SMOKE FAILED: ${FAIL} check(s) failed." >&2
   exit 1
 fi
-echo "SMOKE OK: all ${PASS} requests attributed to the correct backend."
+echo "SMOKE OK: all ${PASS} checks passed; native worker succeeded; zero Python headers."
