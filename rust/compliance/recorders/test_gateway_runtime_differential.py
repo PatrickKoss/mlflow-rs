@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import threading
@@ -24,7 +25,9 @@ from unittest.mock import PropertyMock, patch
 import requests
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy import text
 
+import mlflow
 from mlflow.entities import GatewayEndpointModelConfig, GatewayModelLinkageType
 from mlflow.gateway.providers.gemini import GeminiProvider
 from mlflow.server.fastapi_app import add_gateway_timing_middleware
@@ -37,6 +40,17 @@ RUST_BINARY = Path(os.environ.get("MLFLOW_RUST_SERVER_BIN", DEFAULT_RUST_BINARY)
 FIXED_TIME = 1_750_000_000
 FAKE_PASSPHRASE = "obvious-fake-differential-passphrase"
 PROVIDERS = ("openai", "azure", "anthropic", "gemini")
+
+
+def _align_disposable_schema_marker_with_rust(store: SqlAlchemyStore) -> None:
+    source = (REPO_ROOT / "rust" / "crates" / "mlflow-store" / "src" / "db.rs").read_text()
+    expected = re.search(r'EXPECTED_ALEMBIC_HEAD: &str = "([^"]+)"', source)
+    assert expected is not None
+    with store.ManagedSessionMaker() as session:
+        session.execute(
+            text("UPDATE alembic_version SET version_num = :version"),
+            {"version": expected.group(1)},
+        )
 
 
 class MockProviderHandler(BaseHTTPRequestHandler):
@@ -177,7 +191,14 @@ def mock_provider_server():
         thread.join()
 
 
-def _seed(store: SqlAlchemyStore, provider: str, base: str) -> None:
+def _seed(
+    store: SqlAlchemyStore,
+    provider: str,
+    base: str,
+    *,
+    suffix: str = "differential",
+    usage_tracking: bool = False,
+):
     auth_config = {
         "openai": {"api_base": f"{base}/v1"},
         "azure": {
@@ -191,19 +212,19 @@ def _seed(store: SqlAlchemyStore, provider: str, base: str) -> None:
         "gemini": {"api_base": f"{base}/v1beta/models"},
     }[provider]
     secret = store.create_gateway_secret(
-        secret_name=f"obvious-fake-{provider}-differential-secret",
-        secret_value={"api_key": f"obvious-fake-{provider}-differential-key"},
+        secret_name=f"obvious-fake-{provider}-{suffix}-secret",
+        secret_value={"api_key": f"obvious-fake-{provider}-{suffix}-key"},
         provider=provider,
         auth_config=auth_config,
     )
     model = store.create_gateway_model_definition(
-        name=f"{provider}-differential-definition",
+        name=f"{provider}-{suffix}-definition",
         secret_id=secret.secret_id,
         provider=provider,
         model_name="fixture-model",
     )
-    store.create_gateway_endpoint(
-        name=f"{provider}-differential-endpoint",
+    return store.create_gateway_endpoint(
+        name=f"{provider}-{suffix}-endpoint",
         model_configs=[
             GatewayEndpointModelConfig(
                 model_definition_id=model.model_definition_id,
@@ -211,7 +232,7 @@ def _seed(store: SqlAlchemyStore, provider: str, base: str) -> None:
                 weight=1.0,
             )
         ],
-        usage_tracking=False,
+        usage_tracking=usage_tracking,
     )
 
 
@@ -273,6 +294,10 @@ def rust_server(db_uri: str):
 @contextmanager
 def _python_server(store: SqlAlchemyStore, mock_base: str, stack: ExitStack):
     stack.enter_context(patch("mlflow.server.gateway_api._get_store", return_value=store))
+    stack.enter_context(patch("mlflow.tracing.client._get_store", return_value=store))
+    stack.enter_context(
+        patch("mlflow.tracking._tracking_service.utils._get_store", return_value=store)
+    )
     stack.enter_context(patch("mlflow.server.gateway_api.get_request_workspace", return_value=None))
     stack.enter_context(patch("mlflow.server.gateway_api.check_budget_limit"))
     stack.enter_context(patch("mlflow.server.gateway_api.load_guardrails", return_value=[]))
@@ -335,6 +360,17 @@ def test_python_rust_gateway_runtime_mock_differential(tmp_path: Path, monkeypat
     with mock_provider_server() as mock_base:
         for provider in PROVIDERS:
             _seed(store, provider, mock_base)
+        traced_endpoint = _seed(
+            store,
+            "openai",
+            mock_base,
+            suffix="trace-normalization",
+            usage_tracking=True,
+        )
+        # The merged Python tree already owns the additive T-S1 migration,
+        # while this independent task branch still starts Rust at the prior
+        # schema marker. Rust only validates the marker and does not migrate.
+        _align_disposable_schema_marker_with_rust(store)
 
         with ExitStack() as stack, rust_server(db_uri) as rust_base:
             with _python_server(store, mock_base, stack) as python_base:
@@ -502,3 +538,52 @@ def test_python_rust_gateway_runtime_mock_differential(tmp_path: Path, monkeypat
                     assert py_response.content == rs_response.content, (
                         f"{path} {body}\nPY={py_response.content!r}\nRS={rs_response.content!r}"
                     )
+
+                trace_path = "/gateway/openai-trace-normalization-endpoint/mlflow/invocations"
+                nested_body = {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "nested trace input"},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": "data:image/png;base64,obvious-fake",
+                                        "detail": "low",
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    "n": 1,
+                    "stop": ["alpha", "omega"],
+                }
+
+                def stored_inputs_after(session, base):
+                    before, _ = store.search_traces(experiment_ids=[traced_endpoint.experiment_id])
+                    before_ids = {trace.trace_id for trace in before}
+                    response = session.post(base + trace_path, json=nested_body, timeout=10)
+                    response.raise_for_status()
+                    mlflow.flush_trace_async_logging()
+                    for _ in range(100):
+                        traces, _ = store.search_traces(
+                            experiment_ids=[traced_endpoint.experiment_id]
+                        )
+                        created = [trace for trace in traces if trace.trace_id not in before_ids]
+                        if created:
+                            trace = store.get_trace(created[0].trace_id)
+                            root = next(span for span in trace.data.spans if span.parent_id is None)
+                            return root.attributes["mlflow.spanInputs"]
+                        time.sleep(0.05)
+                    raise AssertionError("gateway trace was not persisted")
+
+                previous_tracking_uri = mlflow.get_tracking_uri()
+                try:
+                    mlflow.set_tracking_uri(db_uri)
+                    python_inputs = stored_inputs_after(python, python_base)
+                    rust_inputs = stored_inputs_after(rust, rust_base)
+                finally:
+                    mlflow.set_tracking_uri(previous_tracking_uri)
+
+                assert python_inputs == rust_inputs == nested_body

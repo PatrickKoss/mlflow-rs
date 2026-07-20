@@ -2033,7 +2033,7 @@ async fn invoke_value(
         state: state.clone(),
         workspace: workspace.to_string(),
         endpoint: endpoint.clone(),
-        request: payload.clone(),
+        request: normalized_typed_trace_payload(payload.clone()),
         request_type: match kind {
             InvocationKind::Chat => "unified/chat",
             InvocationKind::Embeddings => "unified/embeddings",
@@ -2298,6 +2298,28 @@ fn compact_chat_payload(payload: &mut Value) {
                 message.retain(|_, value| !value.is_null());
             }
         }
+    }
+}
+
+fn normalized_typed_trace_payload(mut payload: Value) -> Value {
+    omit_none_fields(&mut payload);
+    payload
+}
+
+fn omit_none_fields(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            object.retain(|_, value| !value.is_null());
+            for value in object.values_mut() {
+                omit_none_fields(value);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                omit_none_fields(value);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -4748,6 +4770,36 @@ mod tests {
     use super::*;
     use rand::{rngs::StdRng, SeedableRng};
     use std::collections::HashMap;
+
+    #[test]
+    fn typed_trace_payload_omits_none_fields_recursively() {
+        let payload = json!({
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hello", "unused": null},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA==", "detail": null}}
+                ],
+                "tool_calls": null
+            }],
+            "stop": ["done", null],
+            "stream_options": null
+        });
+
+        assert_eq!(
+            normalized_typed_trace_payload(payload),
+            json!({
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}
+                    ]
+                }],
+                "stop": ["done", null]
+            })
+        );
+    }
 
     fn fixture_model(provider: &str) -> ResolvedGatewayModelConfig {
         ResolvedGatewayModelConfig {
