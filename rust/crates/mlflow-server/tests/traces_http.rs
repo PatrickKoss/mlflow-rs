@@ -791,6 +791,32 @@ async fn query_metrics_global_no_dimensions() {
 }
 
 #[tokio::test]
+async fn query_metrics_time_bucket_uses_iso_8601_dimension() {
+    let server = TestServer::start("metrics_time_bucket").await;
+    start_trace(&server, "tb-1", EXP_ID, "OK").await;
+
+    let body = json!({
+        "experiment_ids": [EXP_ID],
+        "view_type": "TRACES",
+        "metric_name": "trace_count",
+        "aggregations": [{"aggregation_type": "COUNT"}],
+        "time_interval_seconds": 86400,
+        "start_time_ms": 1704067200000_i64,
+        "end_time_ms": 1704153600000_i64
+    })
+    .to_string();
+    let res = post(&server, "/api/3.0", "/mlflow/traces/metrics", &body).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body);
+    let points = res.json()["data_points"].as_array().unwrap().clone();
+    assert_eq!(points.len(), 1, "{}", res.body);
+    assert_eq!(
+        points[0]["dimensions"]["time_bucket"],
+        "2024-01-01T00:00:00+00:00"
+    );
+    assert_eq!(points[0]["values"]["COUNT"], 1.0);
+}
+
+#[tokio::test]
 async fn query_metrics_invalid_metric_name() {
     let server = TestServer::start("metrics_bad").await;
     let body = json!({
@@ -806,7 +832,7 @@ async fn query_metrics_invalid_metric_name() {
 }
 
 #[tokio::test]
-async fn query_metrics_percentile_deferred() {
+async fn query_metrics_percentile_deferred_on_sqlite() {
     let server = TestServer::start("metrics_pct").await;
     start_trace(&server, "p-1", EXP_ID, "OK").await;
     let body = json!({

@@ -1113,10 +1113,27 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       config and Bash syntax validation passed; shellcheck was unavailable.
       The stack, volumes, and networks were removed after verification. T22.5
       is next.
-- [ ] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
+- [x] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
       budgets/guardrails), scorers + evaluation runs pages, datasets, issues,
       review queues, labeling, prompt optimization, assistant panel.
       **AC/VER:** T11.6-style recorded checklist.
+
+      **DONE (2026-07-20):** added the self-contained Playwright/Chromium suite
+      in `rust/e2e/`, a deterministic Rust-attributed HTTP seeder, production
+      React-build + fresh-compose wrapper, screenshot capture, console/page/
+      failed-response audit, and a zero-`X-MLflow-Backend: python` assertion on
+      every same-origin response. The suite rendered 16/16 populated or honestly
+      recorded empty/setup surfaces green three consecutive times (including the
+      required two clean final runs) against nginx + Postgres + the all-Rust
+      service, then recorded the checklist at
+      `rust/compliance/report/t22_5_ui_smoke.md`; screenshots are reproducible and
+      gitignored. The smoke found and fixed two real integration gaps: Postgres
+      trace metrics now support the UI's time buckets and `PERCENTILE_CONT`, and
+      experiment outlets now receive their computed trace-location context so
+      the judges prefetch does not send `locations: []`. Seeding also required a
+      native `ResponseLength` scorer worker job to reach `SUCCEEDED`. The compose
+      stack, volumes, and browsers were removed after verification. T22.6 is
+      next.
 - [ ] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
       rotation, native worker concurrency/memory/process supervision, pinned
       scorer/provider/GEPA manifest upgrades, Redis budget tracker option,

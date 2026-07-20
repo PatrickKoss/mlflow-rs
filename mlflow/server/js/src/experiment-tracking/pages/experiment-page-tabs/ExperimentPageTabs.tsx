@@ -30,6 +30,7 @@ import { useNavigateToExperimentPageTab } from '../../components/experiment-page
 
 import { ExperimentPageSideNav, ExperimentPageSideNavSkeleton } from './side-nav/ExperimentPageSideNav';
 import { HeaderVisibilityProvider, useHeaderVisibility } from './ExperimentPageHeaderVisibilityContext';
+import { SqlWarehouseContextProvider } from './SqlWarehouseContext';
 
 const ExperimentPageTabsImpl = () => {
   const { experimentId, tabName } = useParams();
@@ -165,17 +166,19 @@ const ExperimentPageTabsImpl = () => {
   }
 
   const outletComponent = (
-    <React.Suspense
-      fallback={
-        <>
-          {[...Array(8).keys()].map((i) => (
-            <ParagraphSkeleton label="Loading..." key={i} seed={`s-${i}`} />
-          ))}
-        </>
-      }
-    >
-      <Outlet />
-    </React.Suspense>
+    <SqlWarehouseContextProvider experimentId={experimentId} traceSearchLocations={traceSearchLocations}>
+      <React.Suspense
+        fallback={
+          <>
+            {[...Array(8).keys()].map((i) => (
+              <ParagraphSkeleton label="Loading..." key={i} seed={`s-${i}`} />
+            ))}
+          </>
+        }
+      >
+        <Outlet />
+      </React.Suspense>
+    </SqlWarehouseContextProvider>
   );
 
   const contentWrapperCss = {

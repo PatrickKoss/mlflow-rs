@@ -10,7 +10,7 @@ deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 don
 except those two UI checks. Corpus GREEN + required CI gate; client suites 0
 failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
 operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
-Phase 22 is in progress (T22.0–T22.4 done; T22.5 next) and is the only
+Phase 22 is in progress (T22.0–T22.5 done; T22.6 next) and is the only
 remaining planned work.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
 
@@ -82,7 +82,15 @@ remaining planned work.**
   both server and native worker; strict image/runtime audit, 35/35 backend smoke
   checks, one native scorer job, and 15/15 frontend checks are green. The
   Python/Alembic one-shot migration init and documented GCS/Azure artifact
-  seams remain deliberate exceptions. T22.5 (GenAI UI smoke) is next. See
+  seams remain deliberate exceptions. **T22.5 is COMPLETE 2026-07-20:** the
+  real production React build rendered 16/16 recorded GenAI surfaces green in
+  headless Chromium against the nginx-fronted all-Rust compose stack, with
+  page/console/failed-response checks and zero Python-attributed responses.
+  The deterministic suite and seeder live in `rust/e2e/`; the committed
+  checklist is `rust/compliance/report/t22_5_ui_smoke.md`. It also fixed the
+  usage dashboard's missing Rust time-bucket/Postgres-percentile metrics and
+  the judges page's missing experiment trace-location context. T22.6 (Ops
+  docs) is next and is the final planned task. See
   `part2-work-breakdown.md` §16 Phase 22.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-

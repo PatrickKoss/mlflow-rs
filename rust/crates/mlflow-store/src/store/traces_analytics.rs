@@ -10,12 +10,13 @@
 //!
 //! ## Scope (documented deviations)
 //!
-//! `query_trace_metrics` implements the **core** aggregations Python supports
-//! and defers the advanced surface. See [`TrackingStore::query_trace_metrics`]
-//! for the precise supported/deferred matrix.
+//! `query_trace_metrics` implements the aggregations needed by the GenAI UI.
+//! See [`TrackingStore::query_trace_metrics`] for the precise
+//! supported/deferred matrix.
 
 use std::collections::BTreeMap;
 
+use chrono::{SecondsFormat, TimeZone, Utc};
 use mlflow_error::MlflowError;
 
 use super::dbutil::Val;
@@ -261,12 +262,11 @@ impl TrackingStore {
     ///
     /// ## Deferred (documented; see final task report)
     ///
-    /// * **PERCENTILE** aggregation — Python has four dialect-specific
-    ///   implementations (Postgres ordered-set, SQLite UDF, MSSQL/MySQL window
-    ///   subqueries). Requesting a percentile returns `INVALID_PARAMETER_VALUE`
-    ///   ("percentile aggregation is not yet supported by this server").
-    /// * **`time_interval_seconds` time bucketing** — floor arithmetic +
-    ///   ISO-8601 bucket labels. Requesting it returns `INVALID_PARAMETER_VALUE`.
+    /// * **PERCENTILE** aggregation is supported on Postgres using its
+    ///   ordered-set aggregate. SQLite/MySQL remain deferred because Python
+    ///   uses a registered UDF/window-query implementation for those dialects.
+    /// * **`time_interval_seconds` time bucketing** — floor arithmetic and
+    ///   Python-compatible ISO-8601 bucket labels on every supported dialect.
     /// * Real pagination (`page_token`) — Python itself never implemented it
     ///   (always returns `next_page_token=None`), so this matches Python.
     #[allow(clippy::too_many_arguments)]
@@ -286,26 +286,23 @@ impl TrackingStore {
     ) -> Result<Vec<MetricDataPoint>, MlflowError> {
         validate_query_trace_metrics_params(view_type, metric_name, aggregations, dimensions)?;
 
-        if time_interval_seconds.is_some() && (start_time_ms.is_none() || end_time_ms.is_none()) {
+        let bucket_interval_seconds = time_interval_seconds.filter(|interval| *interval != 0);
+        if bucket_interval_seconds.is_some() && (start_time_ms.is_none() || end_time_ms.is_none()) {
             return Err(MlflowError::invalid_parameter_value(
                 "start_time_ms and end_time_ms are required if time_interval_seconds is set",
             ));
         }
-        if time_interval_seconds.is_some() {
-            return Err(MlflowError::invalid_parameter_value(
-                "time_interval_seconds bucketing is not yet supported by this server",
-            ));
-        }
-        if aggregations
-            .iter()
-            .any(|a| matches!(a, MetricAggregation::Percentile(_)))
+        let dialect = self.db().dialect();
+        if dialect != Dialect::Postgres
+            && aggregations
+                .iter()
+                .any(|a| matches!(a, MetricAggregation::Percentile(_)))
         {
             return Err(MlflowError::invalid_parameter_value(
-                "PERCENTILE aggregation is not yet supported by this server",
+                "PERCENTILE aggregation is not yet supported on this database backend",
             ));
         }
 
-        let dialect = self.db().dialect();
         let exp_ids = self
             .filter_trace_experiment_ids(workspace, experiment_ids)
             .await?;
@@ -313,7 +310,20 @@ impl TrackingStore {
             return Ok(vec![]);
         }
 
-        let plan = build_metrics_plan(dialect, view_type, metric_name, dimensions)?;
+        let mut plan = build_metrics_plan(dialect, view_type, metric_name, dimensions)?;
+        if let Some(interval_seconds) = bucket_interval_seconds {
+            let bucket_size_ms = interval_seconds.checked_mul(1000).ok_or_else(|| {
+                MlflowError::invalid_parameter_value("time_interval_seconds is too large")
+            })?;
+            plan.dimensions.insert(
+                0,
+                DimensionCol {
+                    expr: time_bucket_expr(dialect, view_type, bucket_size_ms),
+                    label: "time_bucket".to_string(),
+                    join: None,
+                },
+            );
+        }
 
         let mut binds: Vec<Val> = Vec::new();
         let mut ph = Ph::new(dialect);
@@ -327,7 +337,7 @@ impl TrackingStore {
             select_cols.push(format!("{} AS {}", d.expr, d.label));
         }
         for agg in aggregations {
-            let expr = aggregation_sql(*agg, &plan.agg_column);
+            let expr = aggregation_sql(dialect, *agg, &plan.agg_column);
             // The `values` proto map is double-typed; COUNT returns an integer
             // on most backends, so cast every aggregation to float for a uniform
             // f64 decode (and to match the double wire type).
@@ -419,6 +429,11 @@ impl TrackingStore {
             for (k, v) in dims {
                 match v {
                     Some(val) => {
+                        let val = if k == "time_bucket" {
+                            format_time_bucket(&val)?
+                        } else {
+                            val
+                        };
                         resolved_dims.insert(k, val);
                     }
                     None => {
@@ -484,9 +499,9 @@ fn to_correlation_result(counts: TraceCorrelationCounts) -> TraceFilterCorrelati
     }
 }
 
-/// SQL for one aggregation over `column` (COUNT/SUM/AVG only; PERCENTILE is
-/// rejected earlier).
-fn aggregation_sql(agg: MetricAggregation, column: &AggColumn) -> String {
+/// SQL for one aggregation over `column`. Postgres implements percentile as
+/// an ordered-set aggregate; unsupported dialects are rejected by the caller.
+fn aggregation_sql(dialect: Dialect, agg: MetricAggregation, column: &AggColumn) -> String {
     match agg {
         MetricAggregation::Count => match column {
             AggColumn::CountDistinct(c) => format!("COUNT(DISTINCT {c})"),
@@ -494,9 +509,51 @@ fn aggregation_sql(agg: MetricAggregation, column: &AggColumn) -> String {
         },
         MetricAggregation::Sum => format!("SUM({})", column.expr()),
         MetricAggregation::Avg => format!("AVG({})", column.expr()),
-        // Rejected before reaching here.
-        MetricAggregation::Percentile(_) => format!("AVG({})", column.expr()),
+        MetricAggregation::Percentile(value) => {
+            debug_assert_eq!(dialect, Dialect::Postgres);
+            format!(
+                "PERCENTILE_CONT({}) WITHIN GROUP (ORDER BY {})",
+                value / 100.0,
+                column.expr()
+            )
+        }
     }
+}
+
+fn time_bucket_expr(dialect: Dialect, view_type: MetricViewType, bucket_size_ms: i64) -> String {
+    let timestamp = match view_type {
+        MetricViewType::Traces => "ti.timestamp_ms",
+        MetricViewType::Spans => "(s.start_time_unix_nano / 1000000)",
+        MetricViewType::Assessments => "a.created_timestamp",
+    };
+    let bucket = match dialect {
+        Dialect::Sqlite => {
+            format!("(CAST({timestamp} AS INTEGER) / {bucket_size_ms}) * {bucket_size_ms}")
+        }
+        Dialect::Postgres => format!("({timestamp} / {bucket_size_ms}) * {bucket_size_ms}"),
+        Dialect::MySql => {
+            format!("FLOOR({timestamp} / {bucket_size_ms}) * {bucket_size_ms}")
+        }
+    };
+    match dialect {
+        Dialect::Sqlite | Dialect::Postgres => format!("CAST({bucket} AS TEXT)"),
+        Dialect::MySql => format!("CAST({bucket} AS CHAR)"),
+    }
+}
+
+fn format_time_bucket(value: &str) -> Result<String, MlflowError> {
+    let timestamp_ms = value.parse::<f64>().map_err(|error| {
+        MlflowError::internal_error(format!("invalid time bucket returned by database: {error}"))
+    })? as i64;
+    let timestamp = Utc
+        .timestamp_millis_opt(timestamp_ms)
+        .single()
+        .ok_or_else(|| {
+            MlflowError::internal_error(format!(
+                "invalid time bucket returned by database: {value}"
+            ))
+        })?;
+    Ok(timestamp.to_rfc3339_opts(SecondsFormat::AutoSi, false))
 }
 
 /// The column/expression the aggregation runs over.

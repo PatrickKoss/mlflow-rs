@@ -1,0 +1,13 @@
+{
+  "name": "mlflow-rust-ui-smoke",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node seed.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}
