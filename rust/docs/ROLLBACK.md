@@ -1,127 +1,132 @@
-# Split-server rollback
+# Rust cutover rollback
 
-Rollback means changing nginx routing back to Python. It normally requires no
-data copy or data migration because Rust and Python share the tracking/registry
-database, auth database, and artifact store. See [MIGRATION_RUNBOOK.md](MIGRATION_RUNBOOK.md)
-for the forward procedure and [DEPLOYMENT.md](DEPLOYMENT.md) for the normal route map.
+After T22.4, rollback is no longer an nginx-only operation: the normal deploy
+stack contains no Python server to receive traffic. Restore a compatible Python
+service first, verify it privately, then change routing. Rust and Python use the
+same databases and artifact store, so routing rollback normally requires no
+data copy or schema downgrade.
 
-## 1. Decide whether routing-only rollback is safe
-
-1. Confirm the old Python image can run against the current database heads:
-
-   ```bash
-   psql "$BACKEND_STORE_URI" -Atc 'select version_num from alembic_version'
-   psql "$AUTH_DATABASE_URI" -Atc 'select version_num from alembic_version_auth'
-   ```
-
-2. If the old Python release knows the current heads, do a routing-only
-   rollback. This is the normal and fastest path.
-3. If the database was upgraded past the old Python release's expected head,
-   routing can still be flipped immediately, but that old image may not start or
-   may mis-handle the newer schema. Route to the pinned migration Python image,
-   not an incompatible old image. Schema downgrade is a separate, backed-up
-   maintenance operation in section 4.
-
-Never restore a pre-cutover database over a live database: both servers may
-have committed valid writes after the backup.
-
-## 2. Flip traffic to Python
-
-1. Keep Rust running for diagnosis. Replace the default Rust location with the
-   Python upstream. Preserve streaming settings on GenAI locations.
-
-   ```nginx
-   location / {
-       proxy_pass http://python_backend;
-       proxy_http_version 1.1;
-       proxy_set_header Host $host;
-       proxy_set_header X-Real-IP $remote_addr;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-MLFLOW-WORKSPACE $http_x_mlflow_workspace;
-       add_header X-MLflow-Backend python always;
-   }
-   ```
-
-2. Validate and reload atomically:
-
-   ```bash
-   nginx -t
-   nginx -s reload
-   ```
-
-   Kubernetes alternative: apply the rollback ConfigMap, run
-   `kubectl rollout restart deployment/mlflow-nginx`, and wait for
-   `kubectl rollout status deployment/mlflow-nginx`.
-
-3. If a percentage canary was used, set its Rust percentage to zero first.
-   Do not leave route-specific Rust locations above the Python default.
-
-## 3. Verify and stabilize
-
-1. Confirm attribution and health:
-
-   ```bash
-   curl -fsSI "$PUBLIC_URL/health" | grep -i '^X-MLflow-Backend: python'
-   curl -fsS "$PUBLIC_URL/health"
-   ```
-
-2. Repeat the run create/read round trip and authenticated request from
-   [MIGRATION_RUNBOOK.md](MIGRATION_RUNBOOK.md#6-canary).
-3. Upload and download an artifact through the configured mode. For a cloud
-   proxy, confirm `/(api|ajax-api)/2.0/mlflow-artifacts/*` reaches Python.
-4. Test a webhook delivery and confirm its signature headers.
-5. Watch HTTP error rate, Python worker memory, DB locks, and pool saturation.
-6. Only after the observation window, scale Rust down. Preserve its logs and
-   exact image digest for the incident record.
-
-No database reconciliation is required: successful Rust writes were made to the
-same stores Python now reads.
-
-## 4. Optional schema downgrade
-
-Do this only when an older Python binary must be restored and its documented
-schema compatibility requires it. Take a new backup, stop all MLflow writers,
-test the downgrade on a restored copy, and obtain the database owner's approval.
-`mlflow db` intentionally has no downgrade command; invoke the repository's
-Alembic scripts explicitly with the same MLflow source that supplied the
-migrations.
-
-The two newest tracking revisions have implemented downgrades:
-
-| Revision | Downgrade target | Effect |
-|---|---|---|
-| `c4a9b7d3e812` | `a3f8c21d9b47` | Drops `index_span_attributes_key_value` and the `span_attributes` table. All extracted/backfilled attribute rows are lost. Original span JSON in `spans.content` is not deleted, but any new searchable rows that exist only in `span_attributes` are lost. |
-| `a3f8c21d9b47` | `b7e4c1a90f23` | Drops the five query-performance indexes. No application rows are deleted; query latency may regress. The migration includes MySQL-safe foreign-key handling. |
-
-Run one revision at a time and inspect the version after each step:
+The pre-cutover reference is commit `543081c33`. Prefer a release tag or an
+archived, reviewed manifest derived from that commit. For incident comparison,
+the old files can be inspected without changing the worktree:
 
 ```bash
-export DOWNGRADE_TARGET=a3f8c21d9b47  # then b7e4c1a90f23 if required
-uv run python - "$BACKEND_STORE_URI" "$DOWNGRADE_TARGET" <<'PY'
-import sys
-from pathlib import Path
-from alembic.command import downgrade
-from alembic.config import Config
-
-url, target = sys.argv[1:]
-migrations = Path("mlflow/store/db_migrations").resolve()
-cfg = Config(str(migrations / "alembic.ini"))
-cfg.set_main_option("script_location", str(migrations))
-cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
-downgrade(cfg, target)
-PY
-psql "$BACKEND_STORE_URI" -Atc 'select version_num from alembic_version'
+git show 543081c33:rust/deploy/docker-compose.yml
+git show 543081c33:rust/deploy/nginx.conf
 ```
 
-The Rust build documented here will refuse to start after either downgrade
-because it requires `c4a9b7d3e812`. Keep routing on a Python image compatible
-with the selected target. The auth database has a separate lineage; do not
-downgrade it merely because the tracking database was downgraded.
+Do not blindly deploy those files: reapply current secrets, image digests,
+database URLs, artifact configuration, and any fixes made after that commit.
 
-## 5. Close the rollback
+## 1. Confirm compatibility and choose scope
 
-Record the nginx checksum, image digest, database heads, start/end times, lost
-or replayed requests, and whether any schema downgrade occurred. If routing was
-the only change, the forward migration can resume at the canary step after the
-fault is corrected.
+1. Query `alembic_version` and, when auth is enabled,
+   `alembic_version_auth`.
+2. Select a Python image that recognizes those exact heads. The pinned
+   migration image for the current release is the safest default.
+3. Decide whether to restore only selected routes or all application traffic.
+   GCS/Azure artifact proxy rollback may be limited to the artifact family;
+   a broad incident rollback can send every non-static route to Python.
+4. Keep nginx/static serving in place if it is healthy. A Python UI fallback is
+   optional rollback scope, not a prerequisite.
+
+Never restore a pre-cutover database over a live database. Valid writes may
+have committed after the backup.
+
+## 2. Re-add the Python service
+
+Create a Python Service/compose service using the compatible image, current
+backend URI, auth config, webhook encryption key, artifact destination, and
+shared volumes. Start it privately with job execution disabled:
+
+```yaml
+python:
+  image: YOUR_COMPATIBLE_MLFLOW_IMAGE
+  environment:
+    MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
+  command:
+    - mlflow
+    - server
+    - --host
+    - 0.0.0.0
+    - --port
+    - "5001"
+    - --backend-store-uri
+    - YOUR_BACKEND_STORE_URI
+```
+
+Add a private healthcheck and wait for `/health` 200. Verify authenticated
+tracking, GenAI discovery, and artifact access directly against port 5001
+before adding `python_backend` to nginx.
+
+If the Python service will own artifact proxying, include its exact production
+artifact settings. Do not infer credentials or destination from the Rust
+configuration.
+
+## 3. Restore routing atomically
+
+Add the upstream only after Python is healthy:
+
+```nginx
+upstream python_backend {
+    server python:5001;
+}
+```
+
+For a full rollback, replace the default Rust proxy with Python while retaining
+forwarded headers:
+
+```nginx
+location / {
+    proxy_pass http://python_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-MLFLOW-WORKSPACE $http_x_mlflow_workspace;
+    add_header X-MLflow-Backend python always;
+}
+```
+
+Restore buffering-off and long read timeouts on Python Assistant/gateway
+streaming locations. Validate with `nginx -t`, then reload or roll out the proxy
+atomically. Do not leave a route-specific Rust location above the Python
+default unless it is deliberately part of a partial rollback.
+
+## 4. Transfer job-runner ownership
+
+The jobs table is the queue. Rust and Python job runners must never claim it at
+the same time.
+
+1. Keep Python job execution disabled while routing changes.
+2. Stop new native job submissions or wait until Rust-owned jobs are terminal.
+3. Restart Rust with `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false` or scale Rust to
+   zero.
+4. Only then enable Python job execution and restart the Python service.
+5. Submit one deterministic job and require terminal success.
+
+## 5. Verify and stabilize
+
+Confirm:
+
+- `/health` and representative application routes carry
+  `X-MLflow-Backend: python` for the selected rollback scope;
+- experiment/run create and read round trips succeed;
+- GenAI discovery and stubbed streaming work;
+- artifact upload/download matches the configured destination;
+- auth, workspace selection, webhook signatures, and one job succeed;
+- only one job runtime is enabled.
+
+Watch error rate, Python worker memory, database locks, and pool saturation.
+Preserve Rust/nginx logs and exact image digests for incident analysis.
+
+## 6. Schema downgrade is a separate operation
+
+Only consider downgrade if no compatible Python image can run against the
+current heads. Take a fresh backup, stop every MLflow writer, test downgrade on
+a restored copy, and obtain database-owner approval. Never downgrade merely to
+speed up a routing rollback.
+
+Record the restored Python image digest, manifest/pre-cutover reference, nginx
+checksum, database heads, job-runner handoff time, and rollback start/end times.

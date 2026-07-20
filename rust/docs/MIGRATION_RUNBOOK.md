@@ -1,235 +1,145 @@
-# Python-only to split-server migration
+# Python-server to Rust-server migration
 
-This runbook moves an existing Python MLflow server behind nginx and adds the
-Rust server. Both servers continue to use the same tracking/registry database,
-auth database, and artifact store. Read [DEPLOYMENT.md](DEPLOYMENT.md) before
-starting and keep [ROLLBACK.md](ROLLBACK.md) open during the change.
+This runbook replaces a long-running Python MLflow server with the all-Rust
+serving stack. Python remains only as a pinned, one-shot Alembic migration job.
+Keep [ROLLBACK.md](ROLLBACK.md) open during the change.
 
-## 1. Pin the release and check prerequisites
+The final serving topology is nginx/static UI -> Rust for every application
+route. It is valid for local/file and S3-compatible artifact destinations. GCS
+and Azure artifact proxy destinations remain Rust `NOT_IMPLEMENTED` seams; move
+those installations to client-direct uploads or retain a documented Python
+artifact-only exception instead of claiming a Python-free cutover.
 
-1. Use a Python image and Rust image built from the same MLflow source revision.
-   This Rust build requires these exact database heads:
+## 1. Pin, audit, and back up
+
+1. Pin the Python migration image and Rust image to the same MLflow source
+   revision. Record immutable image digests.
+2. Confirm the database heads expected by the build. At this revision:
 
    | Database | Version table | Required head |
    |---|---|---|
    | tracking + registry | `alembic_version` | `c4a9b7d3e812` |
    | auth | `alembic_version_auth` | `f1a2b3c4d5e6` |
 
-2. Confirm that the target Python image contains both revisions before touching
-   a database:
+3. Back up tracking/registry and auth databases with native database tools and
+   test restoring both backups into disposable databases.
+4. Retain the auth config, webhook encryption key, object-store credentials,
+   and their secret-manager version identifiers. Do not log their values.
+5. Audit the exact Rust image before it is eligible for promotion:
 
    ```bash
-   docker run --rm YOUR_PYTHON_IMAGE python - <<'PY'
-   from mlflow.store.db import utils
-   from mlflow.server.auth.db.utils import _get_alembic_config
-   from alembic.script import ScriptDirectory
-
-   print("tracking:", utils._get_latest_schema_revision())
-   print("auth:", ScriptDirectory.from_config(_get_alembic_config("sqlite://")).get_current_head())
-   PY
+   bash rust/deploy/audit_image.sh YOUR_RUST_IMAGE@sha256:...
    ```
 
-   Expected output is `tracking: c4a9b7d3e812` and `auth: f1a2b3c4d5e6`.
+   The audit must prove the image has no Python executable, libpython,
+   site-packages, or `.py` payload and that a jobs-enabled server starts with
+   its native worker sibling resolved.
 
-3. Record the current revisions and retain the output with the change record:
+## 2. Run the Python-owned migrations
 
-   ```bash
-   psql "$BACKEND_STORE_URI" -Atc 'select version_num from alembic_version'
-   psql "$AUTH_DATABASE_URI" -Atc 'select version_num from alembic_version_auth'
-   ```
+Put schema-changing maintenance in the appropriate maintenance window, then
+run the pinned migration image as short-lived jobs:
 
-   Adapt the query client for MySQL or SQLite. Do not start Rust yet. Rust does
-   not initialize or migrate either schema; it refuses to boot unless both
-   version tables contain exactly the heads above. A database ahead of the
-   pinned build is also rejected.
+```bash
+docker run --rm --network YOUR_DB_NETWORK YOUR_MIGRATION_IMAGE \
+  mlflow db upgrade "$BACKEND_STORE_URI"
 
-## 2. Back up both databases and secrets
+docker run --rm --network YOUR_DB_NETWORK YOUR_MIGRATION_IMAGE \
+  python -m mlflow.server.auth db upgrade \
+  --url "$AUTH_DATABASE_URI" --revision head
+```
 
-1. Stop schema-changing maintenance and retain a database-native backup of both
-   databases. PostgreSQL example:
+Verify both version tables afterward. Do not expose these containers through a
+Service or nginx. Rust never initializes or upgrades the schema and refuses to
+start against a missing, older, or newer head.
 
-   ```bash
-   pg_dump --format=custom --file=tracking-before-split.dump "$BACKEND_STORE_URI"
-   pg_dump --format=custom --file=auth-before-split.dump "$AUTH_DATABASE_URI"
-   pg_restore --list tracking-before-split.dump >/dev/null
-   pg_restore --list auth-before-split.dump >/dev/null
-   ```
+## 3. Stage Rust privately
 
-2. Back up the current auth INI, `MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`,
-   `MLFLOW_FLASK_SERVER_SECRET_KEY`, object-store credentials, and their secret
-   manager version identifiers. Do not print secret values into the change log.
+Start the audited Rust image on an internal address with the production backend
+URI, artifact configuration, auth config, workspace mode, and persistent
+`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`. Keep public traffic on Python during
+this staging step.
 
-3. Test restore into disposable databases. The backup step is incomplete until
-   both restored databases can be queried.
+Do not set `MLFLOW_GENAI_WORKER_PATH` for the stock image: the worker is
+co-installed beside `mlflow-server`. Leave native job execution enabled so a
+missing worker is a startup failure.
 
-Verification:
-
-- both backup files are non-empty and pass the database tool's integrity/list check;
-- the restored copies contain the two Alembic version tables;
-- the secret manager can return the pinned key versions to both workloads.
-
-## 3. Upgrade both databases with the pinned Python image
-
-Put the Python service in maintenance/read-only mode if required by the database
-and migration sizes. Migrations remain Python-owned.
-
-1. Upgrade tracking and registry:
-
-   ```bash
-   docker run --rm --network YOUR_DB_NETWORK YOUR_PYTHON_IMAGE \
-     mlflow db upgrade "$BACKEND_STORE_URI"
-   ```
-
-2. Upgrade the separate auth lineage:
-
-   ```bash
-   docker run --rm --network YOUR_DB_NETWORK YOUR_PYTHON_IMAGE \
-     python -m mlflow.server.auth db upgrade --url "$AUTH_DATABASE_URI" --revision head
-   ```
-
-3. Query the heads again:
-
-   ```bash
-   test "$(psql "$BACKEND_STORE_URI" -Atc 'select version_num from alembic_version')" = c4a9b7d3e812
-   test "$(psql "$AUTH_DATABASE_URI" -Atc 'select version_num from alembic_version_auth')" = f1a2b3c4d5e6
-   ```
-
-Do not substitute the tracking `mlflow db upgrade` command for the auth command:
-the auth migrations use a different script directory and version table.
-
-## 4. Make identity and key configuration identical where required
-
-1. Mount the same auth INI into both servers and set the same
-   `MLFLOW_AUTH_CONFIG_PATH`. Its `database_uri` must be the existing shared auth
-   database. Rust reads the Python-created Werkzeug password hashes directly;
-   do not reset or rehash users during cutover.
-
-2. Supply the exact same persistent Fernet key to both servers:
-
-   ```text
-   MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY=<same url-safe-base64 32-byte key>
-   ```
-
-   If this key differs, a server cannot decrypt webhook secrets written by the
-   other server. If it is absent, each process generates an ephemeral key; that
-   is not safe for a split or replicated deployment. Generate a new key only
-   for an installation that has no encrypted webhook secrets:
-
-   ```bash
-   openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n'
-   ```
-
-3. Keep `MLFLOW_FLASK_SERVER_SECRET_KEY` on Python only. It signs Python Flask
-   sessions and must remain stable across Python replicas and restarts.
-
-4. Rust owns a separate signup-CSRF secret. The current Rust build generates it
-   once per process; it has no configuration variable. A restart invalidates
-   outstanding signup tokens, and multiple Rust replicas require session
-   affinity for `GET /signup` and `POST /api/2.0/mlflow/users/create-ui`.
-   Run one Rust replica unless that affinity is configured.
-
-Verification:
-
-- an existing user authenticates through a Rust-owned route and a Python-owned
-  GenAI route with the same credentials;
-- an existing encrypted webhook can be read/tested from both pinned images;
-- neither server logs a generated/ephemeral webhook-key warning.
-
-## 5. Deploy Rust beside Python with no public traffic
-
-1. Start Rust with the same backend URI, artifact root, auth INI, Fernet key,
-   workspace mode, and security settings. Do not put it in nginx yet.
-2. If the artifact destination is S3, configure the same `AWS_*` and MLflow S3
-   variables on Rust, enable `--serve-artifacts`, and privately verify PUT/GET
-   plus multipart create/upload/complete. For GCS or Azure, start Rust with
-   `--no-serve-artifacts`; keep the artifact-proxy family on Python as shown in
-   [DEPLOYMENT.md](DEPLOYMENT.md#cloud-artifact-proxy-support).
-3. Wait for startup. A schema error is a hard stop; do not bypass the head pin.
-
-Verification against the private Rust Service:
+Verify privately:
 
 ```bash
 curl -fsS "$RUST_URL/health"
 curl -fsS "$RUST_URL/version"
-curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" \
-  "$RUST_URL/api/2.0/mlflow/experiments/search" \
-  -H 'Content-Type: application/json' -d '{"max_results":1}'
+curl -fsS -H 'Content-Type: application/json' \
+  -d '{"max_results":1}' \
+  "$RUST_URL/api/2.0/mlflow/experiments/search"
+curl -fsS "$RUST_URL/ajax-api/3.0/mlflow/gateway/supported-providers"
 ```
 
-Check that Rust's logs show both database connections and no Alembic mismatch.
+Also run deterministic gateway/Assistant mocks and one native scorer job. The
+reference `rust/deploy/smoke.sh` demonstrates a provider-free `ResponseLength`
+job and requires it to reach `SUCCEEDED` through the jobs API.
 
-## 6. Canary
+For S3, verify PUT/GET plus multipart create/upload/complete using the exact
+endpoint and addressing-style configuration intended for production.
 
-Route canaries only among endpoints implemented by both servers. Never send the
-GenAI exception routes to Rust. S3 artifact-proxy requests may be sent to Rust;
-GCS/Azure artifact-proxy requests must remain on Python.
+## 4. Canary Rust
 
-Choose one method:
+Because Rust now implements every application route, canary either selected
+read-only routes first or a stable percentage of complete user sessions. Keep
+`X-MLflow-Backend` attribution visible. Do not allow both Python and Rust job
+runners to claim the shared jobs table simultaneously: disable Python job
+execution before enabling Rust job traffic.
 
-1. Per-route canary: move read-only tracking routes first, for example
-   `experiments/search`, `runs/get`, and `runs/search`.
-2. Percentage canary: use nginx `split_clients` to assign a stable cookie or
-   client address to Rust, then select an upstream in a normal location. Keep a
-   header such as `X-MLflow-Backend` on every response so attribution is visible.
+During the canary, exercise:
 
-During the canary, execute a write/read round trip through Rust:
+- experiment and run create/read round trips;
+- trace creation and retrieval;
+- artifact upload/download;
+- registry and webhook operations;
+- GenAI discovery/CRUD and mock gateway streaming;
+- Assistant stub streaming;
+- a deterministic native job to terminal success;
+- authenticated requests and workspace selection, when enabled.
 
-```bash
-NAME="split-canary-$(date +%s)"
-CREATE=$(curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" \
-  -H 'Content-Type: application/json' \
-  -d "{\"name\":\"$NAME\"}" \
-  "$PUBLIC_URL/api/2.0/mlflow/experiments/create")
-EXPERIMENT_ID=$(printf '%s' "$CREATE" | jq -r .experiment_id)
-RUN=$(curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" \
-  -H 'Content-Type: application/json' \
-  -d "{\"experiment_id\":\"$EXPERIMENT_ID\",\"start_time\":0}" \
-  "$PUBLIC_URL/api/2.0/mlflow/runs/create")
-RUN_ID=$(printf '%s' "$RUN" | jq -r '.run.info.run_id')
-curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" \
-  "$PUBLIC_URL/api/2.0/mlflow/runs/get?run_id=$RUN_ID" | jq -e \
-  --arg id "$RUN_ID" '.run.info.run_id == $id'
-```
+Watch error rate, latency, database locks, pool use, worker process count, and
+memory against existing SLOs. A GCS/Azure artifact proxy installation must not
+route those requests to Rust.
 
-Also verify:
+## 5. Full nginx cutover
 
-- `/health` is Rust and `/python/health` is Python;
-- an authenticated Rust request returns neither `401` nor `403`;
-- a GenAI or jobs request carries `X-MLflow-Backend: python`;
-- error rate, database locks, pool use, and p95 latency remain within the
-  operator's existing SLO. For measured reference behavior, use
-  [`../bench/soak.md`](../bench/soak.md), not new capacity assumptions.
+1. Deploy the final nginx contract from `rust/deploy/nginx.conf`: only
+   `rust_backend`, explicit Rust streaming locations, nginx static locations,
+   and the default Rust location.
+2. Require the frontend build to be present. Missing static content must fail
+   closed; there is no Python UI fallback.
+3. Route all traffic to Rust and run:
 
-## 7. Verify webhook delivery
+   ```bash
+   bash rust/deploy/smoke.sh
+   bash rust/deploy/smoke_frontend.sh
+   ```
 
-Start a disposable HTTP receiver that records request headers, then create and
-test a webhook through the Rust route:
+4. Require the smoke footer to report the native worker job succeeded and zero
+   responses carried `X-MLflow-Backend: python`.
+5. Record the Rust image digest, database heads, nginx config checksum, secret
+   versions, and cutover timestamp.
 
-```bash
-WEBHOOK=$(curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"split-test","url":"https://YOUR_RECEIVER.example/hook","events":[{"entity":"REGISTERED_MODEL","action":"CREATED"}],"secret":"one-time-test-secret"}' \
-  "$PUBLIC_URL/api/2.0/mlflow/webhooks")
-WEBHOOK_ID=$(printf '%s' "$WEBHOOK" | jq -r '.webhook.webhook_id')
-curl -fsS -u "$MLFLOW_USER:$MLFLOW_PASSWORD" -X POST \
-  "$PUBLIC_URL/api/2.0/mlflow/webhooks/$WEBHOOK_ID/test" | jq -e \
-  '.result.success == true'
-```
+## 6. Remove the Python serving plane
 
-Confirm the receiver saw `X-MLflow-Signature`, `X-MLflow-Timestamp`, and
-`X-MLflow-Delivery-Id`. Remove the disposable webhook after the test.
+After the observation window:
 
-## 8. Full cutover
+1. Scale the Python server to zero, then remove its Deployment/Service or
+   compose service.
+2. Remove `python_backend`, `/python/health`, every Python route exception, and
+   every Python static fallback from proxy configuration.
+3. Remove Python runtime images from the serving release manifests. Keep only
+   the pinned migration Job definition and make its non-serving role explicit.
+4. Confirm runtime discovery contains no Python server endpoint and nginx logs
+   show only `backend=rust` or `backend=static`.
+5. Preserve the pre-cutover release manifest or commit SHA required by
+   [ROLLBACK.md](ROLLBACK.md).
 
-1. Apply the nginx default-to-Rust configuration from
-   [DEPLOYMENT.md](DEPLOYMENT.md#nginx-routing-contract).
-2. Keep Python at full capacity until the observation window passes.
-3. Run the health, run round-trip, authenticated request, GenAI attribution,
-   artifact upload/download, and webhook checks again.
-4. Record image digests, both Alembic heads, secret versions, nginx config
-   checksum, and the cutover time.
-5. Scale Python only to the capacity required by GenAI, jobs, UI fallback, and
-   any GCS/Azure artifact-proxy traffic.
-
-If any verification fails, follow [ROLLBACK.md](ROLLBACK.md). Do not downgrade a
-database as part of the first response.
+If any required verification fails, restore the full Python service using the
+rollback procedure. Do not downgrade or restore a database as the first
+response; both servers use the same schemas and successful Rust writes remain
+valid.

@@ -1084,8 +1084,9 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       binary. Required Rust CI job `sse-recorders` builds that release server
       plus both standalone recorder examples, installs the locked Python +
       pytest dependencies, runs the complete recorder directory serially, and
-      uploads its pytest log and JUnit report on failure. T22.4 is next.
-- [ ] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
+      uploads its pytest log and JUnit report on failure. This cleared the
+      streaming-parity gate for the completed T22.4 cutover.
+- [x] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
       phase; final state removes the Python server container from
       `rust/deploy/docker-compose.yml` and removes Python from every production
       image; `smoke.sh` asserts zero `X-MLflow-Backend: python` responses.
@@ -1094,6 +1095,24 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       site-packages, and `.py` payloads absent.
       **VER:** `smoke.sh` + `smoke_frontend.sh` + image-content/runtime-launch
       audit extended.
+
+      **DONE (2026-07-20):** deleted nginx's `python_backend`, all Python route
+      locations, health route, and static fallbacks; deleted the long-running
+      Python service and nginx dependency from the reference compose. The
+      Python/Alembic migration service remains solely as a digest-pinned,
+      one-shot init job, with the checkout's migration revisions overlaid
+      read-only so it reaches head `c4a9b7d3e812`. The production Rust image
+      now builds and installs `mlflow-genai-worker` beside `mlflow-server`, and
+      removes package-supplied debugger `.py` helpers. New `audit_image.sh`
+      proved no `python*` executable on `PATH`, `libpython`, `site-packages`, or
+      `.py` payload and proved a healthy jobs-enabled launch resolved the
+      worker. Full compose verification passed: `smoke.sh` 35/35 with zero
+      `X-MLflow-Backend: python` responses and a deterministic native
+      `ResponseLength` scorer job reaching `SUCCEEDED`; `smoke_frontend.sh`
+      15/15 with static UI attribution and Rust-backed GenAI discovery. Compose
+      config and Bash syntax validation passed; shellcheck was unavailable.
+      The stack, volumes, and networks were removed after verification. T22.5
+      is next.
 - [ ] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
       budgets/guardrails), scorers + evaluation runs pages, datasets, issues,
       review queues, labeling, prompt optimization, assistant panel.

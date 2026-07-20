@@ -10,7 +10,7 @@ deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 don
 except those two UI checks. Corpus GREEN + required CI gate; client suites 0
 failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
 operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
-Phase 22 is in progress (T22.0–T22.3 done; T22.4 next) and is the only
+Phase 22 is in progress (T22.0–T22.4 done; T22.5 next) and is the only
 remaining planned work.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
 
@@ -77,9 +77,13 @@ remaining planned work.**
   providers 21/21, OpenAI-compatible provider 3/3), with no parity regression
   and no weakened byte/frame checks. Required CI job `sse-recorders` builds
   the release server and standalone recorders and retains pytest/JUnit output
-  on failure. T22.4 (nginx cutover) is next. See
-  `part2-work-breakdown.md` §16 Phase 22. Phase 23 already
-  finished, so T22.4's precondition on the Python container is satisfied.
+  on failure. **T22.4 is COMPLETE 2026-07-20:** nginx and the reference compose
+  have no Python serving upstream/container; the Python-free Rust image carries
+  both server and native worker; strict image/runtime audit, 35/35 backend smoke
+  checks, one native scorer job, and 15/15 frontend checks are green. The
+  Python/Alembic one-shot migration init and documented GCS/Azure artifact
+  seams remain deliberate exceptions. T22.5 (GenAI UI smoke) is next. See
+  `part2-work-breakdown.md` §16 Phase 22.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row in `part2-decisions-and-appendix.md`).
