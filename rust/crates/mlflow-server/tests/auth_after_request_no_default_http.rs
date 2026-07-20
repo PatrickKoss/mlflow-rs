@@ -22,7 +22,7 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use mlflow_auth::{AuthDb, AuthStore};
 use mlflow_registry::RegistryStore;
 use mlflow_server::{build_app_with_recorder, AppState, ServerConfig};
-use mlflow_store::{Db, PoolConfig, TrackingStore};
+use mlflow_store::{Db, McpStatus, McpTransportType, PoolConfig, TrackingStore};
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
@@ -484,4 +484,73 @@ async fn search_logged_models_filters_and_refills_page_across_tokens() {
     let mut expected = readable_models.clone();
     expected.sort();
     assert_eq!(seen, expected);
+}
+
+#[tokio::test]
+async fn mcp_search_filters_and_refills_servers_and_endpoints() {
+    let srv = TestServer::start("search_mcp_fill").await;
+    let names = [
+        "com.example/auth-a-hidden",
+        "com.example/auth-b-hidden",
+        "com.example/auth-c-readable",
+    ];
+    for name in names {
+        srv.tracking
+            .create_mcp_server(WS, name, None, None, None)
+            .await
+            .unwrap();
+        srv.tracking
+            .create_mcp_server_version(
+                WS,
+                json!({"name": name, "version": "1.0.0"}),
+                None,
+                None,
+                McpStatus::Active,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        srv.tracking
+            .create_mcp_access_endpoint(
+                WS,
+                name,
+                &format!("https://{name}.example.test"),
+                McpTransportType::StreamableHttp,
+                Some("1.0.0"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let (user, password) = srv.create_user("mcp_search_reader").await;
+    srv.grant(&user, "mcp_server", names[2], "READ").await;
+
+    let servers = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers?max_results=1&order_by=name%20ASC",
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(servers.status, StatusCode::OK, "{}", servers.body);
+    assert_eq!(servers.json()["mcp_servers"][0]["name"], names[2]);
+    assert!(servers.json()["next_page_token"].is_null());
+
+    let endpoints = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers/endpoints?max_results=1&order_by=server_name%20ASC",
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(endpoints.status, StatusCode::OK, "{}", endpoints.body);
+    assert_eq!(
+        endpoints.json()["mcp_access_endpoints"][0]["server_name"],
+        names[2]
+    );
+    assert!(endpoints.json()["next_page_token"].is_null());
 }

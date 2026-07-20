@@ -194,6 +194,9 @@ pub enum Validator {
     UpdateRegisteredModelOrPrompt,
     DeleteRegisteredModelOrPrompt,
     CreateModelVersion,
+    // ---- MCP server registry ----
+    CanCreateMcpServer,
+    McpServerPermission,
     // ---- Traces (inherit experiment) ----
     StartTraceV3,
     ReadTraceByRequestId,
@@ -269,7 +272,7 @@ impl Validator {
             // `_user_can_create_in_workspace` (`__init__.py:1208-1213`, `1663-1667`):
             // workspaces off → True; on → a workspace-wide USE/MANAGE grant in the
             // request workspace (or the default-workspace auto-grant).
-            CanListUsers | CanCreateExperiment | CanCreateRegisteredModel => {
+            CanListUsers | CanCreateExperiment | CanCreateRegisteredModel | CanCreateMcpServer => {
                 user_can_create_in_workspace(ctx).await
             }
             ViewWorkspace => validate_can_view_workspace(ctx).await,
@@ -345,6 +348,7 @@ impl Validator {
             UpdateRegisteredModelOrPrompt => Ok(registered_model_perm(ctx).await?.can_update),
             DeleteRegisteredModelOrPrompt => Ok(registered_model_perm(ctx).await?.can_delete),
             CreateModelVersion => validate_can_create_model_version(ctx).await,
+            McpServerPermission => validate_mcp_server_permission(ctx).await,
             // Traces.
             StartTraceV3 => validate_start_trace_v3(ctx).await,
             ReadTraceByRequestId => Ok(trace_perm(ctx, "request_id").await?.can_read),
@@ -394,6 +398,43 @@ impl Validator {
             GetUserPermission => validate_can_get_user_permission(ctx).await,
         }
     }
+}
+
+async fn validate_mcp_server_permission(ctx: &RequestCtx<'_>) -> Result<bool, MlflowError> {
+    let name = require_param(ctx, "mcp_server_name")?;
+    if ctx.method == "POST"
+        && ctx
+            .path_params
+            .iter()
+            .any(|(key, value)| key == "mcp_create_version" && value == "true")
+    {
+        match ctx
+            .tracking_store
+            .get_mcp_server(ctx.workspace, &name)
+            .await
+        {
+            Ok(_) => {}
+            Err(error) if error.error_code == ErrorCode::ResourceDoesNotExist => {
+                return user_can_create_in_workspace(ctx).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    let permission = resolve_role_permission(
+        ctx.auth_store,
+        ctx.username,
+        ctx.workspace,
+        ctx.workspaces_enabled,
+        "mcp_server",
+        &name,
+    )
+    .await?;
+    Ok(match ctx.method {
+        "GET" => permission.can_read,
+        "POST" | "PATCH" => permission.can_update,
+        "DELETE" => permission.can_delete,
+        _ => false,
+    })
 }
 
 async fn gateway_permission(

@@ -2,8 +2,8 @@
 //! port of `mlflow/server/auth/permissions.py`.
 //!
 //! The five permission levels (`READ < USE < EDIT < MANAGE`, plus
-//! `NO_PERMISSIONS`) and the eight resource types (`experiment`,
-//! `registered_model`, `prompt`, `scorer`, three gateway types, and the
+//! `NO_PERMISSIONS`) and the nine resource types (`experiment`,
+//! `registered_model`, `prompt`, `scorer`, three gateway types, MCP servers, and the
 //! special `workspace` slot) define the RBAC vocabulary. The validators here
 //! reproduce Python's error wording verbatim so the HTTP surface returns
 //! identical messages.
@@ -84,10 +84,11 @@ pub const RESOURCE_TYPE_SCORER: &str = "scorer";
 pub const RESOURCE_TYPE_GATEWAY_SECRET: &str = "gateway_secret";
 pub const RESOURCE_TYPE_GATEWAY_ENDPOINT: &str = "gateway_endpoint";
 pub const RESOURCE_TYPE_GATEWAY_MODEL_DEFINITION: &str = "gateway_model_definition";
+pub const RESOURCE_TYPE_MCP_SERVER: &str = "mcp_server";
 pub const RESOURCE_TYPE_WORKSPACE: &str = "workspace";
 
 /// `VALID_RESOURCE_TYPES` (`permissions.py:110`).
-pub const VALID_RESOURCE_TYPES: [&str; 8] = [
+pub const VALID_RESOURCE_TYPES: [&str; 9] = [
     RESOURCE_TYPE_EXPERIMENT,
     RESOURCE_TYPE_REGISTERED_MODEL,
     RESOURCE_TYPE_PROMPT,
@@ -95,6 +96,7 @@ pub const VALID_RESOURCE_TYPES: [&str; 8] = [
     RESOURCE_TYPE_GATEWAY_SECRET,
     RESOURCE_TYPE_GATEWAY_ENDPOINT,
     RESOURCE_TYPE_GATEWAY_MODEL_DEFINITION,
+    RESOURCE_TYPE_MCP_SERVER,
     RESOURCE_TYPE_WORKSPACE,
 ];
 
@@ -221,7 +223,7 @@ mod tests {
             err.message,
             "Invalid resource type 'bogus'. Valid resource types are: \
              ('experiment', 'gateway_endpoint', 'gateway_model_definition', 'gateway_secret', \
-             'prompt', 'registered_model', 'scorer', 'workspace')"
+             'mcp_server', 'prompt', 'registered_model', 'scorer', 'workspace')"
         );
     }
 

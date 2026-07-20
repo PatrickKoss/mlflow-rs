@@ -59,6 +59,10 @@ pub mod parse {
         parse_filter_string_sqlalchemy as logged_models_filter_sqlalchemy,
         parse_order_by as logged_models_order_by, parse_search_filter as logged_models_filter,
     };
+    pub use crate::domains::mcp::{
+        parse_endpoint_filter as mcp_endpoint_filter, parse_server_filter as mcp_server_filter,
+        parse_version_filter as mcp_version_filter,
+    };
     pub use crate::domains::model_versions::{
         parse_order_by as model_versions_order_by, parse_search_filter as model_versions_filter,
     };

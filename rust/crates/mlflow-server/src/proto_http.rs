@@ -357,6 +357,10 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+pub(crate) fn percent_decode_path(s: &str) -> String {
+    percent_decode(&s.replace('+', "%2B"))
+}
+
 fn hex_val(b: u8) -> Option<u8> {
     match b {
         b'0'..=b'9' => Some(b - b'0'),

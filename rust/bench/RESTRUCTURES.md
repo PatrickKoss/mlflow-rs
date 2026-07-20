@@ -24,7 +24,7 @@ The relevant T13.3 results are:
 Schema statements below are grounded in
 `mlflow/store/tracking/dbmodels/models.py`, the registry and auth DB models, the
 T13.1 index revision `a3f8c21d9b47`, and the T13.2 shared `span_attributes`
-revision `c4a9b7d3e812`. Query and write behavior comes from
+revision `a8b9c0d1e2f3`. Query and write behavior comes from
 `rust/crates/mlflow-store/src/store/`,
 `rust/crates/mlflow-registry/src/store/search.rs`, and the Rust auth store and
 after-request middleware. DDL is a sketch, not a new migration in this task.

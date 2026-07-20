@@ -573,9 +573,48 @@ fn dispatch_gateway_request(path: &str) -> Option<Dispatched> {
         .then(|| Dispatched::Validator(Validator::MissingGatewayEndpointName, Vec::new()))
 }
 
+fn dispatch_mcp_request(path: &str, method: &str) -> Option<Dispatched> {
+    let tail = [
+        "/api/3.0/mlflow/mcp-servers",
+        "/ajax-api/3.0/mlflow/mcp-servers",
+    ]
+    .iter()
+    .find_map(|prefix| {
+        path.strip_prefix(prefix)
+            .filter(|tail| tail.is_empty() || tail.starts_with('/'))
+    })?;
+    let tail = crate::proto_http::percent_decode_path(tail);
+    let parts = tail
+        .trim_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return Some(if method == "POST" && parts.is_empty() {
+            Dispatched::Validator(Validator::CanCreateMcpServer, Vec::new())
+        } else {
+            Dispatched::Validator(Validator::Allow, Vec::new())
+        });
+    }
+    let mut params = vec![(
+        "mcp_server_name".to_string(),
+        format!("{}/{}", parts[0], parts[1]),
+    )];
+    if method == "POST" && parts.len() == 3 && parts[2] == "versions" {
+        params.push(("mcp_create_version".to_string(), "true".to_string()));
+    }
+    Some(Dispatched::Validator(
+        Validator::McpServerPermission,
+        params,
+    ))
+}
+
 /// Mirror `_find_validator` + the proxy-artifact fallback in `_before_request`.
 pub fn dispatch_request(path: &str, method: &str) -> Dispatched {
     if let Some(dispatched) = dispatch_gateway_request(path) {
+        return dispatched;
+    }
+    if let Some(dispatched) = dispatch_mcp_request(path, method) {
         return dispatched;
     }
 
@@ -670,12 +709,53 @@ pub fn dispatch_after_request(
     path: &str,
     method: &str,
 ) -> Option<(AfterRequestHandler, Vec<(String, String)>)> {
+    if let Some(value) = dispatch_mcp_after_request(path, method) {
+        return Some(value);
+    }
     after_routes().iter().find_map(|r| {
         if r.method != method {
             return None;
         }
         r.matcher.matches(path).map(|params| (r.handler, params))
     })
+}
+
+fn dispatch_mcp_after_request(
+    path: &str,
+    method: &str,
+) -> Option<(AfterRequestHandler, Vec<(String, String)>)> {
+    use AfterRequestHandler::*;
+    let tail = [
+        "/api/3.0/mlflow/mcp-servers",
+        "/ajax-api/3.0/mlflow/mcp-servers",
+    ]
+    .iter()
+    .find_map(|prefix| {
+        path.strip_prefix(prefix)
+            .filter(|tail| tail.is_empty() || tail.starts_with('/'))
+    })?;
+    let tail = crate::proto_http::percent_decode_path(tail);
+    let parts = tail
+        .trim_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let params = if parts.len() >= 2 {
+        vec![(
+            "mcp_server_name".to_string(),
+            format!("{}/{}", parts[0], parts[1]),
+        )]
+    } else {
+        Vec::new()
+    };
+    match (method, parts.as_slice()) {
+        ("POST", []) => Some((CreatorGrantMcpServer, params)),
+        ("POST", [_, _, "versions"]) => Some((CreatorGrantMcpServer, params)),
+        ("DELETE", [_, _]) => Some((DeleteGrantsMcpServer, params)),
+        ("GET", []) => Some((FilterSearchMcpServers, params)),
+        ("GET", ["endpoints"]) => Some((FilterSearchMcpEndpoints, params)),
+        _ => None,
+    }
 }
 
 /// The `<path:artifact_path>` tail of a proxy artifact URL: everything after the

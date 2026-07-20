@@ -37,6 +37,7 @@ mod issues;
 mod jobs;
 mod label_schemas;
 mod logged_models;
+mod mcp_registry;
 mod metrics;
 mod metrics_bulk;
 mod names;
@@ -92,6 +93,10 @@ pub use logged_models::{
     logged_models_page_token, logged_models_token_offset, DatasetFilter, LoggedModel,
     LoggedModelKv, LoggedModelMetric, LoggedModelMetricInput, LoggedModelOrderByInput,
     LoggedModelStatus, LoggedModelsPage, SEARCH_LOGGED_MODEL_MAX_RESULTS_DEFAULT,
+};
+pub use mcp_registry::{
+    McpAccessEndpoint, McpAccessEndpointsPage, McpPatch, McpServer, McpServerVersion,
+    McpServerVersionsPage, McpServersPage, McpStatus, McpTransportType,
 };
 pub use metrics::{MetricInput, GET_METRIC_HISTORY_MAX_RESULTS};
 pub use metrics_bulk::{MAX_RESULTS_PER_RUN, MAX_RUNS_GET_METRIC_HISTORY_BULK};

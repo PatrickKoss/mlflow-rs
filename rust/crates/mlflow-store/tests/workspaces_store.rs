@@ -2,7 +2,7 @@
 //! T10.1), ported from `tests/store/workspace/test_sqlalchemy_store.py`.
 //!
 //! Each test copies the checked-in SQLite fixture (a real Alembic-migrated DB at
-//! head `c4a9b7d3e812`, which already contains the `workspaces` table and a
+//! head `a8b9c0d1e2f3`, which already contains the `workspaces` table and a
 //! `default` row) into a temp file and operates on it, so the committed fixture
 //! is never mutated.
 

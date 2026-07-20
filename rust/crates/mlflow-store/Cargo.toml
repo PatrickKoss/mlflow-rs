@@ -44,6 +44,7 @@ hmac = { workspace = true }
 pbkdf2 = { workspace = true }
 aes-gcm = { workspace = true }
 rand = { workspace = true }
+url = "2.5"
 
 [dev-dependencies]
 tokio = { workspace = true }

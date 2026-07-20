@@ -35,6 +35,7 @@ pub mod job_runner;
 pub mod jobs;
 pub mod label_schemas;
 pub mod logged_models;
+pub mod mcp_registry;
 pub mod metric_history;
 pub mod metrics;
 pub mod native_worker;
@@ -447,6 +448,10 @@ fn register_proto_routes(state: AppState, artifacts_only: bool) -> Router {
     // ---- Assistant (T20.1, §12.10) ----
     router = router.merge(assistant::routes());
     // ---- end Assistant ----
+
+    // Native FastAPI MCP registry routes. The Python router is mounted under
+    // both the REST and AJAX 3.0 prefixes.
+    router = router.merge(mcp_registry::routes());
 
     // ---- Gateway runtime (T18.3/T18.4, §12.9) ----
     router = router.route(

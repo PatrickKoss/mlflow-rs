@@ -10,6 +10,7 @@ pub mod evaluation_datasets;
 pub mod experiments;
 pub mod issues;
 pub mod logged_models;
+pub mod mcp;
 pub mod model_versions;
 pub mod registered_models;
 pub mod runs;

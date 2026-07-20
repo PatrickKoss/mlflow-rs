@@ -136,7 +136,7 @@ class DualServers:
         python_extra_env: dict[str, str] | None = None,
         rust_extra_env: dict[str, str] | None = None,
         python_app: str = "mlflow.server:app",
-        python_asgi: bool = False,
+        python_asgi_app: str | None = None,
     ) -> None:
         self.workdir = workdir
         self.seed_db = seed_db
@@ -149,7 +149,7 @@ class DualServers:
         # endpoints exist only there), mirroring
         # `tests/server/auth/test_auth.py`'s `app="mlflow.server.auth:create_app"`.
         self.python_app = python_app
-        self.python_asgi = python_asgi
+        self.python_asgi_app = python_asgi_app
         self.python: ServerHandle | None = None
         self.rust: ServerHandle | None = None
 
@@ -195,19 +195,19 @@ class DualServers:
         rust_art.mkdir(parents=True, exist_ok=True)
 
         py_port = _free_port()
-        if self.python_asgi:
-            py_cmd = [
+        py_cmd = (
+            [
                 sys.executable,
                 "-m",
                 "uvicorn",
-                self.python_app,
+                self.python_asgi_app,
                 "--host",
                 LOCALHOST,
                 "--port",
                 str(py_port),
             ]
-        else:
-            py_cmd = [
+            if self.python_asgi_app
+            else [
                 sys.executable,
                 "-m",
                 "flask",
@@ -219,6 +219,7 @@ class DualServers:
                 "--port",
                 str(py_port),
             ]
+        )
         self.python = self._boot("python", py_cmd, f"sqlite:///{py_db}", py_art)
 
         rust_port = _free_port()
@@ -684,7 +685,7 @@ def _run_sqlite_sections(
     workroot: Path,
     *,
     python_app: str = "mlflow.server:app",
-    python_asgi: bool = False,
+    python_asgi_app: str | None = None,
 ) -> list[CaseResult]:
     """Run all non-auth/non-workspace sections against one Python+Rust pair."""
     seed_db = workroot / "seed.db"
@@ -737,7 +738,7 @@ def _run_sqlite_sections(
         python_extra_env=python_extra_env,
         rust_extra_env=rust_extra_env,
         python_app=python_app,
-        python_asgi=python_asgi,
+        python_asgi_app=python_asgi_app,
     ) as servers:
         py_bindings: dict[str, Any] = {}
         rust_bindings: dict[str, Any] = {}
@@ -860,6 +861,30 @@ def _run_workspace_section(
     return results
 
 
+def _run_mcp_server_registry_section(
+    cases: list[Case],
+    allow: list[AllowEntry],
+    workroot: Path,
+) -> list[CaseResult]:
+    """Run the FastAPI-only MCP routes against Python and Rust."""
+    seed_db = workroot / "seed.db"
+    _seed_tracking_db(seed_db)
+    artifact_root = workroot / "artifacts"
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    extra_env = {"MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false"}
+    creds: dict[str, tuple[str, str]] = {}
+    with DualServers(
+        workroot,
+        seed_db,
+        artifact_root,
+        extra_env=extra_env,
+        python_asgi_app="mlflow.server.fastapi_app:app",
+    ) as servers:
+        py_bindings: dict[str, Any] = {}
+        rust_bindings: dict[str, Any] = {}
+        return [run_case(case, servers, py_bindings, rust_bindings, allow, creds) for case in cases]
+
+
 def _run_gateway_proxy_validation_section(
     cases: list[Case],
     allow: list[AllowEntry],
@@ -908,6 +933,7 @@ def main() -> int:
     invoke_cases = sections.pop("invoke", [])
     traces_cases = sections.pop("traces", [])
     gateway_proxy_validation_cases = sections.pop("gateway_proxy_validation", [])
+    mcp_server_registry_cases = sections.pop("mcp_server_registry", [])
 
     all_results: list[CaseResult] = []
     if sections:
@@ -923,8 +949,7 @@ def main() -> int:
                     {"traces": traces_cases},
                     allow,
                     Path(td),
-                    python_app="mlflow.server.fastapi_app:app",
-                    python_asgi=True,
+                    python_asgi_app="mlflow.server.fastapi_app:app",
                 )
             )
     if gateway_proxy_validation_cases:
@@ -933,6 +958,11 @@ def main() -> int:
                 _run_gateway_proxy_validation_section(
                     gateway_proxy_validation_cases, allow, Path(td)
                 )
+            )
+    if mcp_server_registry_cases:
+        with tempfile.TemporaryDirectory(prefix="ts1-mcp-registry-") as td:
+            all_results.extend(
+                _run_mcp_server_registry_section(mcp_server_registry_cases, allow, Path(td))
             )
 
     if auth_cases:

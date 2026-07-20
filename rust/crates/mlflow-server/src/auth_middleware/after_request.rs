@@ -83,6 +83,7 @@ pub enum AfterRequestHandler {
     CreatorGrantGatewaySecret,
     CreatorGrantGatewayEndpoint,
     CreatorGrantGatewayModelDefinition,
+    CreatorGrantMcpServer,
     /// `delete_can_manage_registered_model_permission` — sweep grants on delete.
     DeleteGrantsRegisteredModel,
     /// `rename_registered_model_permission` — rewrite grants on rename.
@@ -92,6 +93,7 @@ pub enum AfterRequestHandler {
     DeleteGrantsGatewaySecret,
     DeleteGrantsGatewayEndpoint,
     DeleteGrantsGatewayModelDefinition,
+    DeleteGrantsMcpServer,
     /// `filter_search_experiments`.
     FilterSearchExperiments,
     /// `filter_search_registered_models`.
@@ -107,6 +109,8 @@ pub enum AfterRequestHandler {
     /// `filter_list_workspaces` — drop workspaces the caller can't access from a
     /// ListWorkspaces response (T10.4). Admins skip.
     FilterListWorkspaces,
+    FilterSearchMcpServers,
+    FilterSearchMcpEndpoints,
     /// `_seed_default_workspace_roles` — seed the `admin`/`user` roles into a new
     /// workspace after CreateWorkspace (T10.4), gated on
     /// `MLFLOW_RBAC_SEED_DEFAULT_ROLES` (default on).
@@ -130,6 +134,7 @@ impl AfterRequestHandler {
                 | AfterRequestHandler::DeleteGrantsGatewaySecret
                 | AfterRequestHandler::DeleteGrantsGatewayEndpoint
                 | AfterRequestHandler::DeleteGrantsGatewayModelDefinition
+                | AfterRequestHandler::DeleteGrantsMcpServer
                 // `_cleanup_workspace_permissions` reads `request.view_args`;
                 // DeleteWorkspace returns 204 with no body.
                 | AfterRequestHandler::CleanupWorkspacePermissions
@@ -303,6 +308,10 @@ async fn run_inner(
             .await?;
             Ok(None)
         }
+        CreatorGrantMcpServer => {
+            grant_creator_mcp_server(ctx, body_json(resp_body)?).await?;
+            Ok(None)
+        }
         DeleteGrantsRegisteredModel => {
             delete_grants_registered_model(ctx).await?;
             Ok(None)
@@ -327,6 +336,10 @@ async fn run_inner(
             delete_grants_gateway(ctx, "model_definition_id", "gateway_model_definition").await?;
             Ok(None)
         }
+        DeleteGrantsMcpServer => {
+            delete_grants_mcp_server(ctx).await?;
+            Ok(None)
+        }
         FilterSearchExperiments => filter_search_experiments(ctx, body_json(resp_body)?).await,
         FilterSearchRegisteredModels => {
             filter_search_registered_models(ctx, body_json(resp_body)?).await
@@ -336,6 +349,8 @@ async fn run_inner(
         FilterListScorers => filter_list_scorers(ctx, body_json(resp_body)?).await,
         FilterListReviewQueues => filter_list_review_queues(ctx, body_json(resp_body)?).await,
         FilterListWorkspaces => filter_list_workspaces(ctx, body_json(resp_body)?).await,
+        FilterSearchMcpServers => filter_search_mcp_servers(ctx, body_json(resp_body)?).await,
+        FilterSearchMcpEndpoints => filter_search_mcp_endpoints(ctx, body_json(resp_body)?).await,
         SeedDefaultWorkspaceRoles => {
             seed_default_workspace_roles(ctx, body_json(resp_body)?).await?;
             Ok(None)
@@ -438,6 +453,31 @@ async fn grant_creator_gateway(
         .await
 }
 
+async fn grant_creator_mcp_server(
+    ctx: &AfterCtx<'_>,
+    response: serde_json::Value,
+) -> Result<(), MlflowError> {
+    let Some(name) = response.get("name").and_then(|value| value.as_str()) else {
+        return Ok(());
+    };
+    // A create-version request only earns the creator grant when it actually
+    // auto-created the parent. The persisted creator is the race-safe signal.
+    if !ctx
+        .state
+        .tracking_store()
+        .get_mcp_server(ctx.workspace, name)
+        .await
+        .is_ok_and(|server| server.created_by.as_deref() == Some(ctx.username))
+    {
+        return Ok(());
+    }
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .grant_user_permission(ctx.username, "mcp_server", name, "MANAGE", ctx.workspace)
+        .await
+}
+
 // ---------------------------------------------------------------------------
 // Grant cascade on delete / rename
 // ---------------------------------------------------------------------------
@@ -455,6 +495,184 @@ async fn delete_grants_registered_model(ctx: &AfterCtx<'_>) -> Result<(), Mlflow
     store
         .delete_grants_for_resource("prompt", &name, Some(ctx.workspace))
         .await
+}
+
+async fn delete_grants_mcp_server(ctx: &AfterCtx<'_>) -> Result<(), MlflowError> {
+    let name = ctx
+        .path_params
+        .iter()
+        .find(|(key, _)| key == "mcp_server_name")
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    ctx.state
+        .auth_store()
+        .expect("auth enabled")
+        .delete_grants_for_resource("mcp_server", name, Some(ctx.workspace))
+        .await
+}
+
+async fn filter_search_mcp_servers(
+    ctx: &AfterCtx<'_>,
+    mut response: serde_json::Value,
+) -> Result<Option<Vec<u8>>, MlflowError> {
+    if ctx.is_admin {
+        return Ok(None);
+    }
+    let readable = readable_set(ctx, "mcp_server").await?;
+    let query = mcp_query(ctx);
+    let max_results = mcp_max_results(&query)?;
+    let filter = mcp_query_one(&query, "filter_string");
+    let order_by = mcp_query_many(&query, "order_by");
+    let mut next_token = response
+        .get("next_page_token")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let items = response
+        .get_mut("mcp_servers")
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("MCP search response has mcp_servers");
+    items.retain(|item| {
+        item.get("name")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|name| readable.allows(name))
+    });
+    while items.len() < max_results as usize && next_token.as_deref().is_some_and(|v| !v.is_empty())
+    {
+        let token = next_token.take().unwrap_or_default();
+        let start_offset = parse_start_offset_from_page_token(Some(&token)).map_err(offset_err)?;
+        let page = ctx
+            .state
+            .tracking_store()
+            .search_mcp_servers(ctx.workspace, filter, max_results, &order_by, Some(&token))
+            .await?;
+        if page.items.is_empty() {
+            break;
+        }
+        let page_len = page.items.len();
+        let mut consumed = 0_i64;
+        for server in page.items {
+            if items.len() >= max_results as usize {
+                break;
+            }
+            consumed += 1;
+            if readable.allows(&server.name) {
+                items.push(crate::mcp_registry::server_json(server));
+            }
+        }
+        next_token = if consumed < page_len as i64 {
+            Some(create_page_token(start_offset + consumed))
+        } else {
+            page.next_page_token
+        };
+    }
+    response["next_page_token"] =
+        next_token.map_or(serde_json::Value::Null, serde_json::Value::String);
+    serde_json::to_vec(&response)
+        .map(Some)
+        .map_err(|error| MlflowError::internal_error(error.to_string()))
+}
+
+async fn filter_search_mcp_endpoints(
+    ctx: &AfterCtx<'_>,
+    mut response: serde_json::Value,
+) -> Result<Option<Vec<u8>>, MlflowError> {
+    if ctx.is_admin {
+        return Ok(None);
+    }
+    let readable = readable_set(ctx, "mcp_server").await?;
+    let query = mcp_query(ctx);
+    let max_results = mcp_max_results(&query)?;
+    let filter = mcp_query_one(&query, "filter_string");
+    let server_version = mcp_query_one(&query, "server_version");
+    let server_alias = mcp_query_one(&query, "server_alias");
+    let order_by = mcp_query_many(&query, "order_by");
+    let mut next_token = response
+        .get("next_page_token")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let items = response
+        .get_mut("mcp_access_endpoints")
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("MCP endpoint search response has mcp_access_endpoints");
+    items.retain(|item| {
+        item.get("server_name")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|name| readable.allows(name))
+    });
+    while items.len() < max_results as usize && next_token.as_deref().is_some_and(|v| !v.is_empty())
+    {
+        let token = next_token.take().unwrap_or_default();
+        let start_offset = parse_start_offset_from_page_token(Some(&token)).map_err(offset_err)?;
+        let page = ctx
+            .state
+            .tracking_store()
+            .search_mcp_access_endpoints(
+                ctx.workspace,
+                None,
+                server_version,
+                server_alias,
+                filter,
+                max_results,
+                &order_by,
+                Some(&token),
+            )
+            .await?;
+        if page.items.is_empty() {
+            break;
+        }
+        let page_len = page.items.len();
+        let mut consumed = 0_i64;
+        for endpoint in page.items {
+            if items.len() >= max_results as usize {
+                break;
+            }
+            consumed += 1;
+            if readable.allows(&endpoint.server_name) {
+                items.push(crate::mcp_registry::endpoint_json(endpoint, true));
+            }
+        }
+        next_token = if consumed < page_len as i64 {
+            Some(create_page_token(start_offset + consumed))
+        } else {
+            page.next_page_token
+        };
+    }
+    response["next_page_token"] =
+        next_token.map_or(serde_json::Value::Null, serde_json::Value::String);
+    serde_json::to_vec(&response)
+        .map(Some)
+        .map_err(|error| MlflowError::internal_error(error.to_string()))
+}
+
+fn mcp_query(ctx: &AfterCtx<'_>) -> Vec<(String, String)> {
+    crate::proto_http::parse_query_pairs(ctx.query.unwrap_or_default())
+}
+
+fn mcp_query_one<'a>(query: &'a [(String, String)], key: &str) -> Option<&'a str> {
+    query
+        .iter()
+        .find(|(name, _)| name == key)
+        .map(|(_, value)| value.as_str())
+}
+
+fn mcp_query_many(query: &[(String, String)], key: &str) -> Vec<String> {
+    query
+        .iter()
+        .filter(|(name, _)| name == key)
+        .map(|(_, value)| value.clone())
+        .collect()
+}
+
+fn mcp_max_results(query: &[(String, String)]) -> Result<i32, MlflowError> {
+    mcp_query_one(query, "max_results")
+        .map(|value| {
+            value.parse().map_err(|_| {
+                MlflowError::invalid_parameter_value(
+                    "Invalid request: max_results: Input should be a valid integer, unable to parse string as an integer",
+                )
+            })
+        })
+        .unwrap_or(Ok(100))
 }
 
 /// `rename_registered_model_permission` (`__init__.py:3477`): rewrite grants on

@@ -21,14 +21,25 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterator
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import requests
+import yaml
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+from rust.compliance.engine import (
+    NormalizeOptions,
+    diff_normalized,
+    json_path_get,
+    normalize,
+    substitute,
+)
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -37,6 +48,8 @@ DEFAULT_REPORT_DIR = ROOT / "rust" / "compliance" / "report"
 CLASSIFICATIONS = ("server_reachable", "client_only")
 BACKENDS = ("sqlite", "postgres")
 SERVER_IMPLEMENTATIONS = ("python_http", "rust")
+SUITES = ("ledger", "mcp_server_registry")
+MCP_CORPUS_PATH = ROOT / "rust" / "compliance" / "corpus" / "mcp_server_registry.yaml"
 _logger = logging.getLogger(__name__)
 
 # These cases exercise the public SDK/store boundary without optional provider
@@ -60,6 +73,7 @@ REQUIRED_TESTS = {
 def _args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("required", "full"), default="required")
+    parser.add_argument("--suite", action="append", choices=SUITES)
     parser.add_argument("--backend", action="append", choices=BACKENDS)
     parser.add_argument("--classification", action="append", choices=CLASSIFICATIONS)
     parser.add_argument("--server-implementation", action="append", choices=SERVER_IMPLEMENTATIONS)
@@ -82,7 +96,148 @@ def _args() -> argparse.Namespace:
         help="Merge requested runs into an existing report for the same profile.",
     )
     parser.add_argument("--pytest-arg", action="append", default=[])
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.server_bin = args.server_bin.resolve()
+    args.report_dir = args.report_dir.resolve()
+    return args
+
+
+def _mcp_normalize_options(raw: dict[str, Any]) -> NormalizeOptions:
+    options = raw.get("normalize", {}) or {}
+    return NormalizeOptions(
+        drop_paths=options.get("drop_paths", []),
+        extra_timestamp_fields=options.get("extra_timestamp_fields", []),
+        hash_fields=options.get("hash_fields", []),
+        json_string_fields=options.get("json_string_fields", []),
+        normalize_ids=options.get("normalize_ids", True),
+        normalize_paths=options.get("normalize_paths", True),
+    )
+
+
+def _run_mcp_sequence(url: str, cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    bindings: dict[str, Any] = {}
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        path = substitute(case["path"], bindings)
+        query = substitute(case.get("query", {}), bindings)
+        body = substitute(case.get("body"), bindings)
+        headers = substitute(case.get("headers", {}), bindings)
+        options = _mcp_normalize_options(case)
+
+        def request(page_query: dict[str, Any]) -> tuple[int, Any]:
+            response = requests.request(
+                case["method"],
+                url + path,
+                params=page_query,
+                json=body,
+                headers=headers,
+                timeout=30,
+            )
+            try:
+                response_body = response.json()
+            except ValueError:
+                response_body = {"__raw_text__": response.text}
+            return response.status_code, response_body
+
+        if walk := case.get("walk"):
+            pages = []
+            page_query = dict(query)
+            for _ in range(walk.get("max_pages", 10)):
+                status, response_body = request(page_query)
+                pages.append((status, normalize(response_body, options)))
+                token = response_body.get(walk.get("token_field", "next_page_token"))
+                if not token:
+                    break
+                page_query[walk.get("token_param", "page_token")] = token
+            results.append({"name": case["name"], "status": pages[0][0], "body": pages})
+            continue
+
+        status, response_body = request(query)
+        for binding in case.get("bind", []):
+            bindings[binding["bind"]] = json_path_get(response_body, binding["from"])
+        results.append({
+            "name": case["name"],
+            "status": status,
+            "body": normalize(response_body, options),
+        })
+    return results
+
+
+def _run_mcp_registry_suite(args: argparse.Namespace, backend: str) -> dict[str, Any]:
+    cases = (yaml.safe_load(MCP_CORPUS_PATH.read_text()) or {}).get("cases", [])
+    observed: dict[str, list[dict[str, Any]]] = {}
+    logs: dict[str, str] = {}
+    for implementation in SERVER_IMPLEMENTATIONS:
+        with _server(
+            args.server_bin,
+            implementation,
+            backend,
+            args.postgres_uri,
+            "mcp-server-registry",
+            extra_env={"MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false"},
+        ) as (url, server_log):
+            observed[implementation] = _run_mcp_sequence(url, cases)
+            log_copy = args.report_dir / f"ts1_mcp_server_registry_{implementation}_{backend}.log"
+            log_copy.write_text(server_log.read_text())
+            logs[implementation] = log_copy.relative_to(ROOT).as_posix()
+
+    results = []
+    for python_result, rust_result in zip(observed["python_http"], observed["rust"], strict=True):
+        diffs = (
+            [
+                {
+                    "json_pointer": "/__status__",
+                    "python_value": python_result["status"],
+                    "rust_value": rust_result["status"],
+                    "kind": "status",
+                }
+            ]
+            if python_result["status"] != rust_result["status"]
+            else []
+        )
+        diffs.extend(
+            asdict(diff) for diff in diff_normalized(python_result["body"], rust_result["body"])
+        )
+        results.append({
+            "name": python_result["name"],
+            "python_status": python_result["status"],
+            "rust_status": rust_result["status"],
+            "diffs": diffs,
+        })
+    failed = sum(bool(result["diffs"]) for result in results)
+    return {
+        "backend": backend,
+        "cases": len(results),
+        "passed": len(results) - failed,
+        "failed": failed,
+        "diffs": sum(len(result["diffs"]) for result in results),
+        "results": results,
+        "evidence": logs,
+    }
+
+
+def _write_mcp_registry_report(args: argparse.Namespace) -> int:
+    args.report_dir.mkdir(parents=True, exist_ok=True)
+    backends = args.backend or list(BACKENDS)
+    runs = [_run_mcp_registry_suite(args, backend) for backend in backends]
+    report = {"schema_version": 1, "task": "T-S1", "suite": "mcp_server_registry", "runs": runs}
+    json_path = args.report_dir / "ts1_mcp_server_registry.json"
+    markdown_path = args.report_dir / "ts1_mcp_server_registry.md"
+    json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    lines = [
+        "# T-S1 MCP server registry conformance",
+        "",
+        "| Backend | Cases | Passed | Failed | Diffs |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    lines.extend(
+        f"| {run['backend']} | {run['cases']} | {run['passed']} | "
+        f"{run['failed']} | {run['diffs']} |"
+        for run in runs
+    )
+    markdown_path.write_text("\n".join(lines) + "\n")
+    _logger.info("Wrote %s and %s", json_path.relative_to(ROOT), markdown_path.relative_to(ROOT))
+    return int(any(run["failed"] for run in runs))
 
 
 def _free_port() -> int:
@@ -129,6 +284,7 @@ def _server(
     backend: str,
     postgres_uri: str,
     tag: str,
+    extra_env: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, Path]]:
     with tempfile.TemporaryDirectory(prefix=f"mlflow-t22-2-{backend}-") as raw_tmp:
         tmp = Path(raw_tmp)
@@ -144,6 +300,7 @@ def _server(
                 "MLFLOW_CRYPTO_KEK_PASSPHRASE": (
                     "t22-2-conformance-passphrase-at-least-32-characters"
                 ),
+                **(extra_env or {}),
             }
             common_args = [
                 "--host",
@@ -443,11 +600,14 @@ def _render_markdown(report: dict[str, Any]) -> str:
 def main() -> int:
     args = _args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    suites = args.suite or ["ledger"]
     implementations = args.server_implementation or (
         list(SERVER_IMPLEMENTATIONS) if args.profile == "full" else ["rust"]
     )
     if "rust" in implementations and not args.server_bin.is_file():
         raise FileNotFoundError(f"release Rust server not found: {args.server_bin}")
+    if suites == ["mcp_server_registry"]:
+        return _write_mcp_registry_report(args)
     _run_checked(["uv", "run", "--no-sync", "python", str(HERE / "validate_ledger.py")])
     ledger = json.loads(LEDGER_PATH.read_text())
     args.report_dir.mkdir(parents=True, exist_ok=True)

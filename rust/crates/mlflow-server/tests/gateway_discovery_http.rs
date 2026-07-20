@@ -264,8 +264,8 @@ async fn discovery_json_matches_python_with_empty_and_populated_gateway_stores()
             ),
             (
                 "/ajax-api/3.0/mlflow/gateway/supported-models",
-                1020938,
-                "595d94ecffd1b7ffba2c1cbbf4ffce0bafb9bb4f56e0a3cfac97f84f12b024a8",
+                1021913,
+                "3e2d61fb17c531b0154e49c2e88560ca855a8fed05dcf7bd29a89367aaf99c87",
             ),
             (
                 "/ajax-api/3.0/mlflow/gateway/provider-config?provider=openai",

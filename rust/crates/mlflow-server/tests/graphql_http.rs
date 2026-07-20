@@ -38,7 +38,7 @@ const WS: &str = "default";
 
 // The fixture's pre-seeded entities (see `tests/fixtures/tracking.db`).
 const FIXTURE_EXP_ID: &str = "1";
-const FIXTURE_RUN_ID: &str = "f6f9b188dd2845c0ae79e10bce95d692";
+const FIXTURE_RUN_ID: &str = "7291cd29522244dcac0763ecba76103f";
 
 fn fixture_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -344,7 +344,7 @@ async fn get_run_accepts_run_uuid_alias() {
     let server = TestServer::start("get_run_uuid").await;
     let res = gql(
         &server,
-        "query Q { mlflowGetRun(input: {runUuid: \"f6f9b188dd2845c0ae79e10bce95d692\"}) { \
+        "query Q { mlflowGetRun(input: {runUuid: \"7291cd29522244dcac0763ecba76103f\"}) { \
          run { info { runId } } } }",
         json!({}),
     )
@@ -416,7 +416,7 @@ async fn list_artifacts_returns_root_uri() {
     // run's artifact_uri echoed as rootUri.
     let res = gql(
         &server,
-        "query Q { mlflowListArtifacts(input: {runId: \"f6f9b188dd2845c0ae79e10bce95d692\"}) { \
+        "query Q { mlflowListArtifacts(input: {runId: \"7291cd29522244dcac0763ecba76103f\"}) { \
          rootUri files { path isDir fileSize } nextPageToken apiError } }",
         json!({}),
     )
@@ -503,7 +503,7 @@ async fn get_run_model_versions_extension_finds_seeded_version() {
 
     let res = gql(
         &server,
-        "query Q { mlflowGetRun(input: {runId: \"f6f9b188dd2845c0ae79e10bce95d692\"}) { \
+        "query Q { mlflowGetRun(input: {runId: \"7291cd29522244dcac0763ecba76103f\"}) { \
          run { modelVersions { name version } } } }",
         json!({}),
     )
@@ -637,7 +637,7 @@ async fn field_alias_and_typename_are_honored() {
     let server = TestServer::start("alias_typename").await;
     let res = gql(
         &server,
-        "query Q { r: mlflowGetRun(input: {runId: \"f6f9b188dd2845c0ae79e10bce95d692\"}) { \
+        "query Q { r: mlflowGetRun(input: {runId: \"7291cd29522244dcac0763ecba76103f\"}) { \
          __typename run { info { __typename runId } } } }",
         json!({}),
     )

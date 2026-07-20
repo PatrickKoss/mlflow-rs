@@ -306,3 +306,180 @@ async fn model_version_create_source_read_denied_with_no_default() {
     .await;
     assert_ne!(allowed.status, StatusCode::FORBIDDEN, "{}", allowed.body);
 }
+
+#[tokio::test]
+async fn mcp_server_permissions_follow_read_edit_manage_lattice() {
+    let srv = TestServer::start("nd_mcp_permissions").await;
+    let name = "com.example/auth-existing";
+    srv.tracking
+        .create_mcp_server(WS, name, None, None, None)
+        .await
+        .unwrap();
+    let (user, password) = srv.create_user("mcp_reader").await;
+    let path = format!("/api/3.0/mlflow/mcp-servers/{name}");
+
+    let denied = send(
+        &srv.base,
+        Method::GET,
+        &path,
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(denied.status, StatusCode::FORBIDDEN, "{}", denied.body);
+
+    srv.grant(&user, "mcp_server", name, "READ").await;
+    let readable = send(
+        &srv.base,
+        Method::GET,
+        &path,
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(readable.status, StatusCode::OK, "{}", readable.body);
+    let not_editable = send(
+        &srv.base,
+        Method::PATCH,
+        &path,
+        Some((&user, &password)),
+        Some(json!({"description": "denied"})),
+    )
+    .await;
+    assert_eq!(
+        not_editable.status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        not_editable.body
+    );
+
+    srv.grant(&user, "mcp_server", name, "EDIT").await;
+    let editable = send(
+        &srv.base,
+        Method::PATCH,
+        &path,
+        Some((&user, &password)),
+        Some(json!({"description": "allowed"})),
+    )
+    .await;
+    assert_eq!(editable.status, StatusCode::OK, "{}", editable.body);
+    let not_deletable = send(
+        &srv.base,
+        Method::DELETE,
+        &path,
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(
+        not_deletable.status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        not_deletable.body
+    );
+
+    srv.grant(&user, "mcp_server", name, "MANAGE").await;
+    let deleted = send(
+        &srv.base,
+        Method::DELETE,
+        &path,
+        Some((&user, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::OK, "{}", deleted.body);
+}
+
+#[tokio::test]
+async fn mcp_server_creator_gets_manage_for_root_and_auto_created_parent() {
+    let srv = TestServer::start("nd_mcp_creator").await;
+    let (creator, password) = srv.create_user("mcp_creator").await;
+    let (other, other_password) = srv.create_user("mcp_other").await;
+
+    let created = send(
+        &srv.base,
+        Method::POST,
+        "/api/3.0/mlflow/mcp-servers",
+        Some((&creator, &password)),
+        Some(json!({"name": "com.example/auth-created"})),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::OK, "{}", created.body);
+    let creator_read = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers/com.example/auth-created",
+        Some((&creator, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(creator_read.status, StatusCode::OK, "{}", creator_read.body);
+    let other_denied = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers/com.example/auth-created",
+        Some((&other, &other_password)),
+        None,
+    )
+    .await;
+    assert_eq!(
+        other_denied.status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        other_denied.body
+    );
+
+    let deleted = send(
+        &srv.base,
+        Method::DELETE,
+        "/api/3.0/mlflow/mcp-servers/com.example/auth-created",
+        Some((&creator, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::OK, "{}", deleted.body);
+    srv.tracking
+        .create_mcp_server(WS, "com.example/auth-created", None, None, None)
+        .await
+        .unwrap();
+    let stale_grant_denied = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers/com.example/auth-created",
+        Some((&creator, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(
+        stale_grant_denied.status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        stale_grant_denied.body
+    );
+
+    let auto_created = send(
+        &srv.base,
+        Method::POST,
+        "/api/3.0/mlflow/mcp-servers/com.example/auto-parent/versions",
+        Some((&creator, &password)),
+        Some(json!({
+            "server_json": {"name": "com.example/auto-parent", "version": "1.0.0"}
+        })),
+    )
+    .await;
+    assert_eq!(auto_created.status, StatusCode::OK, "{}", auto_created.body);
+    let auto_parent_read = send(
+        &srv.base,
+        Method::GET,
+        "/api/3.0/mlflow/mcp-servers/com.example/auto-parent",
+        Some((&creator, &password)),
+        None,
+    )
+    .await;
+    assert_eq!(
+        auto_parent_read.status,
+        StatusCode::OK,
+        "{}",
+        auto_parent_read.body
+    );
+}

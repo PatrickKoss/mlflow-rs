@@ -1,0 +1,201 @@
+# MCP server registry: server/version/endpoint CRUD, tags, aliases, dual route
+# prefixes, pagination, and representative validation/not-found errors.
+cases:
+  - name: mcp_create_server
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers
+    body:
+      name: com.example/compliance
+      description: compliance server
+      icons: [{src: "https://example.com/icon.svg", mimeType: "image/svg+xml", future: null}]
+
+  - name: mcp_get_server_ajax
+    method: GET
+    path: /ajax-api/3.0/mlflow/mcp-servers/com.example/compliance
+
+  - name: mcp_update_server
+    method: PATCH
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance
+    body: {display_name: Compliance, description: updated}
+
+  - name: mcp_set_server_tag
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/tags
+    body: {key: owner, value: rust}
+
+  - name: mcp_create_version
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions
+    body:
+      server_json:
+        name: com.example/compliance
+        version: 1.0.0
+        description: first version
+        future_object: {kept: true, explicit_null: null}
+      display_name: First
+      status: active
+      source: compliance
+      tools:
+        - name: echo
+          description: Echo input
+          inputSchema: {type: object}
+
+  - name: mcp_create_version_ajax
+    method: POST
+    path: /ajax-api/3.0/mlflow/mcp-servers/com.example/compliance/versions
+    body:
+      server_json: {name: com.example/compliance, version: 1.1.0, explicit_null: null}
+      status: draft
+
+  - name: mcp_get_version
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.0.0
+
+  - name: mcp_update_version
+    method: PATCH
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.1.0
+    body: {display_name: Candidate, status: active, tools: []}
+
+  - name: mcp_set_version_tag
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.1.0/tags
+    body: {key: channel, value: stable}
+
+  - name: mcp_set_alias
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/aliases
+    body: {alias: production, version: 1.1.0}
+
+  - name: mcp_get_alias_ajax
+    method: GET
+    path: /ajax-api/3.0/mlflow/mcp-servers/com.example/compliance/aliases/production
+
+  - name: mcp_get_latest_alias
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/aliases/latest
+
+  - name: mcp_create_endpoint_version
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints
+    body:
+      url: "https://mcp.example.com/v1"
+      transport_type: streamable-http
+      server_version: 1.0.0
+    bind:
+      - {bind: mcp_endpoint_version, from: "$.id"}
+
+  - name: mcp_create_endpoint_alias_ajax
+    method: POST
+    path: /ajax-api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints
+    body:
+      url: "https://mcp.example.com/prod"
+      transport_type: sse
+      server_alias: production
+    bind:
+      - {bind: mcp_endpoint_alias, from: "$.id"}
+
+  - name: mcp_get_endpoint
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints/${mcp_endpoint_version}
+
+  - name: mcp_update_endpoint
+    method: PATCH
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints/${mcp_endpoint_version}
+    body: {url: "https://mcp.example.com/updated", server_version: 1.1.0}
+
+  - name: mcp_search_servers
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers
+    query: {filter_string: "tags.owner = 'rust'", order_by: name ASC}
+    normalize:
+      drop_paths: ["$.mcp_servers[0].access_endpoints"]
+
+  - name: mcp_search_versions
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions
+    query: {filter_string: "status IN ('active')", order_by: "`version` DESC"}
+
+  - name: mcp_search_server_endpoints
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints
+    query: {server_version: 1.1.0}
+
+  - name: mcp_search_all_endpoints_ajax
+    method: GET
+    path: /ajax-api/3.0/mlflow/mcp-servers/endpoints
+    query: {server_alias: production}
+
+  - name: mcp_create_page_server_1
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers
+    body: {name: com.example/page-one}
+
+  - name: mcp_create_page_server_2
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers
+    body: {name: com.example/page-two}
+
+  - name: mcp_search_pagination
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers
+    query: {max_results: 1, order_by: name ASC}
+    walk: {token_field: next_page_token, token_param: page_token, max_pages: 10}
+    normalize:
+      drop_paths: ["$.mcp_servers[0].access_endpoints"]
+
+  - name: mcp_delete_endpoint
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/endpoints/${mcp_endpoint_alias}
+
+  - name: mcp_delete_alias
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/aliases/production
+
+  - name: mcp_delete_version_tag
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.1.0/tags/channel
+
+  - name: mcp_delete_server_tag
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/tags/owner
+
+  - name: mcp_deprecate_version_1
+    method: PATCH
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.0.0
+    body: {status: deprecated}
+
+  - name: mcp_delete_version_1
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.0.0
+
+  - name: mcp_deprecate_version_2
+    method: PATCH
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.1.0
+    body: {status: deprecated}
+
+  - name: mcp_delete_version_2
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance/versions/1.1.0
+
+  - name: mcp_delete_server
+    method: DELETE
+    path: /api/3.0/mlflow/mcp-servers/com.example/compliance
+
+  # ---- Errors ----
+  - name: mcp_bad_name
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers
+    body: {name: bad}
+    expect_status: 400
+
+  - name: mcp_bad_semver
+    method: POST
+    path: /api/3.0/mlflow/mcp-servers/com.example/invalid/versions
+    body:
+      server_json: {name: com.example/invalid, version: 01.0.0}
+    expect_status: 400
+
+  - name: mcp_missing_server
+    method: GET
+    path: /api/3.0/mlflow/mcp-servers/com.example/missing
+    expect_status: 404

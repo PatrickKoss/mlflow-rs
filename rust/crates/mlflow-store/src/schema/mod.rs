@@ -25,6 +25,7 @@
 
 pub mod jobs;
 pub mod logged_models;
+pub mod mcp;
 pub mod metrics;
 pub mod runs;
 pub mod scorers;
@@ -67,6 +68,12 @@ pub const TRACKING_TABLES: &[&str] = &[
     traces::SPAN_METRICS,
     traces::ASSESSMENTS,
     runs::ENTITY_ASSOCIATIONS,
+    mcp::MCP_SERVERS,
+    mcp::MCP_SERVER_VERSIONS,
+    mcp::MCP_SERVER_TAGS,
+    mcp::MCP_SERVER_VERSION_TAGS,
+    mcp::MCP_SERVER_ALIASES,
+    mcp::MCP_ACCESS_ENDPOINTS,
 ];
 
 #[cfg(test)]
@@ -75,7 +82,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        assert_eq!(TRACKING_TABLES.len(), 33);
+        assert_eq!(TRACKING_TABLES.len(), 39);
     }
 
     #[test]
