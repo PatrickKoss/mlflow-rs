@@ -33,6 +33,8 @@ from mlflow.server.assistant.api import assistant_router
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUST_ROOT = REPO_ROOT / "rust"
 RUST_RECORDER = RUST_ROOT / "target" / "debug" / "examples" / "assistant_provider_recorder"
+DEFAULT_RUST_SERVER = RUST_ROOT / "target" / "debug" / "mlflow-server"
+RUST_SERVER = Path(os.environ.get("MLFLOW_RUST_SERVER_BIN", DEFAULT_RUST_SERVER))
 TRACKING_URI = "http://127.0.0.1:54321"
 MLFLOW_SESSION_ID = "00000000-0000-0000-0000-000000000020"
 
@@ -139,7 +141,6 @@ def _wait_http(url, process=None):
 
 @contextmanager
 def _rust_http_server(tmp_path, environment, config):
-    binary = RUST_ROOT / "target" / "debug" / "mlflow-server"
     database = tmp_path / "route-rust.db"
     shutil.copy(REPO_ROOT / "rust/crates/mlflow-server/tests/fixtures/tracking.db", database)
     home = tmp_path / "route-rust-home"
@@ -151,7 +152,7 @@ def _rust_http_server(tmp_path, environment, config):
     port = _free_port()
     process = subprocess.Popen(
         [
-            str(binary),
+            str(RUST_SERVER),
             "--host",
             "127.0.0.1",
             "--port",

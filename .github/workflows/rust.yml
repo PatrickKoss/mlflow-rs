@@ -292,6 +292,53 @@ jobs:
           path: rust/compliance/report/
           if-no-files-found: warn
 
+  # T22.3 required frame/byte-parity gate for gateway and Assistant streaming.
+  # Every provider is a loopback mock or credential-free CLI stub; the release
+  # Rust server is compared directly with the in-process Python reference.
+  sse-recorders:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false || github.event.pull_request.user.login == 'Copilot' && github.event.pull_request.user.type == 'Bot')
+    permissions:
+      contents: read
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - name: Build release server and recorder binaries
+        run: |
+          cargo build --release -p mlflow-server --bin mlflow-server
+          cargo build -p mlflow-server --bin mlflow-server \
+            --example assistant_provider_recorder \
+            --example assistant_openai_recorder
+      - uses: ./.github/actions/setup-python
+      - name: Install recorder dependencies
+        working-directory: .
+        run: uv sync --no-default-groups --group pytest
+      - name: Run SSE and streaming differential recorders
+        working-directory: .
+        env:
+          MLFLOW_RUST_SERVER_BIN: ${{ github.workspace }}/rust/target/release/mlflow-server
+        run: |
+          mkdir -p rust/compliance/report/sse-recorders
+          set -o pipefail
+          uv run --no-sync pytest -q rust/compliance/recorders/ \
+            --junitxml=rust/compliance/report/sse-recorders/junit.xml \
+            2>&1 | tee rust/compliance/report/sse-recorders/pytest.log
+      - name: Upload SSE recorder failure report
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sse-recorders-failure
+          path: rust/compliance/report/sse-recorders/
+          if-no-files-found: warn
+
   # T22.2 required Python-suite gate. The ledger validator prevents silent
   # source/test drift, while the dependency-light core exercises public SDK
   # calls through a release Rust server on both supported cutover backends.

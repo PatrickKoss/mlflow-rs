@@ -10,7 +10,7 @@ deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 don
 except those two UI checks. Corpus GREEN + required CI gate; client suites 0
 failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
 operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
-Phase 22 is in progress (T22.0–T22.2 done; T22.3 next) and is the only
+Phase 22 is in progress (T22.0–T22.3 done; T22.4 next) and is the only
 remaining planned work.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
 
@@ -71,7 +71,13 @@ remaining planned work.**
   Rust parity bug: StartTraceV3 discarded embedded assessments; fix
   `84340d2e2` persists them atomically and returns them in TraceInfo.** Required
   core + validator run on every Rust CI build; the full optional-dependency
-  matrix is nightly/manual. T22.3 is next. See
+  matrix is nightly/manual. **T22.3 is COMPLETE 2026-07-20:** all 26 recorder
+  pytest items are green against the release Rust server (gateway 1/1 with
+  38/38 comparisons, Assistant HTTP/SSE 1/1 with 27/27 comparisons, CLI
+  providers 21/21, OpenAI-compatible provider 3/3), with no parity regression
+  and no weakened byte/frame checks. Required CI job `sse-recorders` builds
+  the release server and standalone recorders and retains pytest/JUnit output
+  on failure. T22.4 (nginx cutover) is next. See
   `part2-work-breakdown.md` §16 Phase 22. Phase 23 already
   finished, so T22.4's precondition on the Python container is satisfied.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection

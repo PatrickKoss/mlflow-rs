@@ -1068,9 +1068,23 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       12 trace cases with zero non-allowlisted diffs, zero status mismatches, and
       zero errors. Required CI covers core + validator on both backends; the full
       exact-ID matrix remains nightly/manual. T22.3 is next.
-- [ ] **T22.3 SSE/streaming differential** (gateway + assistant) green
+- [x] **T22.3 SSE/streaming differential** (gateway + assistant) green
       frame-by-frame against mocks/stubs.
       **AC/VER:** recorder CI job.
+
+      **DONE (2026-07-20):** the hermetic recorder suite is green against the
+      current release Rust server: `test_gateway_runtime_differential.py` 1/1
+      pytest item (38/38 request/response comparisons),
+      `test_assistant_differential.py` 1/1 (27/27 HTTP/SSE comparisons),
+      `test_assistant_cli_provider_differential.py` 21/21, and
+      `test_assistant_openai_provider_differential.py` 3/3 — 26/26 collected
+      pytest items overall. No server regression was found and no byte/frame
+      assertion or normalization changed. The recorder harness now honors the
+      existing `MLFLOW_RUST_SERVER_BIN` convention so CI exercises the release
+      binary. Required Rust CI job `sse-recorders` builds that release server
+      plus both standalone recorder examples, installs the locked Python +
+      pytest dependencies, runs the complete recorder directory serially, and
+      uploads its pytest log and JUnit report on failure. T22.4 is next.
 - [ ] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
       phase; final state removes the Python server container from
       `rust/deploy/docker-compose.yml` and removes Python from every production

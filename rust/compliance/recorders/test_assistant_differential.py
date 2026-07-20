@@ -28,7 +28,8 @@ from mlflow.assistant.types import Event, Message, TextBlock
 from mlflow.server.assistant.api import assistant_router
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-RUST_BINARY = REPO_ROOT / "rust" / "target" / "debug" / "mlflow-server"
+DEFAULT_RUST_BINARY = REPO_ROOT / "rust" / "target" / "debug" / "mlflow-server"
+RUST_BINARY = Path(os.environ.get("MLFLOW_RUST_SERVER_BIN", DEFAULT_RUST_BINARY))
 FIXTURE_DB = REPO_ROOT / "rust" / "crates" / "mlflow-server" / "tests" / "fixtures" / "tracking.db"
 PREFIX = "/ajax-api/3.0/mlflow/assistant"
 STUB_REPLY = (

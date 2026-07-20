@@ -32,7 +32,8 @@ from mlflow.server.gateway_api import gateway_router
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-RUST_BINARY = REPO_ROOT / "rust" / "target" / "debug" / "mlflow-server"
+DEFAULT_RUST_BINARY = REPO_ROOT / "rust" / "target" / "debug" / "mlflow-server"
+RUST_BINARY = Path(os.environ.get("MLFLOW_RUST_SERVER_BIN", DEFAULT_RUST_BINARY))
 FIXED_TIME = 1_750_000_000
 FAKE_PASSPHRASE = "obvious-fake-differential-passphrase"
 PROVIDERS = ("openai", "azure", "anthropic", "gemini")
