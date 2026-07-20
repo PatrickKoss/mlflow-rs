@@ -860,6 +860,10 @@ def parser() -> argparse.ArgumentParser:
         "t23-4", help="run the streaming, interactive, promptlab, and archival matrix"
     )
     add_t23_4_arguments(streaming_parser)
+    from rust.bench.genai.t23_5 import add_arguments as add_t23_5_arguments
+
+    soak_parser = subparsers.add_parser("t23-5", help="run the mixed GenAI soak")
+    add_t23_5_arguments(soak_parser)
     return value
 
 
