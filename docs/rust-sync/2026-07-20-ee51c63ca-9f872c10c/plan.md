@@ -22,7 +22,7 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
   - **AC:** Every MCP registry endpoint returns byte-identical (allowlist-aware) responses vs the merged Python server on sqlite+postgres, including validation errors (semver rules in `semver_utils.py`, name rules in `validation.py`), auth enforcement, and workspace scoping. Alembic migration `a8b9c0d1e2f3` is schema owner — Rust consumes, never migrates.
   - **VER:** New conformance suite `mcp_server_registry` in `rust/genai-inventory/run_conformance.py` matrix (Python-HTTP baseline, sqlite+postgres) + unary corpus cases in `rust/compliance/` for CRUD/search/tags/aliases/error paths; Rust store + auth unit tests.
 
-- [ ] T-S2 Trace token-usage rollup parity fix
+- [x] T-S2 Trace token-usage rollup parity fix — DONE 2026-07-20 (`5a47f20ce`): real Rust defect — trace-level token usage was never aggregated; now recomputed from the persisted span tree with rollup parents suppressing descendants. 14 spans_store tests + 2 new OTLP corpus cases; coordinator-verified: focused tests green, replay 267 cases / 0 non-allowlisted diffs.
   - **Upstream refs:** `bdc41820c` Fix double-counted trace token usage for rollup parent spans in `SqlAlchemyStore.log_spans` (#24339)
   - **Rust target:** `rust/crates/mlflow-store/src/store/` span-logging path (log_spans token aggregation)
   - **AC:** Logging spans where a parent span rolls up child token usage yields the same trace-level token totals as merged Python (no double count), for both single-batch and incremental log_spans; matches upstream's `test_sqlalchemy_store_traces.py` additions.
@@ -46,7 +46,7 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
   - **AC:** Rust-served model/provider catalog data matches merged Python for the updated catalogs; regenerated protos compile and preserve wire compatibility (oneof restored); any UC-native surface Rust does not serve is explicitly recorded as out-of-scope with the reason.
   - **VER:** `rust/genai-inventory/validate_ledger.py` green; conformance rows touching catalog-backed responses; `cargo test -p mlflow-proto` + full corpus replay for wire regressions.
 
-- [ ] T-S6 Job-runner orphan shutdown + periodic lock recovery semantics
+- [x] T-S6 Job-runner orphan shutdown + periodic lock recovery semantics — DONE 2026-07-20 (`b5e584717`): Rust design already correct (process-group guard + kill_on_drop; scheduler lease takeover); proof tests added (job_runner.rs, trace_archival_scheduler.rs), coordinator-verified green.
   - **Upstream refs:** `2b4acea79` Fix Huey orphan shutdown and periodic lock recovery (#24492)
   - **Rust target:** `rust/crates/mlflow-server/src/job_runner.rs`, `rust/crates/mlflow-genai/src/jobs.rs`
   - **AC:** Rust's native job runner exhibits the behaviors upstream fixed in the Huey implementation: orphaned job processes are shut down when the runner stops, and stale periodic-task locks are recovered after an unclean crash (no permanently wedged periodic tasks). Where Rust's design already guarantees this (kill_on_drop, DB-lock lease expiry), prove it with a test instead of porting code.
