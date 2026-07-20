@@ -5,6 +5,7 @@ on:
     paths:
       - "rust/**"
       - "mlflow/**"
+      - "tests/**"
       - ".github/workflows/rust.yml"
     branches:
       - master
@@ -17,6 +18,7 @@ on:
     paths:
       - "rust/**"
       - "mlflow/**"
+      - "tests/**"
       - ".github/workflows/rust.yml"
   # Nightly soak for the concurrency/chaos test (job `chaos`, plan T12.6),
   # which is too heavy for the PR path. `workflow_dispatch` allows ad-hoc runs.
@@ -288,6 +290,116 @@ jobs:
         with:
           name: compliance-report
           path: rust/compliance/report/
+          if-no-files-found: warn
+
+  # T22.2 required Python-suite gate. The ledger validator prevents silent
+  # source/test drift, while the dependency-light core exercises public SDK
+  # calls through a release Rust server on both supported cutover backends.
+  # The exact same ledger-driven runner expands to every indexed suite in the
+  # nightly/manual job below.
+  python-conformance:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false || github.event.pull_request.user.login == 'Copilot' && github.event.pull_request.user.type == 'Bot')
+    permissions:
+      contents: read
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mlflow
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U mlflow -d mlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - name: Build release Rust server and native worker
+        run: cargo build --release -p mlflow-server -p mlflow-genai-worker
+      - uses: ./.github/actions/setup-python
+      - name: Install Python test and Postgres dependencies
+        working-directory: .
+        run: uv sync --extra db
+      - name: Validate ledger and run required Python conformance matrix
+        working-directory: .
+        env:
+          MLFLOW_RUST_CONFORMANCE_PG_URI: postgresql://mlflow:mlflow@127.0.0.1:5432/mlflow
+        run: uv run --no-sync python rust/genai-inventory/run_conformance.py --profile required
+      - name: Upload required Python conformance report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: t22-2-python-conformance-required
+          path: |
+            rust/compliance/report/t22_2_required*
+          if-no-files-found: warn
+
+  # The complete repointable test ledger is intentionally outside the PR
+  # critical path. It runs against both SQLite and Postgres 16 nightly or on a
+  # manual dispatch, retaining JUnit, pytest, and server logs per classification.
+  # Python-internal unit tests remain classified and validator-covered, but are
+  # not misrepresented as tests that can cross an HTTP process boundary.
+  python-conformance-full:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    timeout-minutes: 240
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mlflow
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U mlflow -d mlflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - name: Build release Rust server and native worker
+        run: cargo build --release -p mlflow-server -p mlflow-genai-worker
+      - uses: ./.github/actions/setup-python
+      - name: Install Python test and Postgres dependencies
+        working-directory: .
+        run: uv sync --extra db
+      - name: Run full ledger Python conformance matrix
+        working-directory: .
+        env:
+          MLFLOW_RUST_CONFORMANCE_PG_URI: postgresql://mlflow:mlflow@127.0.0.1:5432/mlflow
+        run: uv run --no-sync python rust/genai-inventory/run_conformance.py --profile full
+      - name: Upload full Python conformance report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: t22-2-python-conformance-full
+          path: |
+            rust/compliance/report/t22_2_full*
           if-no-files-found: warn
 
   # T22.1 refreshes the dependency-heavy third-party scorer golden nightly or

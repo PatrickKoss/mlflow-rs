@@ -29,12 +29,12 @@
       ],
       "name": "MetaPrompt",
       "owner_task": "T19.5",
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "source": "mlflow/genai/optimize/optimizers/metaprompt_optimizer.py:94"
     }
   ],
   "reference": {
-    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "mlflow_git_sha": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
     "package_pins": {
       "arize-phoenix-evals": "2.13.0",
       "deepeval": "4.0.7",

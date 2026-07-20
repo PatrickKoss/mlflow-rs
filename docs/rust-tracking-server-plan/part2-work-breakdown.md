@@ -1028,11 +1028,34 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       regeneration is an explicit nightly/manual job. Local artifact-style
       evidence: `rust/compliance/report/last_run.{json,md}` and
       `rust/compliance/report/semantic_last_run.{json,md}`.
-- [ ] **T22.2 Python-suite + reachability conformance**: T15.5's server-
+- [x] **T22.2 Python-suite + reachability conformance**: T15.5's server-
       reachable suites green against Rust via the launcher switch on the DB
       matrix; ledger generator reports zero unclassified/missing native owners.
       Client-only SDK suites remain green against the Rust HTTP server.
       **AC/VER:** CI logs + generated coverage report.
+      **DONE (2026-07-20, Codex):** refreshed `rust/genai-inventory/` at the
+      T22.1 merge head `c69051f534f4`: 1,892 source/surface rows remain 1,546
+      `server_reachable` / 346 `client_only` / 0 dead, with zero unclassified
+      server paths and zero server rows missing a native owner. Drift was one
+      new review-queue auth differential plus the three new public-SDK HTTP
+      conformance cases; no source ownership reclassification was needed.
+      The formerly path-keyword-classified test index is now explicit about
+      execution boundaries: 3 Rust-HTTP tests, 183 client-only SDK definitions,
+      and 3,376 `python_internal` definitions whose handler/store/worker
+      monkeypatches cannot cross a process boundary (retained as inventory
+      evidence rather than force-reported as Rust HTTP coverage). The full
+      repointable matrix used the release server and passed on both SQLite and
+      live `postgres:16`: server-reachable 3 passed / 0 failed / 0 skipped per
+      backend; client-only 292 passed / 0 failed / 1 existing skip per backend.
+      The required subset was 14 passed / 0 failed / 0 skipped per backend.
+      No Rust parity bug was found. Ledger-driven runner and byte-stable report
+      generator: `rust/genai-inventory/run_conformance.py`; machine/Markdown
+      evidence: `rust/compliance/report/t22_2_{required,full}.{json,md}` (with
+      per-suite JUnit/pytest/server logs in CI artifacts). Required CI job
+      `python-conformance` runs release Rust + validator + SQLite/Postgres core;
+      `python-conformance-full` runs the pinned optional-dependency suite
+      nightly/manual. Release build, generator stability, validator, Ruff,
+      Python baseline 3/3, and both local DB matrices exited 0.
 - [ ] **T22.3 SSE/streaming differential** (gateway + assistant) green
       frame-by-frame against mocks/stubs.
       **AC/VER:** recorder CI job.

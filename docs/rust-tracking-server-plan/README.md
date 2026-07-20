@@ -10,7 +10,7 @@ deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 don
 except those two UI checks. Corpus GREEN + required CI gate; client suites 0
 failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
 operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
-Phase 22 is in progress (T22.0–T22.1 done; T22.2 next) and is the only
+Phase 22 is in progress (T22.0–T22.2 done; T22.3 next) and is the only
 remaining planned work.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
 
@@ -57,8 +57,15 @@ remaining planned work.**
   factory support) and T22.1 (Tier A + semantic differential corpus) are
   COMPLETE 2026-07-20. T22.1 expanded request replay from 188 to 271 cases
   and added 374 manifest-generated semantic cases; all 645 are green with
-  zero non-allowlisted differences and no new allowlist entries. T22.2 is
-  next — see `part2-work-breakdown.md` §16 Phase 22. Phase 23 already
+  zero non-allowlisted differences and no new allowlist entries. T22.2
+  refreshed the 1,892-item reachability ledger at the T22.1 merge head
+  (1,546 server-reachable / 346 client-only / 0 dead; zero unclassified or
+  missing owners), separated 3,376 Python-internal tests from the repointable
+  HTTP/SDK inventory, and ran that inventory green against release Rust on
+  SQLite + Postgres 16 (per backend: server 3/3; client-only 292 passed / 1
+  documented skip). Required core + validator run on every Rust CI build;
+  the full optional-dependency matrix is nightly/manual. T22.3 is next — see
+  `part2-work-breakdown.md` §16 Phase 22. Phase 23 already
   finished, so T22.4's precondition on the Python container is satisfied.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-

@@ -67,6 +67,18 @@ def render(ledger: dict[str, Any]) -> str:
         f"Its test index contains {len(ledger['tests']):,} exact pytest test IDs.",
         "",
         *_table(
+            ["Test execution classification", "Tests"],
+            [
+                [classification, summary["test_classification_counts"][classification]]
+                for classification in ("server_reachable", "client_only", "python_internal")
+            ],
+        ),
+        "",
+        "`python_internal` tests exercise Python handlers, stores, workers, or monkeypatched "
+        "implementation classes directly; they remain inventory evidence but are not falsely "
+        "reported as repointable Rust HTTP conformance.",
+        "",
+        *_table(
             ["Classification", "Items"],
             [
                 [classification, summary["classification_counts"][classification]]

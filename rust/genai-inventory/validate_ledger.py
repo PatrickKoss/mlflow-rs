@@ -13,6 +13,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 GENAI_ROOT = ROOT / "mlflow" / "genai"
 CLASSIFICATIONS = {"server_reachable", "client_only", "dead"}
+TEST_CLASSIFICATIONS = {"server_reachable", "client_only", "python_internal"}
 OWNERS = {"mlflow-genai", "mlflow-server", "mlflow-store", "worker"}
 REQUIRED_SURFACE_AREAS = {
     "archival",
@@ -118,6 +119,9 @@ def main() -> None:
 
     oracle_groups = ledger["fixture_oracles"]
     test_ids = {test["id"] for test in ledger["tests"]}
+    for test in ledger["tests"]:
+        if test.get("classification") not in TEST_CLASSIFICATIONS:
+            raise AssertionError(f"unclassified test: {test['id']}")
     for item in items:
         classification = item.get("classification")
         if classification not in CLASSIFICATIONS:
@@ -171,6 +175,11 @@ def main() -> None:
     }
     if ledger["summary"]["phase_counts"] != expected_phases:
         raise AssertionError("phase summary drift")
+    expected_test_counts = Counter(test["classification"] for test in ledger["tests"])
+    if ledger["summary"]["test_classification_counts"] != dict(
+        sorted(expected_test_counts.items())
+    ):
+        raise AssertionError("test classification summary drift")
 
     manifests = {
         "scorers.json": scorers,

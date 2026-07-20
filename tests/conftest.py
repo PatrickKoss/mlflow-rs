@@ -848,8 +848,17 @@ def reset_mlflow_uri():
     # Resetting these environment variables cause sqlalchemy store tests to run with a sqlite
     # database instead of mysql/postgresql/mssql.
     if "DISABLE_RESET_MLFLOW_URI_FIXTURE" not in os.environ:
-        os.environ.pop("MLFLOW_TRACKING_URI", None)
-        os.environ.pop("MLFLOW_REGISTRY_URI", None)
+        conformance_uri = os.environ.get("MLFLOW_CONFORMANCE_TRACKING_URI")
+        if conformance_uri:
+            # T22.2 runs ledger-selected SDK suites against a session-scoped Rust
+            # HTTP server. Tests may temporarily replace either URI, so restore the
+            # externally managed endpoint after every case instead of falling back
+            # to a local Python store after the first test.
+            mlflow.set_tracking_uri(conformance_uri)
+            os.environ["MLFLOW_REGISTRY_URI"] = conformance_uri
+        else:
+            os.environ.pop("MLFLOW_TRACKING_URI", None)
+            os.environ.pop("MLFLOW_REGISTRY_URI", None)
         try:
             from mlflow.tracking import set_registry_uri
 
@@ -1208,6 +1217,12 @@ def cached_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture
 def db_uri(cached_db: Path) -> Iterator[str]:
     """Returns a fresh SQLite URI for each test by copying the cached database."""
+    if conformance_uri := os.environ.get("MLFLOW_CONFORMANCE_TRACKING_URI"):
+        # The T22.2 harness deliberately replaces local-store coverage with the
+        # Rust HTTP boundary while retaining the suite's ordinary ``db_uri`` API.
+        yield conformance_uri
+        return
+
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         db_path = Path(tmp_dir) / "mlflow.db"
 

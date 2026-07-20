@@ -1,0 +1,140 @@
+{
+  "ledger_counts": {
+    "client_only": 346,
+    "dead": 0,
+    "server_reachable": 1546
+  },
+  "ledger_reference": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
+  "ledger_test_counts": {
+    "client_only": 183,
+    "python_internal": 3376,
+    "server_reachable": 3
+  },
+  "profile": "required",
+  "runs": [
+    {
+      "backend": "sqlite",
+      "classification": "server_reachable",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_required_server_reachable_sqlite.xml",
+        "pytest_log": "rust/compliance/report/t22_2_required_server_reachable_sqlite.log",
+        "server_log": "rust/compliance/report/t22_2_required_server_reachable_sqlite.server.log"
+      },
+      "exit_code": 0,
+      "ledger_test_definitions": 3,
+      "selector_count": 3,
+      "suites": {
+        "tests/genai/test_rust_http_conformance.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "sqlite",
+      "classification": "client_only",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_required_client_only_sqlite.xml",
+        "pytest_log": "rust/compliance/report/t22_2_required_client_only_sqlite.log",
+        "server_log": "rust/compliance/report/t22_2_required_client_only_sqlite.server.log"
+      },
+      "exit_code": 0,
+      "ledger_test_definitions": 4,
+      "selector_count": 4,
+      "suites": {
+        "tests/genai/scorers/guardrails/test_utils.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 2,
+          "passed": 4,
+          "skipped": 0
+        },
+        "tests/genai/simulators/test_utils.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 2,
+          "passed": 7,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 11,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "postgres",
+      "classification": "server_reachable",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_required_server_reachable_postgres.xml",
+        "pytest_log": "rust/compliance/report/t22_2_required_server_reachable_postgres.log",
+        "server_log": "rust/compliance/report/t22_2_required_server_reachable_postgres.server.log"
+      },
+      "exit_code": 0,
+      "ledger_test_definitions": 3,
+      "selector_count": 3,
+      "suites": {
+        "tests/genai/test_rust_http_conformance.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "postgres",
+      "classification": "client_only",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_required_client_only_postgres.xml",
+        "pytest_log": "rust/compliance/report/t22_2_required_client_only_postgres.log",
+        "server_log": "rust/compliance/report/t22_2_required_client_only_postgres.server.log"
+      },
+      "exit_code": 0,
+      "ledger_test_definitions": 4,
+      "selector_count": 4,
+      "suites": {
+        "tests/genai/scorers/guardrails/test_utils.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 2,
+          "passed": 4,
+          "skipped": 0
+        },
+        "tests/genai/simulators/test_utils.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 2,
+          "passed": 7,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 11,
+        "skipped": 0
+      }
+    }
+  ],
+  "schema_version": 1,
+  "task": "T22.2"
+}

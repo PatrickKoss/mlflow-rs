@@ -27,7 +27,8 @@ ROOT = HERE.parents[1]
 GENAI_ROOT = ROOT / "mlflow" / "genai"
 
 CLASSIFICATIONS = {"server_reachable", "client_only", "dead"}
-REFERENCE_MLFLOW_GIT_SHA = "2a36d19898fe7cdd5f596d4992be7494159efd15"
+TEST_CLASSIFICATIONS = {"server_reachable", "client_only", "python_internal"}
+REFERENCE_MLFLOW_GIT_SHA = "c69051f534f4b0d171ed92d07c58a20f8c2a3461"
 
 
 def _sha256(path: Path) -> str:
@@ -119,9 +120,16 @@ def _classify_test(test_id: str) -> str:
         "/judges/optimizers/test_gepa",
         "/judges/optimizers/test_simba",
     )
-    return (
-        "client_only" if any(marker in test_id for marker in client_markers) else "server_reachable"
-    )
+    if any(marker in test_id for marker in client_markers):
+        return "client_only"
+    if test_id.startswith("tests/genai/test_rust_http_conformance.py::"):
+        return "server_reachable"
+    # The remaining tests exercise Python handlers, stores, workers, or
+    # monkeypatched implementation classes directly. Their source targets may
+    # be server-reachable, but the test process cannot be repointed across an
+    # HTTP boundary. T22.2 retains them in the inventory without presenting
+    # them as Rust-server conformance.
+    return "python_internal"
 
 
 SERVER_RULES: tuple[tuple[str, str, str, str, str], ...] = (
@@ -1822,6 +1830,10 @@ def main() -> None:
                     for item in items
                 )
                 for phase in range(16, 23)
+            },
+            "test_classification_counts": {
+                classification: sum(test["classification"] == classification for test in tests)
+                for classification in sorted(TEST_CLASSIFICATIONS)
             },
         },
     }

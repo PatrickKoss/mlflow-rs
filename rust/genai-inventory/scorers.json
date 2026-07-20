@@ -48,7 +48,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "completeness",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2973"
     },
@@ -100,7 +100,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "conversation_completeness",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2337"
     },
@@ -159,7 +159,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "conversational_guidelines",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2652"
     },
@@ -211,7 +211,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "conversational_role_adherence",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2575"
     },
@@ -263,7 +263,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "conversational_safety",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2416"
     },
@@ -315,7 +315,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "conversational_tool_call_efficiency",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2497"
     },
@@ -367,7 +367,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "correctness",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1698"
     },
@@ -419,7 +419,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "equivalence",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1977"
     },
@@ -471,7 +471,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "expectations_guidelines",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1311"
     },
@@ -523,7 +523,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "fluency",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1894"
     },
@@ -582,7 +582,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "guidelines",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1155"
     },
@@ -641,7 +641,7 @@
           "type": "<class 'mlflow.genai.scorers.base.Scorer'>"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "knowledge_retention",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2787"
     },
@@ -693,7 +693,7 @@
           "type": "list[typing.Literal['email', 'phone', 'ssn', 'credit_card', 'ip_address']] | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "pii_detection",
       "source": "mlflow/genai/scorers/builtin_scorers.py:3337"
     },
@@ -759,7 +759,7 @@
           "type": "<class 'bool'>"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "regex_match",
       "source": "mlflow/genai/scorers/builtin_scorers.py:3228"
     },
@@ -811,7 +811,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "relevance_to_query",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1474"
     },
@@ -877,7 +877,7 @@
           "type": "typing.Literal['chars', 'words']"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "response_length",
       "source": "mlflow/genai/scorers/builtin_scorers.py:3446"
     },
@@ -929,7 +929,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "retrieval_groundedness",
       "source": "mlflow/genai/scorers/builtin_scorers.py:686"
     },
@@ -981,7 +981,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "retrieval_relevance",
       "source": "mlflow/genai/scorers/builtin_scorers.py:392"
     },
@@ -1033,7 +1033,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "retrieval_sufficiency",
       "source": "mlflow/genai/scorers/builtin_scorers.py:550"
     },
@@ -1085,7 +1085,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "safety",
       "source": "mlflow/genai/scorers/builtin_scorers.py:1592"
     },
@@ -1137,7 +1137,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "summarization",
       "source": "mlflow/genai/scorers/builtin_scorers.py:3082"
     },
@@ -1203,7 +1203,7 @@
           "type": "<class 'bool'>"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "tool_call_correctness",
       "source": "mlflow/genai/scorers/builtin_scorers.py:873"
     },
@@ -1255,7 +1255,7 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "tool_call_efficiency",
       "source": "mlflow/genai/scorers/builtin_scorers.py:792"
     },
@@ -1307,13 +1307,13 @@
           "type": "str | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "serialized_name_default": "user_frustration",
       "source": "mlflow/genai/scorers/builtin_scorers.py:2258"
     }
   ],
   "reference": {
-    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "mlflow_git_sha": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
     "package_pins": {
       "arize-phoenix-evals": "2.13.0",
       "deepeval": "4.0.7",
@@ -1425,7 +1425,7 @@
           "type": "list[typing.Union[typing.Literal['min', 'max', 'mean', 'median', 'variance', 'p90'], typing.Callable[[list[int | float]], float]]] | None"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461",
       "source": "mlflow/genai/judges/instructions_judge/__init__.py:61"
     },
     {
@@ -1476,7 +1476,7 @@
           "type": "<class 'bool'>"
         }
       ],
-      "pin": "mlflow==3.14.1.dev0+git.2a36d19898fe7cdd5f596d4992be7494159efd15; dspy==3.2.1",
+      "pin": "mlflow==3.14.1.dev0+git.c69051f534f4b0d171ed92d07c58a20f8c2a3461; dspy==3.2.1",
       "source": "mlflow/genai/judges/optimizers/memalign/optimizer.py:138"
     }
   ],
