@@ -26,6 +26,59 @@ def _json_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
+def _schema_value(schema: Any, digest: str, root: dict[str, Any], key: str = "") -> Any:
+    """Build a small deterministic instance of an OpenAI response JSON schema."""
+    if not isinstance(schema, dict):
+        return f"bench-{digest[:12]}"
+    if ref := schema.get("$ref"):
+        target: Any = root
+        for part in ref.removeprefix("#/").split("/"):
+            target = target.get(part.replace("~1", "/").replace("~0", "~"), {})
+        return _schema_value(target, digest, root, key)
+    if values := schema.get("enum"):
+        if key == "severity" and "low" in values:
+            return "low"
+        return values[0]
+    for variant_key in ("const", "default"):
+        if variant_key in schema:
+            return schema[variant_key]
+    for union_key in ("anyOf", "oneOf"):
+        if variants := schema.get(union_key):
+            variant = next(
+                (
+                    item
+                    for item in variants
+                    if isinstance(item, dict) and item.get("type") != "null"
+                ),
+                variants[0],
+            )
+            return _schema_value(variant, digest, root, key)
+    kind = schema.get("type")
+    if isinstance(kind, list):
+        kind = next((item for item in kind if item != "null"), "string")
+    if kind == "object" or "properties" in schema:
+        properties = schema.get("properties", {})
+        required = schema.get("required", list(properties))
+        return {
+            name: _schema_value(properties[name], digest, root, name)
+            for name in required
+            if name in properties
+        }
+    if kind == "array":
+        return [_schema_value(schema.get("items", {}), digest, root, key)]
+    if kind == "integer":
+        return 0
+    if kind == "number":
+        return 0.5
+    if kind == "boolean":
+        return True
+    if key in {"category", "categories"}:
+        return "quality"
+    if key in {"result", "value"}:
+        return "yes"
+    return f"bench-{key or 'value'}-{digest[:12]}"
+
+
 @dataclass
 class ProviderObservation:
     route: str
@@ -127,14 +180,10 @@ class ProviderHandler(BaseHTTPRequestHandler):
     def _openai_response(self, body: dict[str, Any], digest: str) -> bytes:
         model = str(body.get("model") or "genai-bench-model")
         if body.get("response_format"):
-            text = json.dumps(
-                {
-                    "rationale": f"deterministic judge rationale {digest[:12]}",
-                    "result": "yes",
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            )
+            response_format = body["response_format"]
+            schema = response_format.get("json_schema", {}).get("schema", response_format)
+            value = _schema_value(schema, digest, schema)
+            text = json.dumps(value, sort_keys=True, separators=(",", ":"))
         else:
             text = f"bench-{digest[:12]} {digest[12:20]}"
         prompt_tokens = 5 + int(digest[20:22], 16) % 19

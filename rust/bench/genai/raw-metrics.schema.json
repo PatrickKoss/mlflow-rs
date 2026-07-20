@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mlflow.org/schemas/rust-bench-genai-raw-metrics-1.1.0.json",
+  "$id": "https://mlflow.org/schemas/rust-bench-genai-raw-metrics-1.2.0.json",
   "title": "MLflow Phase 23 GenAI raw benchmark metrics",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
     "equivalence"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0.0", "1.1.0"]},
+    "schema_version": {"enum": ["1.0.0", "1.1.0", "1.2.0"]},
     "run": {
       "type": "object",
       "additionalProperties": false,
@@ -44,7 +44,18 @@
         "mix": {"enum": ["write-heavy", "read-heavy"]},
         "measured_requests": {"type": "integer", "minimum": 1},
         "canonical_requests": {"type": "integer", "minimum": 1},
-        "large_definition": {"type": "string"}
+        "large_definition": {"type": "string"},
+        "shape": {"enum": ["high-fanout", "large-payload", "burst", "steady-drip"]},
+        "job_kinds": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "canonical_jobs": {"type": "integer", "minimum": 1},
+        "measured_jobs": {"type": "integer", "minimum": 1},
+        "post_completion_settle_seconds": {"type": "number", "minimum": 0},
+        "rows_per_job": {"type": "integer", "minimum": 1},
+        "issue_disjoint_corpus": {"type": "boolean"},
+        "concurrent_terminal_polling": {"type": "boolean"},
+        "steady_drip_interleaved": {"type": "boolean"},
+        "trimmed": {"type": "boolean"},
+        "trim_note": {"type": ["string", "null"]}
       }
     },
     "summary": {
@@ -66,7 +77,20 @@
             "errors": {"type": "integer", "minimum": 0},
             "error_rate": {"type": "number", "minimum": 0, "maximum": 1},
             "rps": {"type": "number", "minimum": 0},
-            "latency_ms": {"$ref": "#/$defs/percentiles"}
+            "latency_ms": {"$ref": "#/$defs/percentiles"},
+            "jobs_per_minute": {"type": "number", "minimum": 0},
+            "job_kinds": {"type": "object"},
+            "fairness": {"type": ["object", "null"]},
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["cpu_seconds", "mean_rss_mib", "peak_rss_mib"],
+              "properties": {
+                "cpu_seconds": {"type": "number", "minimum": 0},
+                "mean_rss_mib": {"type": "number", "minimum": 0},
+                "peak_rss_mib": {"type": "number", "minimum": 0}
+              }
+            }
           }
         }
       }
@@ -118,6 +142,7 @@
         }
       }
     },
+    "leak_check": {"type": "object"},
     "machine_state": {
       "type": "object",
       "additionalProperties": false,
@@ -227,7 +252,15 @@
         "polls": {"type": "integer", "minimum": 1},
         "queue_wait_seconds": {"type": "number", "minimum": 0},
         "execution_seconds": {"type": "number", "minimum": 0},
-        "submit_to_terminal_seconds": {"type": "number", "minimum": 0}
+        "submit_to_terminal_seconds": {"type": "number", "minimum": 0},
+        "api_creation_time_ms": {"type": ["integer", "null"], "minimum": 0},
+        "api_last_update_time_ms": {"type": ["integer", "null"], "minimum": 0},
+        "job_kind": {"type": "string"},
+        "sequence": {"type": "integer", "minimum": 0},
+        "result_sampled": {"type": "boolean"},
+        "timed_out": {"type": "boolean"},
+        "submitted_offset_seconds": {"type": "number", "minimum": 0},
+        "terminal_offset_seconds": {"type": "number", "minimum": 0}
       }
     },
     "resourceSample": {
@@ -239,6 +272,7 @@
         "elapsed_seconds": {"type": "number", "minimum": 0},
         "rss_bytes": {"type": "integer", "minimum": 0},
         "process_count": {"type": "integer", "minimum": 0},
+        "thread_count": {"type": "integer", "minimum": 0},
         "utime_seconds": {"type": "number", "minimum": 0},
         "stime_seconds": {"type": "number", "minimum": 0}
       }

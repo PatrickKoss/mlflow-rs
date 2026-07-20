@@ -159,3 +159,69 @@ uv run --frozen --extra db python -m rust.bench.genai.runner t23-2 \
   --families datasets --small-requests 20 --large-requests 10 \
   --output-dir /tmp/t23-2-check
 ```
+
+## T23.3 jobs + native-engine matrix
+
+Run the complete async-job matrix with:
+
+```bash
+uv run --frozen --extra db --with litellm python -m rust.bench.genai.runner t23-3
+```
+
+The fractional matrix uses isolated high-fan-out and large-payload cells for
+evaluation, scorer invoke, issue discovery, and prompt optimization. Online
+trace and session scoring share paired cells because the public minute
+scheduler dispatches both pools from the same registered-scorer experiment.
+An all-kind burst adds cross-pool queue/fairness pressure, and a steady drip
+keeps direct submissions below capacity while observing two real scheduler
+ticks for each online kind. Canonical volumes are 1,000 jobs/kind for fan-out,
+about 10 jobs/kind over 1,000 rows for large payloads, 100 jobs/kind for burst,
+and 20 direct jobs/kind plus two scheduler jobs/kind for drip.
+
+Issue discovery uses a separate 10,000-trace corpus so its ten large jobs each
+receive a disjoint seeded 1,000-row partition. Rotating the same 1,000 traces
+across all ten jobs caused overlapping issue-artifact writes and deterministic
+timeouts during calibration; disjoint partitions preserve the canonical
+ten-by-1,000 volume and measure payload cost instead of write contention.
+
+Public invoke creation is capped at three concurrent requests on both targets,
+leaving one of the four reference uvicorn workers available for the handlers'
+loopback MLflow client calls. Mixed cells serialize the creation requests to
+avoid the prompt dataset-lineage race. The measured burst is the resulting
+worker-queue burst: its 100 jobs per kind remain far above every configured
+job-pool concurrency.
+
+Issue-invoke creation is serialized on both targets because multiple requests
+can be accepted by one reference uvicorn worker and deadlock its loopback
+trace reads. This affects only job creation; the 1,000-job queue is dispatched
+at full issue-worker concurrency and remains the measured fan-out workload.
+
+Online work is created only by public scorer registration and online-config
+APIs plus the real periodic scheduler. Because the generic public jobs API has
+no list operation, the harness uses a read-only jobs-table query to discover
+scheduler-created IDs, then measures every state transition through the public
+GET jobs API. It never inserts, updates, claims, or executes a job internally.
+
+Schema `1.2.0` adds job-kind throughput/percentiles, burst fairness, per-sample
+thread counts, and explicit leak-check inputs/verdicts. Every fan-out cell is a
+1,000-completion leak observation; the verdict requires settled process/thread
+counts and RSS to return to a bounded, non-monotonically-growing baseline. The
+settled RSS allowance is 15% plus 64 MiB over the cold process-tree baseline
+to accommodate lazily retained Python runtime caches; the final samples must
+still be flat and process/thread counts bounded. Leak-applicable cells keep
+sampling for at least five and up to 60 seconds after terminal completion so
+runtime children must actually exit and the whole tree must reach that flat
+tail; reaching the timeout without a flat tail fails the cell. The settled
+thread-count spread allowance is the greater of two threads or 1% of the whole
+tree, while the end count remains capped at 10% plus eight over baseline.
+Polling uses a deterministic one-hour terminal deadline so the 1,000-job
+prompt queue can drain through its two-worker pool; any job still nonterminal
+at that deadline is recorded as an error.
+
+For a reduced plumbing check:
+
+```bash
+uv run --frozen --extra db --with litellm python -m rust.bench.genai.runner t23-3 \
+  --cells evaluation-high-fanout --fanout-jobs 2 --large-rows 2 \
+  --targets rust --output-dir /tmp/t23-3-check
+```

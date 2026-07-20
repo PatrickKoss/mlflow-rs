@@ -850,6 +850,10 @@ def parser() -> argparse.ArgumentParser:
 
     matrix_parser = subparsers.add_parser("t23-2", help="run the Tier-A CRUD/read matrix")
     add_arguments(matrix_parser)
+    from rust.bench.genai.t23_3 import add_arguments as add_t23_3_arguments
+
+    jobs_parser = subparsers.add_parser("t23-3", help="run the jobs/native-engine matrix")
+    add_t23_3_arguments(jobs_parser)
     return value
 
 
