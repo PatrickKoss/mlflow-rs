@@ -138,10 +138,163 @@ cases:
     query: {endpoint_id: "${gateway_endpoint_id}"}
     expect_status: 200
 
+  - name: gateway_update_endpoint
+    method: POST
+    path: /api/3.0/mlflow/gateway/endpoints/update
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      name: corpus-fake-endpoint-updated
+      model_configs:
+        - model_definition_id: "${gateway_model_definition_id}"
+          linkage_type: PRIMARY
+          weight: 1.0
+      routing_strategy: REQUEST_BASED_TRAFFIC_SPLIT
+      usage_tracking: false
+      updated_by: corpus-user
+    expect_status: 200
+
   - name: gateway_set_endpoint_tag
     method: POST
     path: /api/3.0/mlflow/gateway/endpoints/set-tag
     body: {endpoint_id: "${gateway_endpoint_id}", key: corpus, value: parity}
+    expect_status: 200
+
+  - name: gateway_delete_endpoint_tag
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/delete-tag
+    body: {endpoint_id: "${gateway_endpoint_id}", key: corpus}
+    expect_status: 200
+
+  - name: gateway_create_secondary_model_definition
+    method: POST
+    path: /api/3.0/mlflow/gateway/model-definitions/create
+    body:
+      name: corpus-fake-secondary-model-definition
+      secret_id: "${gateway_secret_id}"
+      provider: openai
+      model_name: corpus-fake-secondary-model
+      created_by: corpus-user
+    bind:
+      - {bind: gateway_secondary_model_definition_id, from: "$.model_definition.model_definition_id"}
+    expect_status: 200
+
+  - name: gateway_attach_model
+    method: POST
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/models/attach
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      model_config:
+        model_definition_id: "${gateway_secondary_model_definition_id}"
+        linkage_type: FALLBACK
+        weight: 0.0
+        fallback_order: 1
+      created_by: corpus-user
+    expect_status: 200
+
+  - name: gateway_detach_model
+    method: POST
+    path: /api/3.0/mlflow/gateway/endpoints/models/detach
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      model_definition_id: "${gateway_secondary_model_definition_id}"
+    expect_status: 200
+
+  - name: gateway_create_endpoint_binding
+    method: POST
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/bindings/create
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      resource_type: scorer
+      resource_id: corpus-bound-scorer
+      created_by: corpus-user
+    expect_status: 200
+
+  - name: gateway_list_endpoint_bindings
+    method: GET
+    path: /api/3.0/mlflow/gateway/endpoints/bindings/list
+    query: {endpoint_id: "${gateway_endpoint_id}", resource_type: scorer}
+    expect_status: 200
+
+  - name: gateway_delete_endpoint_binding
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/gateway/endpoints/bindings/delete
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      resource_type: scorer
+      resource_id: corpus-bound-scorer
+    expect_status: 200
+
+  - name: gateway_register_guardrail_scorer
+    method: POST
+    path: /api/3.0/mlflow/scorers/register
+    body:
+      experiment_id: "0"
+      name: corpus-guardrail-scorer
+      serialized_scorer: '{"name":"corpus-guardrail-scorer","instructions_judge_pydantic_data":{"instructions":"Evaluate {{ inputs }}","model":"openai:/fixture"}}'
+    bind:
+      - {bind: gateway_guardrail_scorer_id, from: "$.scorer_id"}
+      - {bind: gateway_guardrail_scorer_version, from: "$.version"}
+    expect_status: 200
+
+  - name: gateway_create_guardrail
+    method: POST
+    path: /ajax-api/3.0/mlflow/gateway/guardrails/create
+    body:
+      name: corpus-input-guardrail
+      scorer_id: "${gateway_guardrail_scorer_id}"
+      scorer_version: "${gateway_guardrail_scorer_version}"
+      stage: BEFORE
+      action: VALIDATION
+    bind:
+      - {bind: gateway_guardrail_id, from: "$.guardrail.guardrail_id"}
+    expect_status: 200
+
+  - name: gateway_get_guardrail
+    method: GET
+    path: /api/3.0/mlflow/gateway/guardrails/get
+    query: {guardrail_id: "${gateway_guardrail_id}"}
+    expect_status: 200
+
+  - name: gateway_list_guardrails
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/guardrails/list
+    query: {max_results: 10}
+    expect_status: 200
+
+  - name: gateway_add_guardrail_to_endpoint
+    method: POST
+    path: /api/3.0/mlflow/gateway/guardrails/add-to-endpoint
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      guardrail_id: "${gateway_guardrail_id}"
+      execution_order: 1
+    expect_status: 200
+
+  - name: gateway_list_guardrails_for_endpoint
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/guardrails/list-for-endpoint
+    query: {endpoint_id: "${gateway_endpoint_id}"}
+    expect_status: 200
+
+  - name: gateway_update_guardrail_config
+    method: PATCH
+    path: /api/3.0/mlflow/gateway/guardrails/update-config
+    body:
+      endpoint_id: "${gateway_endpoint_id}"
+      guardrail_id: "${gateway_guardrail_id}"
+      execution_order: 2
+    expect_status: 200
+
+  - name: gateway_remove_guardrail_from_endpoint
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/gateway/guardrails/remove-from-endpoint
+    body: {endpoint_id: "${gateway_endpoint_id}", guardrail_id: "${gateway_guardrail_id}"}
+    expect_status: 200
+
+  - name: gateway_delete_guardrail
+    method: DELETE
+    path: /api/3.0/mlflow/gateway/guardrails/delete
+    body: {guardrail_id: "${gateway_guardrail_id}"}
     expect_status: 200
 
   - name: gateway_list_endpoints
@@ -160,6 +313,12 @@ cases:
     method: DELETE
     path: /ajax-api/3.0/mlflow/gateway/model-definitions/delete
     body: {model_definition_id: "${gateway_model_definition_id}"}
+    expect_status: 200
+
+  - name: gateway_delete_secondary_model_definition
+    method: DELETE
+    path: /api/3.0/mlflow/gateway/model-definitions/delete
+    body: {model_definition_id: "${gateway_secondary_model_definition_id}"}
     expect_status: 200
 
   - name: gateway_delete_secret

@@ -724,7 +724,7 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("updateGatewayModelDefinition", "POST") => post(gateway::update_model_definition),
         ("deleteGatewayModelDefinition", "DELETE") => delete(gateway::delete_model_definition),
         ("attachModelToEndpoint", "POST") => post(gateway::attach_model),
-        ("detachModelFromEndpoint", "DELETE") => delete(gateway::detach_model),
+        ("detachModelFromEndpoint", "POST") => post(gateway::detach_model),
         ("createEndpointBinding", "POST") => post(gateway::create_binding),
         ("deleteEndpointBinding", "DELETE") => delete(gateway::delete_binding),
         ("listEndpointBindings", "GET") => get(gateway::list_bindings),

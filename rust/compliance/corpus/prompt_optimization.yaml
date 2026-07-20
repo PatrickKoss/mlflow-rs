@@ -58,6 +58,41 @@ cases:
     normalize: {drop_paths: ["$.message"]}
     expect_status: 404
 
+  - name: jobs_create_queued_fixture
+    method: POST
+    path: /api/3.0/mlflow/prompt-optimization/jobs
+    body:
+      experiment_id: "0"
+      source_prompt_uri: prompts:/jobs-api-fixture/1
+      config:
+        optimizer_type: OPTIMIZER_TYPE_METAPROMPT
+        scorers: []
+        optimizer_config_json: '{"reflection_model":"openai:/fixture"}'
+    bind:
+      - {bind: jobs_api_job_id, from: "$.job.job_id"}
+    expect_status: 200
+
+  - name: jobs_get_queued
+    method: GET
+    path: /ajax-api/3.0/mlflow/jobs/${jobs_api_job_id}
+    expect_status: 200
+
+  - name: jobs_cancel
+    method: PATCH
+    path: /ajax-api/3.0/mlflow/jobs/cancel/${jobs_api_job_id}
+    body: {}
+    expect_status: 200
+
+  - name: jobs_get_canceled
+    method: GET
+    path: /ajax-api/3.0/mlflow/jobs/${jobs_api_job_id}
+    expect_status: 200
+
+  - name: jobs_delete_fixture
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/prompt-optimization/jobs/${jobs_api_job_id}
+    expect_status: 200
+
   - name: prompt_optimization_create_missing_source
     method: POST
     path: /ajax-api/3.0/mlflow/prompt-optimization/jobs

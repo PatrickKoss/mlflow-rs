@@ -2406,7 +2406,7 @@ impl TrackingStore {
             }
             return Err(internal(error));
         }
-        self.get_guardrail_config(workspace, endpoint_id, guardrail_id, false)
+        self.get_guardrail_config(workspace, endpoint_id, guardrail_id, true)
             .await
     }
 
@@ -2439,7 +2439,7 @@ impl TrackingStore {
             )
             .await
             .map_err(internal)?;
-        self.get_guardrail_config(workspace, endpoint_id, guardrail_id, false)
+        self.get_guardrail_config(workspace, endpoint_id, guardrail_id, true)
             .await
     }
 

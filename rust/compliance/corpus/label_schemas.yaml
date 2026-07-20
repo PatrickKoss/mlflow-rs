@@ -1,0 +1,72 @@
+# Plan §12.5 - label-schema CRUD and immutable input-type validation.
+cases:
+  - name: label_schema_create
+    method: POST
+    path: /api/3.0/mlflow/label-schemas/create
+    body:
+      experiment_id: "0"
+      name: Corpus correctness
+      type: FEEDBACK
+      input: {pass_fail: {positive_label: Correct, negative_label: Incorrect}}
+      instruction: Compare the answer with expectations.
+      enable_comment: false
+    bind:
+      - {bind: schema_id, from: "$.label_schema.schema_id"}
+    expect_status: 200
+
+  - name: label_schema_create_duplicate
+    method: POST
+    path: /ajax-api/3.0/mlflow/label-schemas/create
+    body:
+      experiment_id: "0"
+      name: Corpus correctness
+      type: FEEDBACK
+      input: {text: {max_length: 100}}
+    expect_status: 400
+
+  - name: label_schema_get
+    method: GET
+    path: /api/3.0/mlflow/label-schemas/get
+    query: {schema_id: "${schema_id}"}
+    expect_status: 200
+
+  - name: label_schema_get_by_name
+    method: GET
+    path: /ajax-api/3.0/mlflow/label-schemas/get-by-name
+    query: {experiment_id: "0", name: Corpus correctness}
+    expect_status: 200
+
+  - name: label_schema_list
+    method: GET
+    path: /api/3.0/mlflow/label-schemas/list
+    query: {experiment_id: "0", max_results: 10}
+    expect_status: 200
+
+  - name: label_schema_update
+    method: PATCH
+    path: /ajax-api/3.0/mlflow/label-schemas/update
+    body:
+      schema_id: "${schema_id}"
+      name: Corpus correctness updated
+      instruction: Updated guidance.
+      enable_comment: true
+    expect_status: 200
+
+  - name: label_schema_change_input_type_rejected
+    method: PATCH
+    path: /api/3.0/mlflow/label-schemas/update
+    body: {schema_id: "${schema_id}", input: {numeric: {min_value: 0, max_value: 1}}}
+    expect_status: 400
+
+  - name: label_schema_delete
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/label-schemas/delete
+    body: {schema_id: "${schema_id}"}
+    expect_status: 200
+
+  - name: label_schema_get_deleted
+    method: GET
+    path: /api/3.0/mlflow/label-schemas/get
+    query: {schema_id: "${schema_id}"}
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404

@@ -1003,12 +1003,31 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       `rust/tools/results/t22_0_verification.md`. T14.3 deployment and migration
       docs now route S3 to Rust while retaining the Python exception for
       GCS/Azure.
-- [ ] **T22.1 Differential corpus genai sections** for every Tier A surface,
+- [x] **T22.1 Differential corpus genai sections** for every Tier A surface,
       invoke submission, and §15 semantic-engine category; compliance CI stays
       a required gate.
       **AC:** zero non-allowlisted wire/state/semantic diffs including all
       pinned scorer/provider/optimizer manifest entries.
       **VER:** CI artifact.
+      **DONE (2026-07-20, Codex):** inventoried every Tier A and Tier C surface
+      in `rust/compliance/report/t22_1_inventory.md`; added request sections
+      for datasets, scorers/online configs, issues, label schemas, and review
+      queues, and extended gateway and prompt-optimization/jobs coverage. The
+      request corpus grew from 188 to 271 cases (+83) and replays with zero
+      non-allowlisted diffs, zero status mismatches/errors/skips, and the same
+      11 documented allowlisted diffs (no new entries). Added
+      `rust/compliance/semantic.py`, which generates 374 cases from the pinned
+      scorer (139), provider (191), evaluation (26), issue-discovery (7),
+      online-scoring (1), optimizer (2), and inline-guardrail (8) inventories;
+      the exact-pinned oracle-refresh profile is 374/374 green with zero live
+      provider calls. New gateway cases exposed and fixed two parity bugs:
+      detach-model now uses the Python/proto POST verb, and guardrail-config
+      create/update responses include the embedded guardrail. Required CI now
+      runs all 645 request + semantic cases and uploads
+      `rust/compliance/report/`; dependency-heavy third-party golden
+      regeneration is an explicit nightly/manual job. Local artifact-style
+      evidence: `rust/compliance/report/last_run.{json,md}` and
+      `rust/compliance/report/semantic_last_run.{json,md}`.
 - [ ] **T22.2 Python-suite + reachability conformance**: T15.5's server-
       reachable suites green against Rust via the launcher switch on the DB
       matrix; ledger generator reports zero unclassified/missing native owners.

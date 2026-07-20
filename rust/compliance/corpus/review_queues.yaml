@@ -1,0 +1,110 @@
+# Plan §12.6 - all eleven review-queue RPCs, including item lifecycle.
+cases:
+  - name: review_queue_create_trace
+    method: POST
+    path: /api/3.0/mlflow/traces
+    body:
+      trace:
+        trace_info:
+          trace_id: tr-corpus-review
+          trace_location:
+            type: MLFLOW_EXPERIMENT
+            mlflow_experiment: {experiment_id: "0"}
+          request_time: "1000"
+          execution_duration_ms: "5"
+          state: OK
+    normalize: {drop_paths: ["$.trace.trace_info.tags"]}
+    expect_status: 200
+
+  - name: review_queue_create
+    method: POST
+    path: /api/3.0/mlflow/review-queues/create
+    body:
+      experiment_id: "0"
+      name: Corpus review queue
+      queue_type: CUSTOM
+      users: [" Reviewer ", reviewer]
+    bind:
+      - {bind: queue_id, from: "$.review_queue.queue_id"}
+    expect_status: 200
+
+  - name: review_queue_create_duplicate_casefold
+    method: POST
+    path: /ajax-api/3.0/mlflow/review-queues/create
+    body: {experiment_id: "0", name: corpus REVIEW queue, queue_type: CUSTOM}
+    expect_status: 400
+
+  - name: review_queue_get
+    method: GET
+    path: /api/3.0/mlflow/review-queues/get
+    query: {queue_id: "${queue_id}"}
+    expect_status: 200
+
+  - name: review_queue_get_by_name
+    method: GET
+    path: /ajax-api/3.0/mlflow/review-queues/get-by-name
+    query: {experiment_id: "0", name: CORPUS REVIEW QUEUE}
+    expect_status: 200
+
+  - name: review_queue_list
+    method: GET
+    path: /api/3.0/mlflow/review-queues/list
+    query: {experiment_id: "0", user: REVIEWER, max_results: 10}
+    expect_status: 200
+
+  - name: review_queue_update
+    method: POST
+    path: /ajax-api/3.0/mlflow/review-queues/update
+    body:
+      queue_id: "${queue_id}"
+      name: Corpus renamed queue
+      update_users: true
+      users: [second-reviewer]
+    expect_status: 200
+
+  - name: review_queue_add_item
+    method: POST
+    path: /api/3.0/mlflow/review-queues/items/add
+    body: {queue_id: "${queue_id}", item_type: TRACE, item_ids: [tr-corpus-review]}
+    expect_status: 200
+
+  - name: review_queue_list_items
+    method: GET
+    path: /ajax-api/3.0/mlflow/review-queues/items/list
+    query: {queue_id: "${queue_id}", status: PENDING, max_results: 1}
+    expect_status: 200
+
+  - name: review_queue_set_status
+    method: POST
+    path: /api/3.0/mlflow/review-queues/items/set-status
+    body:
+      queue_id: "${queue_id}"
+      item_id: tr-corpus-review
+      status: COMPLETE
+      completed_by: reviewer
+    expect_status: 200
+
+  - name: review_queue_remove_item
+    method: POST
+    path: /ajax-api/3.0/mlflow/review-queues/items/remove
+    body: {queue_id: "${queue_id}", item_ids: [tr-corpus-review]}
+    expect_status: 200
+
+  - name: review_queue_get_or_create_user
+    method: POST
+    path: /api/3.0/mlflow/review-queues/get-or-create-user
+    body: {experiment_id: "0", user: " User@Example.COM "}
+    expect_status: 200
+
+  - name: review_queue_delete
+    method: POST
+    path: /ajax-api/3.0/mlflow/review-queues/delete
+    body: {queue_id: "${queue_id}"}
+    expect_status: 200
+
+  - name: review_queue_get_deleted
+    method: GET
+    path: /api/3.0/mlflow/review-queues/get
+    query: {queue_id: "${queue_id}"}
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404

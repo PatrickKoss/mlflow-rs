@@ -80,6 +80,7 @@ def substitute(value: Any, bindings: dict[str, Any]) -> Any:
 TIMESTAMP_FIELDS = frozenset({
     "creation_time",
     "creation_timestamp",
+    "created_timestamp",
     "creation_timestamp_ms",
     "last_update_time",
     "last_update_timestamp",
@@ -103,6 +104,9 @@ TIMESTAMP_FIELDS = frozenset({
     "update_time",
     "created_at",
     "last_updated_at",
+    "creation_time_ms",
+    "last_update_time_ms",
+    "completed_time_ms",
 })
 
 ID_FIELDS = frozenset({
@@ -127,6 +131,13 @@ ID_FIELDS = frozenset({
     "guardrail_id",
     "dataset_id",
     "job_id",
+    "dataset_record_id",
+    "scorer_id",
+    "issue_id",
+    "schema_id",
+    "queue_id",
+    "item_id",
+    "binding_id",
 })
 
 TOKEN_FIELDS = frozenset({
@@ -162,6 +173,8 @@ class NormalizeOptions:
 
     drop_paths: list[str] = field(default_factory=list)
     extra_timestamp_fields: list[str] = field(default_factory=list)
+    hash_fields: list[str] = field(default_factory=list)
+    json_string_fields: list[str] = field(default_factory=list)
     normalize_ids: bool = True
     normalize_paths: bool = True
 
@@ -199,6 +212,7 @@ def normalize(body: Any, opts: NormalizeOptions) -> Any:
     to a basename shape. ``drop_paths`` deletes whole subtrees by ``$.`` path.
     """
     ts_fields = TIMESTAMP_FIELDS | set(opts.extra_timestamp_fields)
+    hash_fields = set(opts.hash_fields)
     ids = _IdCanonicalizer()
 
     def _walk(node: Any) -> Any:
@@ -209,10 +223,17 @@ def normalize(body: Any, opts: NormalizeOptions) -> Any:
                     out[k] = TS_SENTINEL
                 elif k in TOKEN_FIELDS:
                     out[k] = TOKEN_PRESENT if v not in (None, "", []) else TOKEN_ABSENT
+                elif k in hash_fields:
+                    out[k] = f"<HASH:{len(v)}>" if isinstance(v, str) else "<HASH:nonstr>"
                 elif opts.normalize_ids and k in ID_FIELDS and isinstance(v, (str, int)):
                     out[k] = ids.tag(v)
                 elif opts.normalize_paths and k in PATH_FIELDS:
                     out[k] = _path_marker(v)
+                elif k in opts.json_string_fields and isinstance(v, str):
+                    try:
+                        out[k] = _walk(json.loads(v))
+                    except json.JSONDecodeError:
+                        out[k] = v
                 else:
                     walked = _walk(v)
                     if k in SORTED_ARRAY_FIELDS and isinstance(walked, list):

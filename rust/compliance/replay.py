@@ -266,6 +266,8 @@ def _parse_case(raw: dict[str, Any], section: str) -> Case:
     opts = NormalizeOptions(
         drop_paths=n.get("drop_paths", []),
         extra_timestamp_fields=n.get("extra_timestamp_fields", []),
+        hash_fields=n.get("hash_fields", []),
+        json_string_fields=n.get("json_string_fields", []),
         normalize_ids=n.get("normalize_ids", True),
         normalize_paths=n.get("normalize_paths", True),
     )
@@ -568,7 +570,7 @@ def write_report(
     }
     (REPORT_DIR / "last_run.json").write_text(json.dumps(payload, indent=2, default=str))
 
-    lines = ["# T12.4 Differential Replay - Last Run", ""]
+    lines = ["# Differential Request Replay - Last Run", ""]
     lines.append(
         f"- Cases run: **{len(results)}**  |  Non-allowlisted diffs: **{total_diffs}**  |  "
         f"Allowlisted: **{total_allow}**  |  Status mismatches: **{status_mismatches}**  |  "
@@ -636,9 +638,14 @@ Corpus sections map to plan section 3 as follows:
 - artifacts -> 3.11 (upload/list/download via proxy)
 - auth (separate boot) -> 3.16 (401/403/admin/non-admin)
 - workspaces (separate boot) -> 3.17 (X-MLFLOW-WORKSPACE scoping)
-- prompt_optimization -> 12.7 (queued create/get/search/cancel/delete + errors)
+- datasets -> 12.1 (metadata/tags/records/associations, dedup + cursor walk)
+- scorers -> 12.3 (CRUD/versioning, decorator rejection, online configs)
+- issues -> 12.4 (CRUD/search; invoke lives in the isolated invoke section)
+- label_schemas -> 12.5 (CRUD, lookup/list, immutable input-type validation)
+- review_queues -> 12.6 (all 11 RPC operations + item status lifecycle)
+- prompt_optimization -> 12.2/12.7 (CRUD + generic jobs get/cancel/state)
 - invoke -> 12.2-12.4 (invoke handles, validation, batching, pre-created runs/tags)
-- gateway -> 12.8 (CRUD plus bundled discovery and empty-target bridge behavior)
+- gateway -> 12.8 (all CRUD families + discovery and empty-target bridge behavior)
 - gateway_proxy_validation -> 12.8 (GET/POST validation before a closed local target)
 
 Deliberately deferred to follow-up (documented, not covered here): assessments
@@ -853,9 +860,7 @@ def _run_gateway_proxy_validation_section(
     with DualServers(workroot, seed_db, artifact_root, extra_env=extra_env) as servers:
         py_bindings: dict[str, Any] = {}
         rust_bindings: dict[str, Any] = {}
-        return [
-            run_case(case, servers, py_bindings, rust_bindings, allow, creds) for case in cases
-        ]
+        return [run_case(case, servers, py_bindings, rust_bindings, allow, creds) for case in cases]
 
 
 # ---------------------------------------------------------------------------

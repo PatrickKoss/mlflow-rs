@@ -1,0 +1,96 @@
+# Plan §12.3 - scorer CRUD/versioning and online-scoring configuration.
+cases:
+  - name: scorer_register_v1
+    method: POST
+    path: /api/3.0/mlflow/scorers/register
+    body:
+      experiment_id: "0"
+      name: corpus-length
+      serialized_scorer: '{"name":"corpus-length","builtin_scorer_class":"ResponseLength","builtin_scorer_pydantic_data":{"max_length":100}}'
+    bind:
+      - {bind: scorer_id_v1, from: "$.scorer_id"}
+    expect_status: 200
+
+  - name: scorer_register_v2
+    method: POST
+    path: /ajax-api/3.0/mlflow/scorers/register
+    body:
+      experiment_id: "0"
+      name: corpus-length
+      serialized_scorer: '{"name":"corpus-length","builtin_scorer_class":"ResponseLength","builtin_scorer_pydantic_data":{"max_length":50}}'
+    bind:
+      - {bind: scorer_id_v2, from: "$.scorer_id"}
+    expect_status: 200
+
+  - name: scorer_list_latest
+    method: GET
+    path: /api/3.0/mlflow/scorers/list
+    query: {experiment_id: "0"}
+    expect_status: 200
+
+  - name: scorer_list_cross_experiment
+    method: GET
+    path: /ajax-api/3.0/mlflow/scorers/list
+    expect_status: 200
+
+  - name: scorer_versions
+    method: GET
+    path: /api/3.0/mlflow/scorers/versions
+    query: {experiment_id: "0", name: corpus-length}
+    expect_status: 200
+
+  - name: scorer_get_latest
+    method: GET
+    path: /ajax-api/3.0/mlflow/scorers/get
+    query: {experiment_id: "0", name: corpus-length}
+    expect_status: 200
+
+  - name: scorer_get_v1
+    method: GET
+    path: /api/3.0/mlflow/scorers/get
+    query: {experiment_id: "0", name: corpus-length, version: 1}
+    expect_status: 200
+
+  - name: scorer_online_config_put
+    method: PUT
+    path: /ajax-api/3.0/mlflow/scorers/online-config
+    body:
+      experiment_id: "0"
+      name: corpus-length
+      sample_rate: 0.75
+      filter_string: "status = 'OK'"
+    expect_status: 200
+
+  - name: scorer_online_configs_get
+    method: GET
+    path: /api/3.0/mlflow/scorers/online-configs
+    query: {scorer_ids: [missing, "${scorer_id_v2}"]}
+    expect_status: 200
+
+  - name: scorer_register_decorator_rejected
+    method: POST
+    path: /api/3.0/mlflow/scorers/register
+    body:
+      experiment_id: "0"
+      name: corpus-decorator
+      serialized_scorer: '{"name":"corpus-decorator","call_source":"return true","call_signature":"(outputs)","original_func_name":"corpus_decorator"}'
+    expect_status: 400
+
+  - name: scorer_get_missing
+    method: GET
+    path: /ajax-api/3.0/mlflow/scorers/get
+    query: {experiment_id: "0", name: corpus-missing}
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404
+
+  - name: scorer_delete_v1
+    method: DELETE
+    path: /api/3.0/mlflow/scorers/delete
+    body: {experiment_id: "0", name: corpus-length, version: 1}
+    expect_status: 200
+
+  - name: scorer_delete_all
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/scorers/delete
+    body: {experiment_id: "0", name: corpus-length}
+    expect_status: 200

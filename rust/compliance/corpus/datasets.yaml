@@ -1,0 +1,144 @@
+# Plan §12.1 - evaluation-dataset wire/state coverage. JSON-valued proto
+# strings remain JSON on the wire; `records` is decoded only for normalization
+# so generated record ids/timestamps can be compared structurally. Dataset
+# digests include each server's live last-update timestamp, so only that field
+# is shape-normalized; deterministic record input_hash values remain exact.
+cases:
+  - name: dataset_create
+    method: POST
+    path: /api/3.0/mlflow/datasets/create
+    body:
+      name: corpus-evaluation-dataset
+      experiment_ids: ["0"]
+      source_type: HUMAN
+      source: '{"fixture":"t22.1"}'
+      schema: '{"type":"object"}'
+      profile: '{"rows":0}'
+      created_by: corpus-user
+      tags: '{"purpose":"parity"}'
+    bind:
+      - {bind: dataset_id, from: "$.dataset.dataset_id"}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_get
+    method: GET
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_search_post
+    method: POST
+    path: /api/3.0/mlflow/datasets/search
+    body:
+      experiment_ids: ["0"]
+      filter_string: 'name = "corpus-evaluation-dataset"'
+      max_results: 1
+      order_by: [name ASC]
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_search_get
+    method: GET
+    path: /ajax-api/3.0/mlflow/datasets/search
+    query:
+      experiment_ids: "0"
+      filter_string: 'name = "corpus-evaluation-dataset"'
+      max_results: 1
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_set_tags
+    method: PATCH
+    path: /api/3.0/mlflow/datasets/${dataset_id}/tags
+    body: {tags: '{"purpose":"parity","phase":"22.1"}'}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_delete_tag
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}/tags/purpose
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_upsert_records_insert
+    method: POST
+    path: /api/3.0/mlflow/datasets/${dataset_id}/records
+    body:
+      records: '[{"inputs":{"question":"2+2?"},"expectations":{"answer":"4"},"tags":{"split":"train"},"source":{"source_type":"HUMAN","source_data":{"user":"corpus"}}}]'
+      updated_by: corpus-user
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_upsert_records_second
+    method: POST
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}/records
+    body:
+      records: '[{"inputs":{"question":"capital of France?"},"expectations":{"answer":"Paris"},"source":{"source_type":"TRACE","source_data":{"trace_id":"tr-corpus-dataset"}}}]'
+      updated_by: corpus-user
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_upsert_records_dedup
+    method: POST
+    path: /api/3.0/mlflow/datasets/${dataset_id}/records
+    body:
+      records: '[{"inputs":{"question":"2+2?"},"expectations":{"answer":"four"},"tags":{"split":"validation"},"source":{"source_type":"HUMAN","source_data":{"user":"corpus"}}}]'
+      updated_by: corpus-user
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_records_first_page
+    method: GET
+    path: /api/3.0/mlflow/datasets/${dataset_id}/records
+    query: {max_results: 1}
+    normalize: {hash_fields: [digest], json_string_fields: [records]}
+    bind:
+      - {bind: dataset_record_id, from: "$.records"}
+    expect_status: 200
+
+  - name: dataset_records_walk
+    method: GET
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}/records
+    query: {max_results: 1}
+    normalize: {hash_fields: [digest], json_string_fields: [records]}
+    walk: {token_field: next_page_token, token_param: page_token, max_pages: 5}
+    expect_status: 200
+
+  - name: dataset_experiment_ids
+    method: GET
+    path: /api/3.0/mlflow/datasets/${dataset_id}/experiment-ids
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_add_experiment_idempotent
+    method: POST
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}/add-experiments
+    body: {experiment_ids: ["0"]}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_remove_unknown_experiment
+    method: POST
+    path: /api/3.0/mlflow/datasets/${dataset_id}/remove-experiments
+    body: {experiment_ids: ["999999"]}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_delete_unknown_records
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}/records
+    body: {dataset_record_ids: [dr-corpus-missing]}
+    normalize: {hash_fields: [digest]}
+    expect_status: 200
+
+  - name: dataset_get_missing
+    method: GET
+    path: /api/3.0/mlflow/datasets/d-corpus-missing
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404
+
+  - name: dataset_delete
+    method: DELETE
+    path: /ajax-api/3.0/mlflow/datasets/${dataset_id}
+    expect_status: 200

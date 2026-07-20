@@ -1,0 +1,60 @@
+# Plan §12.4 - issue CRUD. Invoke submission is isolated in invoke.yaml.
+cases:
+  - name: issue_create
+    method: POST
+    path: /api/3.0/mlflow/issues
+    body:
+      experiment_id: "0"
+      name: Corpus quality issue
+      description: Deterministic issue for differential replay
+      severity: medium
+      root_causes: [retrieval, prompting]
+      categories: [quality, correctness]
+      created_by: corpus-user
+    bind:
+      - {bind: issue_id, from: "$.issue.issue_id"}
+    expect_status: 200
+
+  - name: issue_get
+    method: GET
+    path: /ajax-api/3.0/mlflow/issues/${issue_id}
+    expect_status: 200
+
+  - name: issue_update
+    method: PATCH
+    path: /api/3.0/mlflow/issues/${issue_id}
+    body:
+      issue_id: "${issue_id}"
+      name: Corpus quality issue updated
+      description: Updated deterministically
+      status: resolved
+      severity: low
+    expect_status: 200
+
+  - name: issue_search_post
+    method: POST
+    path: /ajax-api/3.0/mlflow/issues/search
+    body:
+      experiment_id: "0"
+      filter_string: "status = 'resolved'"
+      include_trace_count: true
+      max_results: 1
+    expect_status: 200
+
+  - name: issue_search_empty
+    method: POST
+    path: /api/3.0/mlflow/issues/search
+    body: {experiment_id: "999999"}
+    expect_status: 200
+
+  - name: issue_create_missing_description
+    method: POST
+    path: /ajax-api/3.0/mlflow/issues
+    body: {experiment_id: "0", name: invalid}
+    expect_status: 400
+
+  - name: issue_get_missing
+    method: GET
+    path: /api/3.0/mlflow/issues/corpus-missing
+    normalize: {drop_paths: ["$.message"]}
+    expect_status: 404

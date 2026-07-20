@@ -189,13 +189,15 @@ jobs:
         # too, just without the parallelism they'd get by default.
         run: cargo test -p mlflow-store -p mlflow-registry -- --test-threads=1
 
-  # T12.5 compliance CI matrix: runs the T12.4 differential replay harness
-  # (rust/compliance/replay.py) — dual-boots the Python and Rust
-  # `mlflow-server`, replays the request corpus against both, and diffs.
+  # T12.5/T22.1 compliance CI: runs the differential request replay harness
+  # plus the manifest-generated GenAI semantic corpus. replay.py dual-boots
+  # the Python and Rust `mlflow-server`; semantic.py replays the pinned scorer,
+  # provider, and optimizer manifests through deterministic oracles.
   #
-  # GATING: REQUIRED. T12.4 drove the full 133-case corpus to zero
-  # non-allowlisted diffs / zero status mismatches on sqlite (2026-07-17: the
-  # harness boot gaps were fixed — auth app factory + artifact-proxy env —
+  # GATING: REQUIRED. T22.1 drove the 271-case request corpus and 374-case
+  # semantic corpus to zero non-allowlisted diffs / zero status mismatches on
+  # sqlite (2026-07-20). The original harness boot gaps were fixed in T12.4 —
+  # auth app factory + artifact-proxy env —
   # and the remaining genuine divergences were fixed on the Rust side,
   # chiefly the lenient ParseDict-parity request parsing; the 11 tolerated
   # diffs are documented in rust/compliance/allowlist.yaml). A non-zero exit
@@ -217,7 +219,7 @@ jobs:
     if: github.event_name != 'pull_request' || (github.event.pull_request.draft == false || github.event.pull_request.user.login == 'Copilot' && github.event.pull_request.user.type == 'Bot')
     permissions:
       contents: read
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -257,8 +259,8 @@ jobs:
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
-      - name: Build mlflow-server
-        run: cargo build -p mlflow-server
+      - name: Build mlflow-server and native GenAI worker
+        run: cargo build -p mlflow-server -p mlflow-genai-worker
       - uses: ./.github/actions/setup-python
       - name: Install Python mlflow with auth + db extras
         working-directory: .
@@ -274,11 +276,52 @@ jobs:
         # Gated: a non-zero exit is a wire-parity regression (see the
         # job-level GATING comment above).
         run: uv run --no-sync python rust/compliance/replay.py
+      - name: Run required GenAI semantic corpus
+        working-directory: .
+        # The required profile uses committed Python-reference goldens and
+        # loopback fakes only. The dependency-heavy golden regeneration runs
+        # in semantic-oracle-refresh below.
+        run: uv run --no-sync python rust/compliance/semantic.py --profile required
       - name: Upload compliance report
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: compliance-report
+          path: rust/compliance/report/
+          if-no-files-found: warn
+
+  # T22.1 refreshes the dependency-heavy third-party scorer golden nightly or
+  # on demand. The same semantic corpus remains required above on every gated
+  # run; this job adds exact-pinned-package regeneration without extending PR
+  # latency or making network package resolution part of the required gate.
+  semantic-oracle-refresh:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: "1.89.0"
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+      - uses: ./.github/actions/setup-python
+      - name: Install Python mlflow
+        working-directory: .
+        run: uv sync
+      - name: Regenerate and replay pinned semantic goldens
+        working-directory: .
+        run: uv run --no-sync python rust/compliance/semantic.py --profile oracle-refresh
+      - name: Upload semantic oracle refresh report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: semantic-oracle-refresh-report
           path: rust/compliance/report/
           if-no-files-found: warn
 

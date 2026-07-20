@@ -1,0 +1,2833 @@
+{
+  "summary": {
+    "profile": "oracle-refresh",
+    "cases_run": 374,
+    "non_allowlisted_diffs": 0,
+    "allowlisted_diffs": 0,
+    "live_provider_calls": 0
+  },
+  "per_section": {
+    "semantic_scorer_execution": {
+      "cases": 139,
+      "diffs": 0
+    },
+    "semantic_provider_manifest": {
+      "cases": 191,
+      "diffs": 0
+    },
+    "semantic_evaluation_harness": {
+      "cases": 26,
+      "diffs": 0
+    },
+    "semantic_issue_discovery": {
+      "cases": 7,
+      "diffs": 0
+    },
+    "semantic_online_scoring": {
+      "cases": 1,
+      "diffs": 0
+    },
+    "semantic_prompt_optimization": {
+      "cases": 2,
+      "diffs": 0
+    },
+    "semantic_inline_judge_guardrails": {
+      "cases": 8,
+      "diffs": 0
+    }
+  },
+  "commands": [
+    {
+      "name": "scorer-python-rust-oracle",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--with",
+        "dspy==3.2.1",
+        "python",
+        "rust/tools/scorer_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "{\"accepted_natively\": 26, \"rejected_correctly\": 11, \"roundtrips\": 26}\n",
+      "stderr": ""
+    },
+    {
+      "name": "judge-python-rust-oracle",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "rust/tools/judge_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 7 tests\n.......\ntest result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s\n\n{\"instructions_transcripts\": 1, \"live_provider_calls\": 0, \"rust_scripted_suites\": 7, \"trace_tool_schemas\": 6}\n",
+      "stderr": ""
+    },
+    {
+      "name": "scorer-manifest-partition",
+      "argv": [
+        "cargo",
+        "test",
+        "--quiet",
+        "-p",
+        "mlflow-genai",
+        "--test",
+        "phase19_contract"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 3 tests\n...\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "third-party-python-golden-replay",
+      "argv": [
+        "cargo",
+        "test",
+        "--quiet",
+        "-p",
+        "mlflow-genai",
+        "--test",
+        "third_party"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 6 tests\n......\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "provider-manifest-generation-check",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "rust/tools/build_provider_manifest.py",
+        "--check"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "provider-hermetic-matrix",
+      "argv": [
+        "cargo",
+        "test",
+        "--quiet",
+        "-p",
+        "mlflow-server",
+        "--lib",
+        "manifest_has_full_pinned_coverage_and_no_unsupported_entries"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 213 filtered out; finished in 0.03s\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "evaluation-python-rust-oracle",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "rust/tools/evaluation_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "{\"aggregate_metrics\": 6, \"aggregate_values\": 10, \"live_provider_calls\": 0, \"rate_cases\": 4, \"seed\": 1902, \"standardization_cases\": 6}\n",
+      "stderr": ""
+    },
+    {
+      "name": "issue-discovery-python-rust-oracle",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "rust/tools/issue_discovery_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 4 tests\ntest discovery::tests::summary_is_python_compatible ... ok\ntest discovery::tests::assessment_dict_parsing_and_filtering_match_python ... ok\ntest discovery::tests::python_random_matches_reference ... ok\ntest discovery::tests::latency_clustering_and_dedup_match_python_goldens ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s\n\n\nrunning 1 test\ntest scripted_issue_discovery_persists_python_contract ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s\n\n{\"cluster_cases\": 1, \"dedup_cases\": 1, \"e2e_cases\": 1, \"latency_cases\": 1, \"live_provider_calls\": 0, \"persisted_artifact_diffs\": 0, \"phase_diffs\": 0, \"sampling_cases\": 3}\n",
+      "stderr": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s\n     Running unittests src/lib.rs (target/debug/deps/mlflow_genai-c894a14b0b590e12)\n     Running tests/discovery.rs (target/debug/deps/discovery-89a01348f803090d)\n     Running tests/execution.rs (target/debug/deps/execution-d214803511a362a4)\n     Running tests/payload.rs (target/debug/deps/payload-7d03497e83c181c3)\n     Running tests/phase19_contract.rs (target/debug/deps/phase19_contract-0d9ee48254bdbf43)\n     Running tests/protocol.rs (target/debug/deps/protocol-e3b2db3128bc385c)\n     Running tests/third_party.rs (target/debug/deps/third_party-e234df182f375de3)\n"
+    },
+    {
+      "name": "online-scoring-shared-db-differential",
+      "argv": [
+        "cargo",
+        "test",
+        "--quiet",
+        "-p",
+        "mlflow-server",
+        "--test",
+        "online_scoring_scheduler_cross_server"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.46s\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "optimizer-python-rust-oracle",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--with",
+        "gepa==0.0.27",
+        "python",
+        "rust/tools/prompt_optimization_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "{\"batches\": [[4, 0, 2], [3, 1, 1], [1, 4, 3], [2, 0, 0]], \"candidates\": [{\"prompt\": \"seed\"}, {\"prompt\": \"candidate-2\"}, {\"prompt\": \"candidate-4\"}], \"metaprompt_few_sha256\": \"bc39355534afef48883c5fefdb337f7ff20f3aa73a47e7bec9555b0fa665bb54\", \"metaprompt_zero_sha256\": \"594ffc4bb7031773e33809b0ad4cf37b38593015b68a1059f344bd28f7418a6e\", \"metric_calls\": 39, \"scores\": [0.5, 0.5, 0.5], \"selected\": [0, 0, 0, 0]}\n",
+      "stderr": ""
+    },
+    {
+      "name": "guardrail-python-rust-matrix",
+      "argv": [
+        "cargo",
+        "test",
+        "--quiet",
+        "-p",
+        "mlflow-server",
+        "--test",
+        "gateway_guardrails_http",
+        "guardrail_matrix_is_byte_identical_to_python"
+      ],
+      "returncode": 0,
+      "stdout": "\nrunning 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 6.95s\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "third-party-pinned-python-golden-refresh",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "rust/tools/third_party_oracle.py"
+      ],
+      "returncode": 0,
+      "stdout": "{\"adapter_transcripts\": 3, \"deterministic_cases\": 15, \"live_provider_calls\": 0, \"manifest\": 112, \"output\": \"/tmp/mlflow-t19-3-f64x7ohl/third_party_golden.json\", \"workflow_calls\": 129, \"workflow_metrics\": 94, \"workflow_output\": \"/tmp/mlflow-t19-3-f64x7ohl/pinned_workflows.json\"}\n\nrunning 6 tests\n......\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s\n\n{\"corpus_diff\": 0, \"deterministic_cases\": 15, \"dynamic_error_families\": 3, \"families\": {\"deepeval\": 44, \"phoenix\": 6, \"ragas\": 37, \"trulens\": 25}, \"live_provider_calls\": 0, \"manifest_coverage\": 112, \"rust_suites\": 6, \"workflow_calls\": 129, \"workflow_metrics\": 94}\n",
+      "stderr": "2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric AgentGoalAccuracy: RAGAS metric 'AgentGoalAccuracy' requires 'inputs' parameter, which is missing. Example: judge(inputs='What is MLflow?', outputs='...')\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric AgentGoalAccuracyWithReference: RAGAS metric 'AgentGoalAccuracyWithReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric AgentGoalAccuracyWithoutReference: RAGAS metric 'AgentGoalAccuracyWithoutReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric AnswerCorrectness: RAGAS metric 'AnswerCorrectness' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric AnswerRelevancy: RAGAS metric 'AnswerRelevancy' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextEntityRecall: RAGAS metric 'ContextEntityRecall' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextPrecision: RAGAS metric 'ContextPrecision' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextPrecisionWithReference: RAGAS metric 'ContextPrecisionWithReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextPrecisionWithoutReference: RAGAS metric 'ContextPrecisionWithoutReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextRecall: RAGAS metric 'ContextRecall' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric ContextUtilization: RAGAS metric 'ContextUtilization' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric DomainSpecificRubrics: RAGAS metric 'DomainSpecificRubrics' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric FactualCorrectness: RAGAS metric 'FactualCorrectness' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric Faithfulness: RAGAS metric 'Faithfulness' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric InstanceSpecificRubrics: RAGAS metric 'InstanceSpecificRubrics' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Error evaluating RAGAS metric MultiModalFaithfulness: 'MlflowRagasLLM' object has no attribute '_map_provider_params'\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Error evaluating RAGAS metric MultiModalRelevance: 'MlflowRagasLLM' object has no attribute '_map_provider_params'\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric NoiseSensitivity: RAGAS metric 'NoiseSensitivity' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric RubricsScoreWithReference: RAGAS metric 'RubricsScoreWithReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric RubricsScoreWithoutReference: RAGAS metric 'RubricsScoreWithoutReference' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric SQLSemanticEquivalence: RAGAS metric 'SQLSemanticEquivalence' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric SummaryScore: RAGAS metric 'SummaryScore' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\n2026/07/20 14:31:03 ERROR mlflow.genai.scorers.ragas: Missing required parameter for RAGAS metric TopicAdherence: RAGAS metric 'TopicAdherence' requires 'Failed to parse JSON. Response was: not-json' parameter, which is missing. \nExample: judge(inputs='...', outputs='...', expectations={'rubrics': {'0': 'rubric for score 0', '1': 'rubric for score 1'}})\nPackage jsonschema not present in requirements.\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Comprehensiveness: LLMProvider.comprehensiveness_with_cot_reasons() missing 2 required positional arguments: 'source' and 'summary'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Conciseness: LLMProvider.conciseness_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Controversiality: LLMProvider.controversiality_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Correctness: LLMProvider.correctness_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Criminality: LLMProvider.criminality_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric ExecutionEfficiency: LLMProvider.execution_efficiency_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n/home/patrick/.cache/uv/archive-v0/ajqIoKJAA83GpSiX/lib/python3.10/site-packages/trulens/feedback/llm_provider.py:2857: UserWarning: Failed to process and remove trivial statements. Proceeding with all statements.\n  warnings.warn(\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Harmfulness: LLMProvider.harmfulness_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Helpfulness: LLMProvider.helpfulness_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Insensitivity: LLMProvider.insensitivity_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric LogicalConsistency: LLMProvider.logical_consistency_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Maliciousness: LLMProvider.maliciousness_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Misogyny: LLMProvider.misogyny_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric PlanAdherence: LLMProvider.plan_adherence_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric PlanQuality: LLMProvider.plan_quality_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric QsRelevance: LLMProvider.relevance_with_cot_reasons() missing 2 required positional arguments: 'prompt' and 'response'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Relevance: LLMProvider.relevance_with_cot_reasons() missing 2 required positional arguments: 'prompt' and 'response'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Sentiment: LLMProvider.sentiment_with_cot_reasons() missing 1 required positional argument: 'text'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Stereotypes: LLMProvider.stereotypes_with_cot_reasons() missing 2 required positional arguments: 'prompt' and 'response'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric Summarization: LLMProvider.summarization_with_cot_reasons() missing 2 required positional arguments: 'source' and 'summary'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric ToolCalling: LLMProvider.tool_calling_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric ToolQuality: LLMProvider.tool_quality_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 WARNING mlflow.genai.scorers.trulens.utils: Multiple context keys found in expectations: ['context', 'expected_output']. Using 'context' (priority order: ('context', 'reference', 'expected_output')).\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric ToolSelection: LLMProvider.tool_selection_with_cot_reasons() missing 1 required positional argument: 'trace'\n2026/07/20 14:31:05 ERROR mlflow.genai.scorers.trulens: Error evaluating TruLens metric DefinitelyMissingMetric: 'GatewayProvider' object has no attribute 'definitely_missing_metric_with_cot_reasons'\n"
+    }
+  ],
+  "results": [
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Completeness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ConversationCompleteness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ConversationalGuidelines",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ConversationalRoleAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ConversationalSafety",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ConversationalToolCallEfficiency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Correctness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Equivalence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ExpectationsGuidelines",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Fluency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Guidelines",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:KnowledgeRetention",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:PIIDetection",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:RegexMatch",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:RelevanceToQuery",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ResponseLength",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:RetrievalGroundedness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:RetrievalRelevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:RetrievalSufficiency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Safety",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:Summarization",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ToolCallCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:ToolCallEfficiency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "builtin:UserFrustration",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "judge:InstructionsJudge",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "judge:MemoryAugmentedJudge",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:AnswerRelevancy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ArgumentCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Bias",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ContextualPrecision",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ContextualRecall",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ContextualRelevancy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ConversationCompleteness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ConversationalDAG",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:DAG",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ExactMatch",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Faithfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:GoalAccuracy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Hallucination",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ImageCoherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ImageEditing",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ImageHelpfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ImageReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:JsonCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:KnowledgeRetention",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:MCPTaskCompletion",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:MCPUse",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Misuse",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:MultiTurnMCPUse",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:NonAdvice",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:PIILeakage",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:PatternMatch",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:PlanAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:PlanQuality",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:PromptAlignment",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:RoleAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:RoleViolation",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:StepEfficiency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Summarization",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TaskCompletion",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TextToImage",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ToolCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:ToolUse",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TopicAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:Toxicity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TurnContextualPrecision",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TurnContextualRecall",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TurnContextualRelevancy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TurnFaithfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:deepeval:TurnRelevancy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AgentGoalAccuracy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AgentGoalAccuracyWithReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AgentGoalAccuracyWithoutReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AnswerAccuracy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AnswerCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:AnswerRelevancy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:BleuScore",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:CHRFScore",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextEntityRecall",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextPrecision",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextPrecisionWithReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextPrecisionWithoutReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextRecall",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextRelevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ContextUtilization",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:DataCompyScore",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:DomainSpecificRubrics",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ExactMatch",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:FactualCorrectness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:Faithfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:InstanceSpecificRubrics",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:MultiModalFaithfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:MultiModalRelevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:NoiseSensitivity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:NonLLMStringSimilarity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:QuotedSpansAlignment",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ResponseGroundedness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:RougeScore",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:RubricsScoreWithReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:RubricsScoreWithoutReference",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:SQLSemanticEquivalence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:SemanticSimilarity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:StringPresence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:SummaryScore",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ToolCallAccuracy",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:ToolCallF1",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:ragas:TopicAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Coherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Comprehensiveness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Conciseness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:ContextRelevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Controversiality",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Correctness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Criminality",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:ExecutionEfficiency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Groundedness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Harmfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Helpfulness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Insensitivity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:LogicalConsistency",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Maliciousness",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Misogyny",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:PlanAdherence",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:PlanQuality",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:QsRelevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Relevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Sentiment",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Stereotypes",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:Summarization",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:ToolCalling",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:ToolQuality",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:trulens:ToolSelection",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:Hallucination",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:QA",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:Relevance",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:SQL",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:Summarization",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "third-party:phoenix:Toxicity",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_scorer_execution",
+      "name": "rejected:0",
+      "status": "passed",
+      "oracle": "scorer-python-rust-oracle,judge-python-rust-oracle,scorer-manifest-partition,third-party-python-golden-replay",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:a2a",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:a2a_agent",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ai21",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ai21_chat",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ai21labs",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:aiml",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:aiohttp_openai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:amazon-bedrock",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:amazon_nova",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:anthropic",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:anthropic_text",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:anyscale",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:apertis",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:apiserpent",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:assemblyai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:auto_router",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:aws_polly",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:azure",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:azure_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:azure_text",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:baseten",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:bedrock",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:bedrock_converse",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:bedrock_mantle",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:black_forest_labs",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:bytez",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cerebras",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:charity_engine",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:chatgpt",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:chutes",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:clarifai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cloudflare",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:codestral",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cohere",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cohere_chat",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cometapi",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:compactifai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:crusoe",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:cursor",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:custom",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:custom_openai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:darkbloom",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:dashscope",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:databricks",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:databricks-model-serving",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:dataforseo",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:datarobot",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:deepgram",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:deepinfra",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:deepseek",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:docker_model_runner",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:dotprompt",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:duckduckgo",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:elevenlabs",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:empower",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:exa_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:fal_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:featherless_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:firecrawl",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:fireworks_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:fireworks_ai-embedding-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:friendliai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:galadriel",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:gemini",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:gigachat",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:github",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:github_copilot",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:gmi",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:google_pse",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:gradient_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:groq",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:helicone",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:heroku",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:hosted_vllm",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:huggingface",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:huggingface-text-generation-inference",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:humanloop",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:hyperbolic",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:inception",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:infinity",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:jina_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:lambda_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:langflow",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:langfuse",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:langgraph",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:lemonade",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:libertai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:linkup",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:litellm",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:litellm_agent",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:litellm_proxy",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:llamafile",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:llamagate",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:lm_studio",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:manus",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:maritalk",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:meta_llama",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:milvus",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:minimax",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:mistral",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:mlflow-model-serving",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:modelscope",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:moonshot",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:morph",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:mosaicml",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nano-gpt",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nebius",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:neosantara",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nlp_cloud",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:novita",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nscale",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nvidia_nim",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:nvidia_riva",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:oci",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ollama",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ollama_chat",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:oobabooga",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:openai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:openai_like",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:openrouter",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ovhcloud",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:palm",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:parallel_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:parasail",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:perplexity",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:petals",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:pg_vector",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:pinstripes",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:poe",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:portkey",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:predibase",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:publicai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:ragflow",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:recraft",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:reducto",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:replicate",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:runwayml",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:s3_vectors",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sagemaker",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sagemaker_chat",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sagemaker_nova",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sambanova",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sap",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:sarvam",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:scaleway",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:searxng",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:serper",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:snowflake",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:soniox",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:stability",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:synthetic",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:tavily",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:tensormesh",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:text-completion-codestral",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:text-completion-inception",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:text-completion-openai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:tinyfish",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:together_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:togetherai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:topaz",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:triton",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:v0",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vercel_ai_gateway",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-ai21_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-anthropic_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-deepseek_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-embedding-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-image-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-language-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-llama_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-minimax_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-mistral_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-moonshot_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-openai_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-qwen_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-text-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-video-models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai-zai_models",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vertex_ai_beta",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:vllm",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:volcengine",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:voyage",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:wandb",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:watsonx",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:watsonx_text",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:xai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:xiaomi_mimo",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:xinference",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:you_com",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_provider_manifest",
+      "name": "provider:zai",
+      "status": "passed",
+      "oracle": "provider-manifest-generation-check,provider-hermetic-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "rate:0",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "rate:1",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "rate:2",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "rate:3",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:0",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:1",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:2",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:3",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:4",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "standardization:5",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:0",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:1",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:2",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:3",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:4",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:5",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:6",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:7",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:8",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-value:9",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:0",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:1",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:2",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:3",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:4",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_evaluation_harness",
+      "name": "aggregate-metric:5",
+      "status": "passed",
+      "oracle": "evaluation-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "sampling:0",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "sampling:1",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "sampling:2",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "latency",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "clustering",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "dedup",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_issue_discovery",
+      "name": "end-to-end",
+      "status": "passed",
+      "oracle": "issue-discovery-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_online_scoring",
+      "name": "seeded-trace-and-session-scheduler",
+      "status": "passed",
+      "oracle": "online-scoring-shared-db-differential",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_prompt_optimization",
+      "name": "optimizer:GEPA",
+      "status": "passed",
+      "oracle": "optimizer-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_prompt_optimization",
+      "name": "optimizer:MetaPrompt",
+      "status": "passed",
+      "oracle": "optimizer-python-rust-oracle",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "BEFORE:VALIDATION:pass",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "BEFORE:VALIDATION:violation",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "BEFORE:SANITIZATION:pass",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "BEFORE:SANITIZATION:violation",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "AFTER:VALIDATION:pass",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "AFTER:VALIDATION:violation",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "AFTER:SANITIZATION:pass",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    },
+    {
+      "section": "semantic_inline_judge_guardrails",
+      "name": "AFTER:SANITIZATION:violation",
+      "status": "passed",
+      "oracle": "guardrail-python-rust-matrix",
+      "diff_count": 0
+    }
+  ]
+}
