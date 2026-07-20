@@ -3881,7 +3881,7 @@ documented there); per-request latency recorded client-side with endpoint
 tags. Every LLM/provider dependency is a local deterministic fake (T23.1) —
 zero live provider calls anywhere in this phase.
 
-- [ ] **T23.1 Bench harness + deterministic fake dependencies**: extend
+- [x] **T23.1 Bench harness + deterministic fake dependencies**: extend
       `rust/bench/` (T14.2's `soak.py` / compose patterns) with a genai bench
       harness:
       (a) a local mock provider HTTP server (in-process thread, no docker)
