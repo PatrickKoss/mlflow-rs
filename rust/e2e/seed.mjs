@@ -30,6 +30,32 @@ async function request(method, route, body, expected = 200, headers = {}) {
   }
 }
 
+async function uploadArtifact(artifactPath, contents) {
+  const response = await fetch(
+    `${baseURL}/api/2.0/mlflow-artifacts/artifacts/${artifactPath.replace(/^\/+/, "")}`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: contents,
+    },
+  );
+  const text = await response.text();
+  if (response.headers.get("x-mlflow-backend") !== "rust" || response.status !== 200) {
+    throw new Error(`PUT artifact ${artifactPath}: ${response.status}: ${text}`);
+  }
+}
+
+function artifactProxyPath(uri, child = "") {
+  const root = uri
+    .replace(/^mlflow-artifacts:\/\//, "")
+    .replace(/^mlflow-artifacts:\//, "")
+    .replace(/^file:\/\//, "")
+    .replace(/^\/mlartifacts\//, "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  return [root, child].filter(Boolean).join("/");
+}
+
 async function waitForHealth() {
   for (let attempt = 0; attempt < 90; attempt += 1) {
     try {
@@ -44,6 +70,10 @@ async function waitForHealth() {
 
 function otlpTrace(traceHex, rootSpanHex, childSpanHex, index) {
   const start = BigInt("1784563200000000000") + BigInt(index) * BigInt("1000000000");
+  const traceId = `tr-${traceHex}`;
+  const attachmentUri =
+    "mlflow-attachment://550e8400-e29b-41d4-a716-446655440000" +
+    `?content_type=text%2Fplain&trace_id=${traceId}&size=35`;
   return {
     resourceSpans: [
       {
@@ -61,7 +91,22 @@ function otlpTrace(traceHex, rootSpanHex, childSpanHex, index) {
                 startTimeUnixNano: start.toString(),
                 endTimeUnixNano: (start + BigInt("500000000")).toString(),
                 status: { code: "STATUS_CODE_OK" },
-                attributes: [{ key: "mlflow.spanType", value: { stringValue: "CHAIN" } }],
+                attributes: [
+                  { key: "mlflow.spanType", value: { stringValue: "CHAIN" } },
+                  {
+                    key: "mlflow.spanInputs",
+                    value: {
+                      stringValue: JSON.stringify({
+                        question: `deterministic question ${index}`,
+                        ...(index === 1 ? { attachment: attachmentUri } : {}),
+                      }),
+                    },
+                  },
+                  {
+                    key: "mlflow.spanOutputs",
+                    value: { stringValue: JSON.stringify({ answer: `deterministic answer ${index}` }) },
+                  },
+                ],
               },
               {
                 traceId: traceHex,
@@ -87,6 +132,13 @@ const experiment = await request("POST", "/api/2.0/mlflow/experiments/create", {
   name: "T22.5 GenAI UI Smoke",
 });
 const experimentId = experiment.experiment_id;
+const secondWorkspaceName = "t11-part1-secondary";
+await request(
+  "POST",
+  "/api/3.0/mlflow/workspaces",
+  { name: secondWorkspaceName, description: "T11.6 deterministic selector workspace" },
+  201,
+);
 const traceHexes = [
   "11111111111111111111111111111111",
   "22222222222222222222222222222222",
@@ -131,22 +183,39 @@ for (const [index, traceHex] of traceHexes.entries()) {
                 },
               ]
             : [],
+        tags:
+          index === 0
+            ? [
+                {
+                  key: "mlflow.artifactLocation",
+                  value: `/mlartifacts/workspaces/default/t11-traces/${traceIds[index]}`,
+                },
+              ]
+            : [],
       },
     },
   });
 }
 
+await uploadArtifact(
+  `workspaces/default/${experimentId}/traces/${traceIds[0]}/artifacts/attachments/550e8400-e29b-41d4-a716-446655440000`,
+  "T11.6 deterministic trace attachment",
+);
+
+let finishedRunSequence = 0;
 async function createFinishedRun(name, tags) {
+  const startTime = 1784550000000 + finishedRunSequence * 1000;
+  finishedRunSequence += 1;
   const created = await request("POST", "/api/2.0/mlflow/runs/create", {
     experiment_id: experimentId,
-    start_time: 1784548800000,
+    start_time: startTime,
     tags: [{ key: "mlflow.runName", value: name }, ...tags],
   });
   const runId = created.run.info.run_id;
   await request("POST", "/api/2.0/mlflow/runs/update", {
     run_id: runId,
     status: "FINISHED",
-    end_time: 1784548801000,
+    end_time: startTime + 1000,
   });
   return runId;
 }
@@ -163,6 +232,98 @@ const issueRunId = await createFinishedRun("T22.5 issue detection", [
   { key: "mlflow.issueDetection.result.totalTracesAnalyzed", value: "3" },
   { key: "mlflow.issueDetection.result.summary", value: "Deterministic UI smoke issue summary" },
 ]);
+
+const ordinaryRuns = [];
+for (let index = 0; index < 110; index += 1) {
+  const runStartTime =
+    index < 2 ? 1784549300000 + index * 1000 : 1784549000000 + index * 1000;
+  const created = await request("POST", "/api/2.0/mlflow/runs/create", {
+    experiment_id: experimentId,
+    start_time: runStartTime,
+    run_name: index < 2 ? `T11.6 metric run ${index + 1}` : `T11.6 pagination run ${index + 1}`,
+    tags: [{ key: "purpose", value: "part1-ui-smoke" }],
+  });
+  const runId = created.run.info.run_id;
+  ordinaryRuns.push({ runId, artifactUri: created.run.info.artifact_uri });
+  if (index < 2) {
+    await request("POST", "/api/2.0/mlflow/runs/log-batch", {
+      run_id: runId,
+      metrics: Array.from({ length: 6 }, (_, step) => ({
+        key: "accuracy",
+        value: 0.5 + index * 0.1 + step * 0.05,
+        timestamp: runStartTime + step * 100,
+        step,
+      })),
+      params: [{ key: "optimizer", value: index === 0 ? "adam" : "sgd" }],
+      tags: [{ key: "metric-fixture", value: "bulk-interval" }],
+    });
+  }
+  await request("POST", "/api/2.0/mlflow/runs/update", {
+    run_id: runId,
+    status: "FINISHED",
+    end_time: runStartTime + 100000,
+  });
+}
+const metricRunIds = ordinaryRuns.slice(0, 2).map(({ runId }) => runId);
+const primaryRunId = metricRunIds[0];
+const primaryRunArtifactUri = ordinaryRuns[0].artifactUri;
+await uploadArtifact(
+  artifactProxyPath(primaryRunArtifactUri, "model/MLmodel"),
+  "artifact_path: model\nflavors:\n  python_function: {}\n",
+);
+await uploadArtifact(
+  artifactProxyPath(primaryRunArtifactUri, "notes/t11-checklist.txt"),
+  "T11.6 deterministic run artifact\n",
+);
+await uploadArtifact(
+  artifactProxyPath(ordinaryRuns[1].artifactUri, "model/MLmodel"),
+  "artifact_path: model\nflavors:\n  python_function: {}\n",
+);
+
+const loggedModelResponse = await request("POST", "/api/2.0/mlflow/logged-models", {
+  experiment_id: experimentId,
+  name: "T11-6 deterministic logged model",
+  model_type: "Classifier",
+  source_run_id: primaryRunId,
+  params: [{ key: "framework", value: "fixture" }],
+  tags: [{ key: "purpose", value: "part1-ui-smoke" }],
+});
+const loggedModelId = loggedModelResponse.model.info.model_id;
+await uploadArtifact(
+  artifactProxyPath(loggedModelResponse.model.info.artifact_uri, "MLmodel"),
+  "flavors:\n  fixture: {}\n",
+);
+await request("PATCH", `/api/2.0/mlflow/logged-models/${loggedModelId}`, {
+  model_id: loggedModelId,
+  status: "LOGGED_MODEL_READY",
+});
+
+const registeredModelName = "t11-6-registered-model";
+await request("POST", "/api/2.0/mlflow/registered-models/create", {
+  name: registeredModelName,
+  description: "T11.6 deterministic non-prompt model",
+  tags: [{ key: "purpose", value: "part1-ui-smoke" }],
+});
+for (let version = 1; version <= 2; version += 1) {
+  await request("POST", "/api/2.0/mlflow/model-versions/create", {
+    name: registeredModelName,
+    source: `${primaryRunArtifactUri}/model`,
+    run_id: primaryRunId,
+    description: `T11.6 deterministic model version ${version}`,
+    tags: [{ key: "version-fixture", value: String(version) }],
+  });
+}
+await request("POST", "/api/2.0/mlflow/model-versions/transition-stage", {
+  name: registeredModelName,
+  version: "1",
+  stage: "Staging",
+  archive_existing_versions: false,
+});
+await request("POST", "/api/2.0/mlflow/registered-models/alias", {
+  name: registeredModelName,
+  alias: "champion",
+  version: "2",
+});
 
 const issue = await request("POST", "/api/3.0/mlflow/issues", {
   experiment_id: experimentId,
@@ -357,6 +518,12 @@ const state = {
   endpointId,
   guardrailId,
   budgetPolicyId: budgetResponse.budget_policy.budget_policy_id,
+  secondWorkspaceName,
+  metricRunIds,
+  primaryRunId,
+  primaryRunArtifactUri,
+  loggedModelId,
+  registeredModelName,
 };
 await fs.writeFile(path.join(HERE, ".state.json"), `${JSON.stringify(state, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);

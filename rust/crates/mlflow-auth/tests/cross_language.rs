@@ -291,10 +291,18 @@ async fn delete_user_removes_the_user() {
     // and confirm it's gone and can't authenticate.
     let db = TempDb::new("delete_user");
     let store = open_store(&db).await;
-    store
+    let user = store
         .create_user("dave_rust", "dave-password-xyz", false)
         .await
         .expect("create_user");
+    let role = store
+        .create_role("dave_viewer", "default", None)
+        .await
+        .expect("create_role");
+    store
+        .assign_role_to_user(user.id, role.id)
+        .await
+        .expect("assign_role_to_user");
     assert!(store.has_user("dave_rust").await.unwrap());
 
     store.delete_user("dave_rust").await.expect("delete_user");

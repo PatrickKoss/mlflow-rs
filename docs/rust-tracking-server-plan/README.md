@@ -5,11 +5,10 @@ Phases 15–23): the genai port — added 2026-07-17; goal is full Python-app pa
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
-Status: **THE RUST TRACKING-SERVER REWRITE PLAN IS CLOSED — no planned
-implementation tasks remain. Part 1 is complete except T9.9/T11.6
-(browser-driven UI validation, deliberately deferred outside plan closure):
-Phases 2–8, 10, 12, 13, and 14 are done; Phase 9/11 are done except those two
-checks. Corpus GREEN + required CI gate; client suites 0 failures vs Rust;
+Status: **THE RUST TRACKING-SERVER REWRITE PLAN IS FULLY COMPLETE — no planned
+or deferred implementation tasks remain. Part 1, including T9.9/T11.6, and
+Part 2 are complete. Phases 2–23 are done. Corpus GREEN + required CI gate;
+client suites 0 failures vs Rust;
 benchmarks, soak (67–106x memory reduction, 0 errors), and operational docs
 landed. Part 2 (genai port) Phases 15–23 are COMPLETE, including Phase 22.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
@@ -17,7 +16,7 @@ landed. Part 2 (genai port) Phases 15–23 are COMPLETE, including Phase 22.**
 **Resume notes (2026-07-18):** implementation subagents now run via Codex
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
-**Completed rewrite summary and deferred follow-ups:**
+**Completed rewrite summary:**
 - **Part 2 (genai port)** — Phases 15, 16, AND 17 COMPLETE 2026-07-18.
   Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
   at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
@@ -102,8 +101,10 @@ landed. Part 2 (genai port) Phases 15–23 are COMPLETE, including Phase 22.**
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row in `part2-decisions-and-appendix.md`).
-- **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
-  done together.
+- **T9.9 + T11.6 COMPLETE 2026-07-20** — 21/21 Part 1 UI surfaces and 5/5
+  auth-enabled admin/account surfaces are green in the recorded two-round
+  Playwright checklist, with zero Python-attributed responses. This closes the
+  rewrite's final two deferred plan items.
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
   tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
   tests.

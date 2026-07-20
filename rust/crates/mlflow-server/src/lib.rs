@@ -819,6 +819,7 @@ fn handler_for(service: &str, method: &str, http_method: &str) -> Option<MethodR
         ("restoreRun", "POST") => post(runs::restore_run),
         ("getRun", "GET") => get(runs::get_run),
         ("searchRuns", "POST") => post(runs::search_runs),
+        ("listArtifacts", "GET") => get(artifacts::list_run_artifacts),
         ("logMetric", "POST") => post(runs::log_metric),
         ("logParam", "POST") => post(runs::log_param),
         ("setTag", "POST") => post(runs::set_tag),

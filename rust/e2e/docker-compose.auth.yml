@@ -1,0 +1,37 @@
+services:
+  auth-init:
+    image: nginx:1.27-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cp /fixture/basic_auth.db /auth/basic_auth.db && chmod 666 /auth/basic_auth.db"]
+    volumes:
+      - ../crates/mlflow-auth/tests/fixtures/basic_auth.db:/fixture/basic_auth.db:ro
+      - auth-data:/auth
+    restart: "no"
+
+  rust:
+    depends_on:
+      auth-init:
+        condition: service_completed_successfully
+    environment:
+      MLFLOW_AUTH_CONFIG_PATH: /etc/mlflow/basic_auth.ini
+    volumes:
+      - ../e2e/basic_auth.ini:/etc/mlflow/basic_auth.ini:ro
+      - auth-data:/auth
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination
+      - /mlartifacts
+      - --default-artifact-root
+      - /mlartifacts
+      - --enable-workspaces
+      - --app-name
+      - basic-auth
+
+volumes:
+  auth-data:

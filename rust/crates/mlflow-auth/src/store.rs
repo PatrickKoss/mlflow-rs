@@ -290,9 +290,9 @@ impl AuthStore {
     /// synthetic `__user_<id>__` role; Python deletes that role (cascading to
     /// its permissions and assignments) before deleting the user so strict-FK
     /// backends don't block on dangling references. We reproduce that here by
-    /// deleting the synthetic role's `role_permissions` and
-    /// `user_role_assignments` rows, then the role, then the user — all in one
-    /// transaction. Errors `RESOURCE_DOES_NOT_EXIST` when the user is gone
+    /// deleting every assignment owned by the user plus the synthetic role's
+    /// `role_permissions` and assignments, then the role, then the user — all
+    /// in one transaction. Errors `RESOURCE_DOES_NOT_EXIST` when the user is gone
     /// (matching `_get_user`'s `NoResultFound` mapping).
     ///
     /// The `__user_<id>__` synthetic-role convention is owned by the RBAC layer
@@ -318,12 +318,19 @@ impl AuthStore {
              (SELECT id FROM {ROLES} WHERE name = {})",
             ph(1),
         );
+        let del_user_assignments = format!(
+            "DELETE FROM {USER_ROLE_ASSIGNMENTS} WHERE user_id = {}",
+            ph(1),
+        );
         let del_role = format!("DELETE FROM {ROLES} WHERE name = {}", ph(1));
         let del_user = format!("DELETE FROM {USERS} WHERE id = {}", ph(1));
 
         let role_val = vec![Val::Text(synthetic_role)];
         tx.exec(&del_perms, &role_val).await.map_err(internal)?;
         tx.exec(&del_assignments, &role_val)
+            .await
+            .map_err(internal)?;
+        tx.exec(&del_user_assignments, &[Val::Int(user.id)])
             .await
             .map_err(internal)?;
         tx.exec(&del_role, &role_val).await.map_err(internal)?;

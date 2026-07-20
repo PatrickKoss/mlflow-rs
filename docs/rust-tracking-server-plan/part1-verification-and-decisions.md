@@ -8,9 +8,10 @@
 3. **Behavioral parity**: `tests/tracking/test_rest_tracking.py`, client suites,
    registry REST checks, `tests/server/auth/`, and workspace endpoint/middleware suites
    green against Rust on the DB matrix (T12.1-T12.5).
-4. **UI parity**: T11.6 smoke — tracking, tracing, registry, prompts, admin/account, and
-   workspace-selector flows all green through nginx with the frontend served statically;
-   genai features still functional via Python.
+4. **UI parity**: T11.6/T9.9 smoke CLOSED 2026-07-20 — 21/21 tracking, tracing,
+   registry, prompts, and workspace-selector surfaces plus 5/5 auth-enabled
+   admin/account flows are green through nginx with the frontend served statically;
+   the response audit observed zero Python-attributed responses.
 5. **Interop**: users/webhook secrets created by either server work on the other
    (shared auth DB, Fernet, werkzeug hashes); alembic head pins enforced on both DBs.
 6. **Scale**: T13.3 benchmarks meet latency targets; EXPLAIN plans show index usage on
@@ -126,4 +127,3 @@ Compliance infra:
   `mlflow/tracking/_tracking_service/utils.py:252`.
 
 ---
-

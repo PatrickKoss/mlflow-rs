@@ -8,8 +8,8 @@
 //!   params);
 //! * T5.2 the `mlflow-artifacts` proxy (list / upload / download / delete
 //!   round-trip, multipart NOT_IMPLEMENTED parity, disabled-mode 503);
-//! * T5.3 ajax `upload-artifact`, `listLoggedModelArtifacts`, and the logged-model
-//!   artifact file download;
+//! * T5.3 ajax run-artifact listing/upload, `listLoggedModelArtifacts`, and the
+//!   logged-model artifact file download;
 //! * a bounded-memory streaming download of a large file.
 
 use std::path::{Path, PathBuf};
@@ -370,6 +370,40 @@ async fn get_artifact_missing_params_is_400() {
     // No run_id.
     let res = get(&server, "/get-artifact?path=f.txt").await;
     assert_eq!(res.status, StatusCode::BAD_REQUEST, "{}", res.text());
+}
+
+#[tokio::test]
+async fn ajax_list_run_artifacts_returns_directories_and_files() {
+    let server = TestServer::start("list_run_artifacts", true).await;
+    let (run_id, artifact_uri) = create_run(&server).await;
+    write_run_artifact(&artifact_uri, "model/MLmodel", b"flavors: {}");
+    write_run_artifact(&artifact_uri, "notes.txt", b"checklist");
+
+    let res = get(
+        &server,
+        &format!("/ajax-api/2.0/mlflow/artifacts/list?run_uuid={run_id}"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    assert_eq!(res.json()["root_uri"], artifact_uri);
+    assert_eq!(
+        res.json()["files"],
+        serde_json::json!([
+            {"path": "model", "is_dir": true},
+            {"path": "notes.txt", "is_dir": false, "file_size": 9}
+        ])
+    );
+
+    let res = get(
+        &server,
+        &format!("/ajax-api/2.0/mlflow/artifacts/list?run_id={run_id}&path=model"),
+    )
+    .await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.text());
+    assert_eq!(
+        res.json()["files"],
+        serde_json::json!([{"path": "model/MLmodel", "is_dir": false, "file_size": 11}])
+    );
 }
 
 // ===========================================================================

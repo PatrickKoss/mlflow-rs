@@ -917,12 +917,18 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       config-parity + 4 credential-cache-store + 6 cache unit (5 workspace + …) +
       6 credential-cache unit; no_default_http switched from the retired env var
       to `AuthConfig{default_permission:NO_PERMISSIONS}`.)*
-- [ ] **T9.9 Admin/account UI validation**: React admin console (`src/admin/`) and
+- [x] **T9.9 Admin/account UI validation**: React admin console (`src/admin/`) and
       account page (`src/account/`) fully functional against Rust (user CRUD, role CRUD,
       grants via EditAccessModal, current-user permissions list, `is_basic_auth` logout
       behavior).
       **AC:** UI smoke checklist items green with auth enabled.
       **VER:** T11.6 with auth-enabled deployment.
+      *(DONE 2026-07-20: 5/5 auth-enabled surfaces passed in the recorded
+      Playwright checklist at `rust/compliance/report/t11_6_ui_smoke.md` using
+      the auth-enabled compose override. User and role CRUD, EditAccessModal
+      assignment, the populated current-user permissions list, and
+      `is_basic_auth` logout behavior were exercised functionally; cleanup
+      deleted the created user and role.)*
 
 ### Phase 10 — Workspaces
 
@@ -1152,14 +1158,20 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       field. Reachable unauthenticated + carved out of the workspace-header
       gate like Python. 7 HTTP tests incl. byte-exact body. Browser check
       rides T11.6.)*
-- [ ] **T11.6 UI smoke checklist** (manual or playwright): experiment list, runs table
+- [x] **T11.6 UI smoke checklist** (manual or playwright): experiment list, runs table
       (Load more), run detail (GraphQL), charts (bulk-interval), compare runs, metric
       page, artifact browser, traces tab (list, span tree, attachments, assessments),
       logged models tab, datasets dropdown, **model registry pages (models list, version
       detail, stages, aliases, model artifact download), prompts pages, admin console
       (users/roles/grants), account page, workspace selector**.
-      **AC:** all render against Rust; network tab shows Python only for genai.
+      **AC:** all render against Rust; zero `X-MLflow-Backend: python` responses anywhere.
       **VER:** recorded checklist in PR; optional Playwright under `rust/e2e/`.
+      *(DONE 2026-07-20: 21/21 Part 1 surfaces passed in headless Chromium,
+      including the shared dataset/prompt rows from T22.5, plus the 5/5 T9.9
+      auth-enabled rows. Every page/console/failed-response audit was green and
+      every observed response had zero `X-MLflow-Backend: python`. The recorded
+      artifact is `rust/compliance/report/t11_6_ui_smoke.md`; the harness runs
+      both complete phases twice via `bash rust/e2e/run.sh`.)*
 
 ### Phase 12 — Compliance harness & CI
 
@@ -1451,4 +1463,3 @@ Phase 2 lands; auth needs registry + tracking APIs to protect).
       downgrade-safe revisions (a3f8c21d9b47, c4a9b7d3e812) and what the
       span_attributes downgrade drops. Human doc walkthrough (the AC's
       fresh-operator test) still pending — flagged for the user.
-

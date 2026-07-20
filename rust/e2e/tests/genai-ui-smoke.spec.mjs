@@ -2,71 +2,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expect, test as base } from "@playwright/test";
+import { expect } from "@playwright/test";
 
+import { AUTH_DISABLED_CAPABILITY_FAILURES, createAuditedTest } from "../browser-audit.mjs";
 import { SCREENSHOT_DIR, surfaces } from "../surfaces.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const state = JSON.parse(fs.readFileSync(path.resolve(HERE, "../.state.json"), "utf8"));
 const surfaceById = new Map(surfaces(state).map((surface) => [surface.id, surface]));
 const screenshotDir = fileURLToPath(SCREENSHOT_DIR);
-const expectedCapabilityFailures = new Set([
-  "/ajax-api/2.0/mlflow/users/current|404",
-  "/ajax-api/2.0/mlflow/users/list|404",
-  "/ajax-api/3.0/mlflow/assistant/config|403",
-  "/ajax-api/3.0/mlflow/ui-telemetry|404",
-]);
-
-const test = base.extend({
-  _browserAudit: [
-    async ({ page }, use) => {
-      const consoleErrors = [];
-      const pageErrors = [];
-      const pythonResponses = [];
-      const unexpectedHttpFailures = [];
-
-      page.on("console", (message) => {
-        if (message.type() === "error") {
-          consoleErrors.push({ text: message.text(), url: message.location().url });
-        }
-      });
-      page.on("pageerror", (error) => pageErrors.push(error.message));
-      page.on("response", (response) => {
-        if (!response.url().startsWith(state.baseURL)) return;
-        if (response.headers()["x-mlflow-backend"]?.toLowerCase() === "python") {
-          pythonResponses.push(`${response.status()} ${response.url()}`);
-        }
-        if (response.status() >= 400) {
-          const url = new URL(response.url());
-          const key = `${url.pathname}|${response.status()}`;
-          if (!expectedCapabilityFailures.has(key)) {
-            unexpectedHttpFailures.push(
-              `${response.status()} ${response.request().method()} ${url.pathname}`,
-            );
-          }
-        }
-      });
-
-      await use();
-
-      const unexpectedConsoleErrors = consoleErrors.filter(({ text, url }) => {
-        // Auth-disabled OSS performs these capability probes intentionally. Chrome reports
-        // their exact, separately-audited 403/404 responses as generic console errors.
-        if (text.startsWith("Failed to load resource:") && url) {
-          const pathname = new URL(url).pathname;
-          return ![...expectedCapabilityFailures].some((key) => key.startsWith(`${pathname}|`));
-        }
-        // Chromium can emit this layout-only diagnostic while the review panes resize;
-        // pageerror still catches actual uncaught ResizeObserver exceptions.
-        return text !== "null ResizeObserver loop completed with undelivered notifications.";
-      });
-      expect(pageErrors, "uncaught browser errors").toEqual([]);
-      expect(unexpectedHttpFailures, "unexpected failed same-origin responses").toEqual([]);
-      expect(unexpectedConsoleErrors, "browser console errors").toEqual([]);
-      expect(pythonResponses, "responses attributed to the Python backend").toEqual([]);
-    },
-    { auto: true },
-  ],
+const test = createAuditedTest({
+  baseURL: state.baseURL,
+  expectedFailures: AUTH_DISABLED_CAPABILITY_FAILURES,
 });
 
 function surface(id) {
@@ -78,7 +25,10 @@ function surface(id) {
 
 async function openSurface(page, id) {
   const definition = surface(id);
-  await page.goto(`/#${definition.route}`, { waitUntil: "domcontentloaded" });
+  const separator = definition.route.includes("?") ? "&" : "?";
+  await page.goto(`/#${definition.route}${separator}workspace=default`, {
+    waitUntil: "domcontentloaded",
+  });
   return definition;
 }
 

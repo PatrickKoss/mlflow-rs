@@ -3,3 +3,4 @@ screenshots/
 test-results/
 playwright-report/
 .state.json
+.t11-results.json

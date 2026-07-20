@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "seed": "node seed.mjs",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:genai": "MLFLOW_E2E_SUITE=genai playwright test",
+    "test:part1": "MLFLOW_E2E_SUITE=part1 playwright test",
+    "test:auth": "MLFLOW_E2E_SUITE=auth playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1"

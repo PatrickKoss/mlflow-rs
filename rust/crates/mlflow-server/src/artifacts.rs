@@ -106,6 +106,42 @@ pub async fn get_artifact(
     }
 }
 
+/// `GET /mlflow/artifacts/list?run_id=&run_uuid=&path=` (`list_artifacts_impl`).
+/// Resolve the owning run's artifact root and return run-relative `FileInfo`
+/// paths. `run_uuid` remains accepted for older UI clients.
+pub async fn list_run_artifacts(
+    State(state): State<AppState>,
+    workspace: Workspace,
+    parts: Parts,
+) -> Result<Response, MlflowError> {
+    let pairs = parts.uri.query().map(parse_query_pairs).unwrap_or_default();
+    let run_id = query_param(&pairs, "run_id")
+        .filter(|value| !value.is_empty())
+        .or_else(|| query_param(&pairs, "run_uuid").filter(|value| !value.is_empty()))
+        .ok_or_else(|| {
+            MlflowError::invalid_parameter_value("Missing value for required parameter 'run_id'.")
+        })?;
+    let validated = match query_param(&pairs, "path").filter(|value| !value.is_empty()) {
+        Some(path) => Some(mlflow_artifacts::validate_path_is_safe(&path)?),
+        None => None,
+    };
+
+    let run = state
+        .tracking_store()
+        .get_run(workspace.name(), &run_id)
+        .await?;
+    let artifact_uri = run.info.artifact_uri.unwrap_or_default();
+    let files = list_artifacts_at(&state, &artifact_uri, validated.as_deref()).await?;
+    proto_response(
+        &pb::list_artifacts::Response {
+            root_uri: Some(artifact_uri),
+            files,
+            next_page_token: None,
+        },
+        "mlflow.ListArtifacts.Response",
+    )
+}
+
 // ===========================================================================
 // T5.4 — GET /model-versions/get-artifact
 // ===========================================================================
