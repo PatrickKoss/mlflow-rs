@@ -6,7 +6,7 @@
 use std::io::{self, Read};
 
 use mlflow_server::assistant_providers::{
-    health, spawn, HealthError, ProviderConfig, ProviderKind, StreamRequest,
+    health, spawn, Event, HealthError, ProviderConfig, ProviderKind, StreamRequest,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -26,6 +26,8 @@ struct RecorderRequest {
     health_error: Option<String>,
     #[serde(default)]
     detail: Option<String>,
+    #[serde(default)]
+    exception_repr: Option<String>,
 }
 
 #[tokio::main]
@@ -37,10 +39,38 @@ async fn main() -> anyhow::Result<()> {
         "stream" => record_stream(request).await?,
         "health" => record_health(request).await?,
         "health_mapping" => record_health_mapping(request)?,
+        "exception_mapping" => record_exception_mapping(request)?,
         action => anyhow::bail!("unknown recorder action: {action}"),
     };
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+struct SimulatedException {
+    message: String,
+    repr: String,
+}
+
+impl std::fmt::Display for SimulatedException {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::fmt::Debug for SimulatedException {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.repr)
+    }
+}
+
+fn record_exception_mapping(request: RecorderRequest) -> anyhow::Result<Value> {
+    let error = SimulatedException {
+        message: request.detail.unwrap_or_default(),
+        repr: request
+            .exception_repr
+            .ok_or_else(|| anyhow::anyhow!("exception_mapping requires exception_repr"))?,
+    };
+    Ok(json!({"frame": Event::from_exception(&error).to_sse_frame()}))
 }
 
 async fn record_stream(request: RecorderRequest) -> anyhow::Result<Value> {

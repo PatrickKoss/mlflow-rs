@@ -169,10 +169,20 @@ pub struct Event {
 
 impl Event {
     pub fn from_error(error: impl Into<String>) -> Self {
+        let error = error.into();
         Self {
             event_type: EventType::Error,
-            data: json!({"error": error.into()}),
+            data: json!({"error": if error.is_empty() { "Exception()" } else { &error }}),
         }
+    }
+
+    pub fn from_exception(error: &(impl std::fmt::Display + std::fmt::Debug)) -> Self {
+        let message = error.to_string();
+        Self::from_error(if message.is_empty() {
+            format!("{error:?}")
+        } else {
+            message
+        })
     }
 
     pub fn from_message(role: &str, content: Value) -> Self {
@@ -224,7 +234,7 @@ pub enum SpawnError {
 
 impl SpawnError {
     fn into_event(self) -> Event {
-        Event::from_error(self.to_string())
+        Event::from_exception(&self)
     }
 }
 

@@ -28,6 +28,7 @@ from mlflow.assistant.providers.base import (
     NotAuthenticatedError,
     clear_config_cache,
 )
+from mlflow.assistant.types import Event
 from mlflow.server.assistant.api import assistant_router
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -639,6 +640,29 @@ def test_health_not_implemented_501_body_is_identical():
         dict(os.environ),
     )
     assert rust == {"status": 501, "body": {"detail": detail}}
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        NotImplementedError(),
+        ValueError(),
+        RuntimeError("boom"),
+        ValueError("bad value"),
+    ],
+)
+def test_exception_fallback_frame_is_non_empty_and_identical(error):
+    python = Event.from_exception(error).to_sse_event()
+    rust = _rust_record(
+        {
+            "action": "exception_mapping",
+            "detail": str(error),
+            "exception_repr": repr(error),
+        },
+        dict(os.environ),
+    )["frame"]
+    assert rust == python
+    assert json.loads(rust.split("data: ", 1)[1])["error"]
 
 
 def test_full_stub_cli_chat_is_frame_identical_through_real_http_routes(tmp_path):

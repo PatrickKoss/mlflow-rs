@@ -23,6 +23,7 @@ import requests
 import uvicorn
 from fastapi import FastAPI
 
+from mlflow.assistant.providers import MlflowGatewayProvider
 from mlflow.assistant.providers.base import AssistantProvider
 from mlflow.assistant.types import Event, Message, TextBlock
 from mlflow.server.assistant.api import assistant_router
@@ -91,12 +92,16 @@ def _free_port():
 
 
 @contextmanager
-def rust_server(tmp_path):
+def rust_server(tmp_path, *, config=None, remote_enabled=None):
     assert RUST_BINARY.exists(), f"build first: cargo build -p mlflow-server ({RUST_BINARY})"
     database = tmp_path / "rust.db"
     shutil.copy(FIXTURE_DB, database)
     home = tmp_path / "rust-home"
     home.mkdir()
+    if config is not None:
+        config_path = home / ".mlflow" / "assistant" / "config.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(json.dumps(config))
     sessions = tmp_path / "rust-tmp"
     sessions.mkdir()
     port = _free_port()
@@ -108,6 +113,8 @@ def rust_server(tmp_path):
         "MLFLOW_SERVER_DISABLE_SECURITY_MIDDLEWARE": "true",
         "MLFLOW_SERVER_ENABLE_JOB_EXECUTION": "false",
     }
+    if remote_enabled is not None:
+        env["MLFLOW_ENABLE_REMOTE_ASSISTANT"] = str(remote_enabled).lower()
     process = subprocess.Popen(
         [
             str(RUST_BINARY),
@@ -138,19 +145,31 @@ def rust_server(tmp_path):
 
 
 @contextmanager
-def python_server(tmp_path, stack):
+def python_server(tmp_path, stack, *, config=None, remote_enabled=None):
     import mlflow.assistant.config as config_module
     import mlflow.server.assistant.session as session_module
 
     home = tmp_path / "python-home"
     home.mkdir()
-    stack.enter_context(
-        patch.object(config_module, "CONFIG_PATH", home / ".mlflow" / "assistant" / "config.json")
-    )
+    config_path = home / ".mlflow" / "assistant" / "config.json"
+    if config is not None:
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(json.dumps(config))
+    stack.enter_context(patch.object(config_module, "CONFIG_PATH", config_path))
     stack.enter_context(patch.object(session_module, "SESSION_DIR", tmp_path / "python-sessions"))
     stack.enter_context(
-        patch("mlflow.server.assistant.api.list_providers", return_value=[ScriptedProvider()])
+        patch(
+            "mlflow.server.assistant.api.list_providers",
+            return_value=[ScriptedProvider(), MlflowGatewayProvider()],
+        )
     )
+    if remote_enabled is not None:
+        stack.enter_context(
+            patch.dict(
+                os.environ,
+                {"MLFLOW_ENABLE_REMOTE_ASSISTANT": str(remote_enabled).lower()},
+            )
+        )
     app = FastAPI()
     app.include_router(assistant_router)
     port = _free_port()
@@ -327,3 +346,104 @@ def test_python_rust_assistant_27_case_differential(tmp_path):
             )  # 27
 
             assert comparisons == 27
+
+
+def test_python_rust_assistant_remote_access_matrix(tmp_path):
+    cases = (
+        ("localhost-cli", "claude_code", False, False, 200),
+        ("remote-cli", "claude_code", True, True, 403),
+        ("remote-api-disabled", "mlflow_gateway", False, True, 403),
+        ("remote-api-enabled", "mlflow_gateway", True, True, 200),
+    )
+    for name, provider, remote_enabled, remote, expected_status in cases:
+        case_path = tmp_path / name
+        case_path.mkdir()
+        config = {
+            "providers": {
+                provider: {
+                    "model": "fixture-model",
+                    "selected": True,
+                    "api_key": "obvious-fake-secret",
+                }
+            },
+            "projects": {"7": {"type": "local", "location": str(case_path)}},
+        }
+        headers = {"X-Forwarded-For": "203.0.113.10"} if remote else {}
+        with (
+            ExitStack() as stack,
+            rust_server(
+                case_path,
+                config=config,
+                remote_enabled=remote_enabled,
+            ) as rust_base,
+        ):
+            with python_server(
+                case_path,
+                stack,
+                config=config,
+                remote_enabled=remote_enabled,
+            ) as python_base:
+                py_config = requests.get(
+                    f"{python_base}{PREFIX}/config", headers=headers, timeout=10
+                )
+                rs_config = requests.get(f"{rust_base}{PREFIX}/config", headers=headers, timeout=10)
+                _compare(py_config, rs_config)
+                config_body = rs_config.json()
+                assert config_body["remote_access_allowed"] is (
+                    provider == "mlflow_gateway" and remote_enabled
+                )
+                assert "api_key" not in config_body["providers"][provider]
+                if remote:
+                    assert "location" not in config_body["projects"]["7"]
+
+                py_response = requests.post(
+                    f"{python_base}{PREFIX}/message",
+                    headers=headers,
+                    json={"message": "hello"},
+                    timeout=10,
+                )
+                rs_response = requests.post(
+                    f"{rust_base}{PREFIX}/message",
+                    headers=headers,
+                    json={"message": "hello"},
+                    timeout=10,
+                )
+                assert py_response.status_code == rs_response.status_code == expected_status
+                if expected_status == 200:
+                    _compare(
+                        py_response,
+                        rs_response,
+                        py_response.json()["session_id"],
+                        rs_response.json()["session_id"],
+                        d18=True,
+                    )
+                else:
+                    assert py_response.content == rs_response.content
+                    assert rs_response.json() == {
+                        "detail": (
+                            "Assistant API is only accessible from the same host where the "
+                            "MLflow server is running."
+                        )
+                    }
+
+                if remote and remote_enabled:
+                    for method, path, kwargs in (
+                        ("PUT", f"{PREFIX}/config", {"json": {}}),
+                        ("POST", f"{PREFIX}/skills/install", {"json": {"type": "global"}}),
+                    ):
+                        py_local_only = requests.request(
+                            method,
+                            python_base + path,
+                            headers=headers,
+                            timeout=10,
+                            **kwargs,
+                        )
+                        rs_local_only = requests.request(
+                            method,
+                            rust_base + path,
+                            headers=headers,
+                            timeout=10,
+                            **kwargs,
+                        )
+                        _compare(py_local_only, rs_local_only)
+                        assert rs_local_only.status_code == 403

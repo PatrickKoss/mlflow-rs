@@ -14,7 +14,7 @@ use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 
 use axum::body::{Body, Bytes};
-use axum::extract::{ConnectInfo, Path, Query, Request, State};
+use axum::extract::{ConnectInfo, Extension, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -37,6 +37,7 @@ const REMOTE_ACCESS_DETAIL: &str =
     "Assistant API is only accessible from the same host where the MLflow server is running.";
 const NO_PROVIDER_DETAIL: &str = "No assistant provider is configured or available.";
 const DEV_STUB_ENV: &str = "MLFLOW_ASSISTANT_DEV_STUB_PROVIDERS";
+const REMOTE_ASSISTANT_ENV: &str = "MLFLOW_ENABLE_REMOTE_ASSISTANT";
 const DEV_STUB_REPLY: &str = "This is a synthetic reply from the MLflow dev stub Claude CLI. The real Claude Code provider is replaced so the Assistant chat panel can be reviewed without credentials or LLM calls. No model was invoked to produce this message.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -233,7 +234,11 @@ impl AssistantEvent {
     }
 
     pub fn error(error: impl Into<String>) -> Self {
-        Self::new("error", json!({"error": error.into()}))
+        let error = error.into();
+        Self::new(
+            "error",
+            json!({"error": if error.is_empty() { "Exception()" } else { &error }}),
+        )
     }
 
     pub fn to_sse(&self) -> Bytes {
@@ -269,6 +274,9 @@ pub enum AssistantProviderError {
 /// execution; this module retains HTTP status mapping and SSE framing.
 pub trait AssistantProvider: Send + Sync + Debug {
     fn name(&self) -> &str;
+    fn allows_remote_access(&self) -> bool {
+        false
+    }
     fn resolve_skills_path(&self, base_directory: &FsPath) -> PathBuf;
     fn check_connection(
         &self,
@@ -433,8 +441,26 @@ impl AssistantConfig {
         fs::write(path, body)
     }
 
-    fn response_value(&self) -> Value {
-        json!({"providers": self.providers, "projects": self.projects})
+    fn response_value(&self, is_localhost: bool, remote_access_allowed: bool) -> Value {
+        let mut providers = self.providers.clone();
+        for provider in providers.values_mut() {
+            if let Some(provider) = provider.as_object_mut() {
+                provider.shift_remove("api_key");
+            }
+        }
+        let mut projects = self.projects.clone();
+        if !is_localhost {
+            for project in projects.values_mut() {
+                if let Some(project) = project.as_object_mut() {
+                    project.shift_remove("location");
+                }
+            }
+        }
+        json!({
+            "providers": providers,
+            "projects": projects,
+            "remote_access_allowed": remote_access_allowed,
+        })
     }
 
     fn project_path(&self, experiment_id: &str) -> Option<PathBuf> {
@@ -480,6 +506,10 @@ impl BuiltinProvider {
 impl AssistantProvider for BuiltinProvider {
     fn name(&self) -> &str {
         self.name
+    }
+
+    fn allows_remote_access(&self) -> bool {
+        matches!(self.kind, BuiltinKind::Gateway)
     }
 
     fn resolve_skills_path(&self, base_directory: &FsPath) -> PathBuf {
@@ -791,22 +821,88 @@ pub fn routes() -> Router<AppState> {
             &format!("{PREFIX}/providers/{{provider}}/models"),
             get(list_provider_models),
         )
-        .route_layer(middleware::from_fn(require_localhost))
+        .route_layer(middleware::from_fn(classify_assistant_client))
 }
 
-async fn require_localhost(request: Request, next: Next) -> Response {
-    let is_loopback = request
+#[derive(Debug, Clone, Copy)]
+struct AssistantClient {
+    is_localhost: bool,
+}
+
+async fn classify_assistant_client(mut request: Request, next: Next) -> Response {
+    let peer_ip = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(address)| address.ip().is_loopback())
-        .unwrap_or(false);
-    if !is_loopback {
-        return detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL);
-    }
+        .map(|ConnectInfo(address)| address.ip());
+    // Uvicorn trusts X-Forwarded-For only from its default trusted proxy,
+    // 127.0.0.1. Mirror that behavior for a same-host reverse proxy without
+    // allowing a remote peer to spoof a loopback address.
+    let effective_ip = peer_ip.and_then(|peer_ip| {
+        if peer_ip.is_loopback() {
+            request
+                .headers()
+                .get("x-forwarded-for")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.split(',').next())
+                .and_then(|value| value.trim().parse().ok())
+                .or(Some(peer_ip))
+        } else {
+            Some(peer_ip)
+        }
+    });
+    request.extensions_mut().insert(AssistantClient {
+        is_localhost: effective_ip.is_some_and(|ip| ip.is_loopback()),
+    });
     next.run(request).await
 }
 
-async fn send_message(State(state): State<AppState>, body: Bytes) -> Response {
+fn remote_assistant_enabled() -> Result<bool, ()> {
+    match std::env::var(REMOTE_ASSISTANT_ENV) {
+        Err(std::env::VarError::NotPresent) => Ok(false),
+        Err(std::env::VarError::NotUnicode(_)) => Err(()),
+        Ok(value) if value.eq_ignore_ascii_case("true") || value == "1" => Ok(true),
+        Ok(value) if value.eq_ignore_ascii_case("false") || value == "0" => Ok(false),
+        Ok(_) => Err(()),
+    }
+}
+
+fn enforce_local_only(client: AssistantClient) -> Option<Response> {
+    (!client.is_localhost).then(|| detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL))
+}
+
+fn enforce_remote_opt_in(client: AssistantClient) -> Option<Response> {
+    if client.is_localhost {
+        return None;
+    }
+    match remote_assistant_enabled() {
+        Ok(true) => None,
+        Ok(false) => Some(detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL)),
+        Err(()) => Some(internal_error()),
+    }
+}
+
+fn enforce_provider_remote_access(
+    client: AssistantClient,
+    provider: Option<&dyn AssistantProvider>,
+) -> Option<Response> {
+    if let Some(response) = enforce_remote_opt_in(client) {
+        return Some(response);
+    }
+    (!client.is_localhost && !provider.is_some_and(AssistantProvider::allows_remote_access))
+        .then(|| detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL))
+}
+
+async fn send_message(
+    State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
+    body: Bytes,
+) -> Response {
+    let runtime = state.assistant_runtime();
+    let config = runtime.load_config();
+    let selected_provider = runtime.selected_provider(&config);
+    if let Some(response) = enforce_provider_remote_access(client, selected_provider.as_deref()) {
+        return response;
+    }
     let request = match parse_object_body(&body) {
         Ok(value) => value,
         Err(response) => return *response,
@@ -836,8 +932,6 @@ async fn send_message(State(state): State<AppState>, body: Bytes) -> Response {
             )
         }
     };
-    let runtime = state.assistant_runtime();
-    let config = runtime.load_config();
     let working_dir = experiment_id
         .as_deref()
         .and_then(|experiment_id| config.project_path(experiment_id));
@@ -874,10 +968,16 @@ async fn send_message(State(state): State<AppState>, body: Bytes) -> Response {
 
 async fn stream_response(
     State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
     Path(session_id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
     let runtime = state.assistant_runtime().clone();
+    let config = runtime.load_config();
+    let provider = runtime.selected_provider(&config);
+    if let Some(response) = enforce_provider_remote_access(client, provider.as_deref()) {
+        return response;
+    }
     let mut session = match runtime.sessions().load(&session_id) {
         Ok(Some(session)) => session,
         Ok(None) => return detail_response(StatusCode::NOT_FOUND, "Session not found"),
@@ -900,8 +1000,6 @@ async fn stream_response(
     if pending.is_none() && !decisions.is_empty() {
         context.insert("tool_decisions".to_string(), Value::Object(decisions));
     }
-    let config = runtime.load_config();
-    let provider = runtime.selected_provider(&config);
     let tracking_uri = tracking_uri(&headers);
     let source: BoxStream<'static, AssistantEvent> = match provider {
         Some(provider) => {
@@ -953,9 +1051,16 @@ async fn stream_response(
 
 async fn patch_session(
     State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
     Path(session_id): Path<String>,
     body: Bytes,
 ) -> Response {
+    let runtime = state.assistant_runtime();
+    let config = runtime.load_config();
+    let provider = runtime.selected_provider(&config);
+    if let Some(response) = enforce_provider_remote_access(client, provider.as_deref()) {
+        return response;
+    }
     let request = match parse_object_body(&body) {
         Ok(value) => value,
         Err(response) => return *response,
@@ -965,7 +1070,6 @@ async fn patch_session(
         Some(Value::String(status)) if status == "cancelled" => {}
         Some(value) => return literal_error("status", "'cancelled'", value.clone()),
     }
-    let runtime = state.assistant_runtime();
     let mut session = match runtime.sessions().load(&session_id) {
         Ok(Some(session)) => session,
         Ok(None) => return detail_response(StatusCode::NOT_FOUND, "Session not found"),
@@ -989,9 +1093,16 @@ async fn patch_session(
 
 async fn resolve_permission(
     State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
     Path(session_id): Path<String>,
     body: Bytes,
 ) -> Response {
+    let runtime = state.assistant_runtime();
+    let config = runtime.load_config();
+    let provider = runtime.selected_provider(&config);
+    if let Some(response) = enforce_provider_remote_access(client, provider.as_deref()) {
+        return response;
+    }
     let request = match parse_object_body(&body) {
         Ok(value) => value,
         Err(response) => return *response,
@@ -1008,7 +1119,6 @@ async fn resolve_permission(
     if let Err(detail) = SessionStore::validate_session_id(&session_id) {
         return detail_response(StatusCode::BAD_REQUEST, &detail);
     }
-    let runtime = state.assistant_runtime();
     let mut session = match runtime.sessions().load(&session_id) {
         Ok(Some(session)) => session,
         Ok(None) => return detail_response(StatusCode::NOT_FOUND, "Session not found"),
@@ -1024,7 +1134,14 @@ async fn resolve_permission(
     )
 }
 
-async fn provider_health(State(state): State<AppState>, Path(provider): Path<String>) -> Response {
+async fn provider_health(
+    State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
+    Path(provider): Path<String>,
+) -> Response {
+    if let Some(response) = enforce_remote_opt_in(client) {
+        return response;
+    }
     let runtime = state.assistant_runtime();
     let Some(instance) = runtime.provider(&provider) else {
         return detail_response(
@@ -1032,6 +1149,9 @@ async fn provider_health(State(state): State<AppState>, Path(provider): Path<Str
             &format!("Provider '{provider}' not found"),
         );
     };
+    if !client.is_localhost && !instance.allows_remote_access() {
+        return detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL);
+    }
     let config = runtime.load_config();
     match instance
         .check_connection(config.providers.get(&provider).cloned())
@@ -1051,14 +1171,34 @@ async fn provider_health(State(state): State<AppState>, Path(provider): Path<Str
     }
 }
 
-async fn get_config(State(state): State<AppState>) -> Response {
+async fn get_config(
+    State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
+) -> Response {
+    let runtime = state.assistant_runtime();
+    let config = runtime.load_config();
+    let selected_provider = runtime.selected_provider(&config);
+    let remote_access_allowed = match selected_provider.as_deref() {
+        None => false,
+        Some(provider) => match remote_assistant_enabled() {
+            Ok(enabled) => enabled && provider.allows_remote_access(),
+            Err(()) => return internal_error(),
+        },
+    };
     json_response(
         StatusCode::OK,
-        state.assistant_runtime().load_config().response_value(),
+        config.response_value(client.is_localhost, remote_access_allowed),
     )
 }
 
-async fn update_config(State(state): State<AppState>, body: Bytes) -> Response {
+async fn update_config(
+    State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
+    body: Bytes,
+) -> Response {
+    if let Some(response) = enforce_local_only(client) {
+        return response;
+    }
     let request = match parse_object_body(&body) {
         Ok(value) => value,
         Err(response) => return *response,
@@ -1156,10 +1296,28 @@ async fn update_config(State(state): State<AppState>, body: Bytes) -> Response {
     if runtime.save_config(&config).is_err() {
         return internal_error();
     }
-    json_response(StatusCode::OK, config.response_value())
+    let selected_provider = runtime.selected_provider(&config);
+    let remote_access_allowed = match selected_provider.as_deref() {
+        None => false,
+        Some(provider) => match remote_assistant_enabled() {
+            Ok(enabled) => enabled && provider.allows_remote_access(),
+            Err(()) => return internal_error(),
+        },
+    };
+    json_response(
+        StatusCode::OK,
+        config.response_value(true, remote_access_allowed),
+    )
 }
 
-async fn install_skills_endpoint(State(state): State<AppState>, body: Bytes) -> Response {
+async fn install_skills_endpoint(
+    State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
+    body: Bytes,
+) -> Response {
+    if let Some(response) = enforce_local_only(client) {
+        return response;
+    }
     let request = match parse_object_body(&body) {
         Ok(value) => value,
         Err(response) => return *response,
@@ -1246,10 +1404,14 @@ struct ModelsQuery {
 
 async fn list_provider_models(
     State(state): State<AppState>,
+    Extension(client): Extension<AssistantClient>,
     Path(provider): Path<String>,
     Query(query): Query<ModelsQuery>,
     headers: HeaderMap,
 ) -> Response {
+    if let Some(response) = enforce_remote_opt_in(client) {
+        return response;
+    }
     let runtime = state.assistant_runtime();
     let Some(instance) = runtime.provider(&provider) else {
         return detail_response(
@@ -1257,6 +1419,9 @@ async fn list_provider_models(
             &format!("Provider '{provider}' not found"),
         );
     };
+    if !client.is_localhost && !instance.allows_remote_access() {
+        return detail_response(StatusCode::FORBIDDEN, REMOTE_ACCESS_DETAIL);
+    }
     let config = runtime.load_config();
     let api_key = headers
         .get("x-api-key")

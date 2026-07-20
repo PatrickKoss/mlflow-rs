@@ -1,4 +1,4 @@
-//! T20.1 Assistant route, session-store, localhost-gate, and SSE coverage.
+//! T20.1 Assistant route, session-store, remote-access, and SSE coverage.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -272,20 +272,19 @@ fn json_body(body: &[u8]) -> Value {
 }
 
 #[tokio::test]
-async fn localhost_gate_covers_all_nine_routes_and_accepts_ipv6_loopback() {
+async fn remote_access_policy_covers_all_routes_and_accepts_ipv6_loopback() {
     let fixture = Fixture::new().await;
-    let routes = [
+    let gated_routes = [
         (Method::POST, format!("{PREFIX}/message")),
         (Method::GET, format!("{PREFIX}/sessions/id/stream")),
         (Method::PATCH, format!("{PREFIX}/sessions/id")),
         (Method::POST, format!("{PREFIX}/sessions/id/permission")),
         (Method::GET, format!("{PREFIX}/providers/id/health")),
-        (Method::GET, format!("{PREFIX}/config")),
         (Method::PUT, format!("{PREFIX}/config")),
         (Method::POST, format!("{PREFIX}/skills/install")),
         (Method::GET, format!("{PREFIX}/providers/id/models")),
     ];
-    for (method, path) in routes {
+    for (method, path) in gated_routes {
         let (status, _, body) = collect(
             fixture
                 .request(
@@ -311,6 +310,24 @@ async fn localhost_gate_covers_all_nine_routes_and_accepts_ipv6_loopback() {
                 Method::GET,
                 &format!("{PREFIX}/config"),
                 None,
+                IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10)),
+                &[],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body,
+        r#"{"providers":{},"projects":{},"remote_access_allowed":false}"#
+    );
+
+    let (status, _, body) = collect(
+        fixture
+            .request(
+                Method::GET,
+                &format!("{PREFIX}/config"),
+                None,
                 IpAddr::V6(Ipv6Addr::LOCALHOST),
                 &[],
             )
@@ -318,7 +335,10 @@ async fn localhost_gate_covers_all_nine_routes_and_accepts_ipv6_loopback() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, r#"{"providers":{},"projects":{}}"#);
+    assert_eq!(
+        body,
+        r#"{"providers":{},"projects":{},"remote_access_allowed":false}"#
+    );
 }
 
 #[tokio::test]
@@ -328,7 +348,10 @@ async fn config_health_models_and_skills_routes_match_python_shapes() {
         .local(Method::GET, &format!("{PREFIX}/config"), None)
         .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, r#"{"providers":{},"projects":{}}"#);
+    assert_eq!(
+        body,
+        r#"{"providers":{},"projects":{},"remote_access_allowed":false}"#
+    );
 
     let project = fixture._directory.path().join("project");
     std::fs::create_dir_all(&project).unwrap();
