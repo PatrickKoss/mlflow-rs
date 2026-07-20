@@ -25,6 +25,7 @@ from rust.bench.genai.t23_3 import (
 )
 from rust.bench.genai.t23_3 import cell_matrix as job_cell_matrix
 from rust.bench.genai.t23_4 import cell_matrix as streaming_cell_matrix
+from rust.bench.genai.t23_5 import MIX_WEIGHTS, rss_trend, scaled_mix, seeded_traffic
 
 
 def test_mock_provider_is_byte_stable_for_every_protocol_route() -> None:
@@ -328,3 +329,32 @@ def test_t23_4_mock_provider_has_seeded_small_and_large_frame_variants() -> None
             counts[variant] = first.count("data: {")
     assert 9 <= counts["small"] <= 11
     assert 112 <= counts["large"] <= 128
+
+
+def test_t23_5_seeded_mix_is_repeatable_and_exactly_10k_requests() -> None:
+    first = seeded_traffic(10_000, 600, 2350)
+    second = seeded_traffic(10_000, 600, 2350)
+    assert first == second
+    assert sum(item.request_count for item in first) == 10_000
+    assert scaled_mix(10_000) == MIX_WEIGHTS
+    assert {item.family for item in first} == set(MIX_WEIGHTS)
+    assert all(0 <= item.scheduled_seconds <= 600 for item in first)
+
+
+def test_t23_5_rss_trend_uses_t14_style_monotonic_growth_rule() -> None:
+    monotonic = [
+        {
+            "elapsed_seconds": index * 60,
+            "rss_bytes": int((100 + index * 2) * 1024 * 1024),
+        }
+        for index in range(6)
+    ]
+    bounded = [
+        {
+            "elapsed_seconds": index * 60,
+            "rss_bytes": int(value * 1024 * 1024),
+        }
+        for index, value in enumerate((100, 106, 104, 105, 103, 104))
+    ]
+    assert rss_trend(monotonic)["verdict"] == "FAIL"
+    assert rss_trend(bounded)["verdict"] == "PASS"

@@ -16,7 +16,7 @@
     "equivalence"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]},
+    "schema_version": {"enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"]},
     "run": {
       "type": "object",
       "additionalProperties": false,
@@ -59,7 +59,12 @@
         "stream_variant": {"enum": ["small", "large", "none"]},
         "provider_mode": {"type": "string"},
         "canonical_traces": {"type": "integer", "minimum": 1},
-        "measured_traces": {"type": "integer", "minimum": 1}
+        "measured_traces": {"type": "integer", "minimum": 1},
+        "scheduled_duration_seconds": {"type": "number", "minimum": 0},
+        "traffic_mix": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
       }
     },
     "summary": {
@@ -95,7 +100,8 @@
                 "peak_rss_mib": {"type": "number", "minimum": 0}
               }
             },
-            "archival": {"type": "object"}
+            "archival": {"type": "object"},
+            "families": {"type": "object"}
           }
         }
       }

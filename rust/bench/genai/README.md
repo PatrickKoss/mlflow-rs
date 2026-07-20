@@ -51,7 +51,8 @@ inter-frame gap.
 ## Raw metrics schema
 
 Every target writes one JSON document validated against
-`raw-metrics.schema.json` (schema version `1.0.0`). Top-level fields are:
+`raw-metrics.schema.json` (latest schema version `1.4.0`, backward compatible
+with the earlier Phase 23 versions). Top-level fields are:
 
 - `run`: target, cell, seed, concurrency, warm-up count, UTC bounds.
 - `summary`: overall and per-endpoint count/error/RPS, p50/p95/p99/max latency,
@@ -278,4 +279,34 @@ uv run --frozen --extra db --extra extras --with litellm \
   python -m rust.bench.genai.runner t23-4 --requests 2 \
   --small-traces 2 --large-traces 2 --cells chat-small-c1 cli-c1 \
   small-c1 pass-small get-trace-c1 --skip-build --output-dir /tmp/t23-4-check
+```
+
+## T23.5 mixed soak
+
+Run the canonical 10,000-request-per-target capstone soak with:
+
+```bash
+docker compose -p mlflow-t23-genai -f rust/bench/genai/docker-compose.yml up -d --wait postgres minio && \
+uv run --frozen --extra db --extra extras --with litellm \
+  python -m rust.bench.genai.runner t23-5
+```
+
+The runner initializes MinIO, builds the release server and worker, recreates
+the database and artifact/archive prefixes per target, then runs Python and
+Rust serially. Its seeded ten-minute primary stream is 20% dataset upserts,
+30% gateway chat (including 5% streams), 5% assistant session/stream requests,
+35% labeling/review reads, and 10% evaluation/scorer submissions. Public job
+polls are control observations outside the 10,000-request mix. A 1,000-trace
+archive pass runs in the background. The raw files include one-second
+process-tree RSS/CPU, one-minute RSS trend means and slope, every job terminal
+state, an archive payload hash, and the deterministic response/SSE sample.
+
+For a quick plumbing check, shorten the schedule and scale every mix count
+proportionally; reduced runs are marked trimmed and cannot satisfy T23.5:
+
+```bash
+uv run --frozen --extra db --extra extras --with litellm \
+  python -m rust.bench.genai.runner t23-5 --requests 100 \
+  --duration-seconds 10 --archive-traces 10 --targets rust \
+  --skip-build --output-dir /tmp/t23-5-check
 ```
