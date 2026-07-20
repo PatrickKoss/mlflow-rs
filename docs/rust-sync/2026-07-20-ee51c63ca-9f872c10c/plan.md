@@ -16,7 +16,7 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
 
 ## Tasks
 
-- [ ] T-S1 MCP server registry backend
+- [x] T-S1 MCP server registry backend — DONE 2026-07-21 (`a58466393`, rebased from `dba421772`): all 23 Python router operations × REST+ajax prefixes (46 routes), full store (search DSL, semver ordering, tags/aliases, 3 dialects), MCP auth permissions, workspace scoping; Alembic anchor advanced to `a8b9c0d1e2f3`. Coordinator-verified post-rebase: conformance 35/35 sqlite + 35/35 postgres zero diffs (my run), focused store/http tests green, gateway-discovery pin update validated against live Python (len 1021913 / sha 3e2d61fb… match). Replay ASGI plumbing unified with T-S2's during rebase (`python_asgi_app`).
   - **Upstream refs:** `14414ab00` Add MCP registry backend and clients (#24380); `d52771638` Harden MCP registry auth, validation, and migration edges (#24479)
   - **Rust target:** `rust/crates/mlflow-store` (entities + sqlalchemy-mixin parity for mcp_servers/mcp_server_versions/mcp_access_endpoints tables incl. tags/aliases + search), `rust/crates/mlflow-server` (24 endpoints under `/api/3.0/mlflow/mcp-servers` and the ajax prefix, per `mlflow/server/mcp_server_api.py`), `rust/crates/mlflow-auth` (new MCP permissions per `mlflow/server/auth/permissions.py`), workspace scoping per `sqlalchemy_workspace_store.py`
   - **AC:** Every MCP registry endpoint returns byte-identical (allowlist-aware) responses vs the merged Python server on sqlite+postgres, including validation errors (semver rules in `semver_utils.py`, name rules in `validation.py`), auth enforcement, and workspace scoping. Alembic migration `a8b9c0d1e2f3` is schema owner — Rust consumes, never migrates.
