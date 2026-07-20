@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import uuid
 import warnings
 from unittest import mock
 
@@ -59,15 +60,16 @@ def client(db_uri):
 
 @pytest.fixture
 def experiments(client):
-    exp1 = client.create_experiment("test_exp_1")
-    exp2 = client.create_experiment("test_exp_2")
-    exp3 = client.create_experiment("test_exp_3")
+    suffix = uuid.uuid4().hex
+    exp1 = client.create_experiment(f"test_exp_1_{suffix}")
+    exp2 = client.create_experiment(f"test_exp_2_{suffix}")
+    exp3 = client.create_experiment(f"test_exp_3_{suffix}")
     return [exp1, exp2, exp3]
 
 
 @pytest.fixture
 def experiment(client):
-    return client.create_experiment("test_trace_experiment")
+    return client.create_experiment(f"test_trace_experiment_{uuid.uuid4().hex}")
 
 
 def test_create_dataset(mock_client):

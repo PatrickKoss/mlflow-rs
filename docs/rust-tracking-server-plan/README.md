@@ -60,11 +60,18 @@ remaining planned work.**
   zero non-allowlisted differences and no new allowlist entries. T22.2
   refreshed the 1,892-item reachability ledger at the T22.1 merge head
   (1,546 server-reachable / 346 client-only / 0 dead; zero unclassified or
-  missing owners), separated 3,376 Python-internal tests from the repointable
-  HTTP/SDK inventory, and ran that inventory green against release Rust on
-  SQLite + Postgres 16 (per backend: server 3/3; client-only 292 passed / 1
-  documented skip). Required core + validator run on every Rust CI build;
-  the full optional-dependency matrix is nightly/manual. T22.3 is next — see
+  missing owners). The 2026-07-20 follow-up replaced the hand-written-only
+  test band with an AST-derived inventory and a Python-over-HTTP mechanical
+  baseline. One store-only review-queue test was excluded by that baseline,
+  leaving 35 repointable definitions (41 collected cases), 183 client-only
+  definitions, and 3,344 Python-internal definitions, all with explicit
+  reasons. Fresh-server/fresh-database isolation made the 41-case baseline and
+  release-Rust matrix green on SQLite + Postgres 16; client-only remained 292
+  passed / 1 documented skip per backend. **T22.2 also found and fixed a genuine
+  Rust parity bug: StartTraceV3 discarded embedded assessments; fix
+  `84340d2e2` persists them atomically and returns them in TraceInfo.** Required
+  core + validator run on every Rust CI build; the full optional-dependency
+  matrix is nightly/manual. T22.3 is next. See
   `part2-work-breakdown.md` §16 Phase 22. Phase 23 already
   finished, so T22.4's precondition on the Python container is satisfied.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import json
 from collections import Counter
 from pathlib import Path
@@ -36,6 +37,16 @@ def _load(name: str) -> dict[str, Any]:
     if value.get("schema_version") != 1:
         raise AssertionError(f"{name}: unsupported schema version")
     return value
+
+
+def _expected_tests() -> list[dict[str, Any]]:
+    path = HERE / "build_inventory.py"
+    spec = importlib.util.spec_from_file_location("genai_build_inventory", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load test classifier: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._test_inventory()
 
 
 def _definitions(path: Path) -> list[tuple[str, str | None, int]]:
@@ -118,10 +129,40 @@ def main() -> None:
         raise AssertionError(f"mlflow/genai coverage mismatch; missing={missing}, extra={extra}")
 
     oracle_groups = ledger["fixture_oracles"]
+    expected_tests = _expected_tests()
+    if ledger["tests"] != expected_tests:
+        expected_ids = {test["id"] for test in expected_tests}
+        actual_ids = {test["id"] for test in ledger["tests"]}
+        raise AssertionError(
+            "AST test inventory drift; "
+            f"missing={sorted(expected_ids - actual_ids)[:3]}, "
+            f"extra={sorted(actual_ids - expected_ids)[:3]}"
+        )
     test_ids = {test["id"] for test in ledger["tests"]}
     for test in ledger["tests"]:
         if test.get("classification") not in TEST_CLASSIFICATIONS:
             raise AssertionError(f"unclassified test: {test['id']}")
+        if not test.get("reason"):
+            raise AssertionError(f"test missing classification reason: {test['id']}")
+    if set(ledger.get("test_classification_criterion", {})) != TEST_CLASSIFICATIONS:
+        raise AssertionError("missing test classification criteria")
+    suite_paths = {suite["path"] for suite in ledger.get("test_suites", [])}
+    if suite_paths != {test["path"] for test in ledger["tests"]}:
+        raise AssertionError("test suite classification index drift")
+    for suite in ledger["test_suites"]:
+        for classification in suite["classifications"]:
+            if not classification.get("reasons"):
+                raise AssertionError(f"suite classification missing reasons: {suite['path']}")
+            matching = [
+                test
+                for test in ledger["tests"]
+                if test["path"] == suite["path"]
+                and test["classification"] == classification["classification"]
+            ]
+            if classification["tests"] != len(matching) or classification["reasons"] != sorted({
+                test["reason"] for test in matching
+            }):
+                raise AssertionError(f"suite classification drift: {suite['path']}")
     for item in items:
         classification = item.get("classification")
         if classification not in CLASSIFICATIONS:

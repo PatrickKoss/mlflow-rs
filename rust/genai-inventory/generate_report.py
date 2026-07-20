@@ -78,6 +78,25 @@ def render(ledger: dict[str, Any]) -> str:
         "implementation classes directly; they remain inventory evidence but are not falsely "
         "reported as repointable Rust HTTP conformance.",
         "",
+        "The repointable band is derived mechanically from the Python AST: a test must "
+        "transitively consume `db_uri` through its local fixture graph, and is rejected if that "
+        "graph or test patches MLflow internals, imports/uses Python store or handler "
+        "implementations, accesses private Python attributes, or consumes Databricks stubs. "
+        "The resulting candidate must also pass against a Python HTTP server on the same "
+        "per-test-isolated backend; store-only behavior is `python_internal` by definition.",
+        "",
+        "### Repointable suites",
+        "",
+        *_table(
+            ["Suite", "Tests", "Mechanical reason"],
+            [
+                [suite["path"], classification["tests"], " / ".join(classification["reasons"])]
+                for suite in ledger["test_suites"]
+                for classification in suite["classifications"]
+                if classification["classification"] == "server_reachable"
+            ],
+        ),
+        "",
         *_table(
             ["Classification", "Items"],
             [

@@ -1039,23 +1039,35 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       server paths and zero server rows missing a native owner. Drift was one
       new review-queue auth differential plus the three new public-SDK HTTP
       conformance cases; no source ownership reclassification was needed.
-      The formerly path-keyword-classified test index is now explicit about
-      execution boundaries: 3 Rust-HTTP tests, 183 client-only SDK definitions,
-      and 3,376 `python_internal` definitions whose handler/store/worker
-      monkeypatches cannot cross a process boundary (retained as inventory
-      evidence rather than force-reported as Rust HTTP coverage). The full
-      repointable matrix used the release server and passed on both SQLite and
-      live `postgres:16`: server-reachable 3 passed / 0 failed / 0 skipped per
-      backend; client-only 292 passed / 0 failed / 1 existing skip per backend.
-      The required subset was 14 passed / 0 failed / 0 skipped per backend.
-      No Rust parity bug was found. Ledger-driven runner and byte-stable report
-      generator: `rust/genai-inventory/run_conformance.py`; machine/Markdown
-      evidence: `rust/compliance/report/t22_2_{required,full}.{json,md}` (with
-      per-suite JUnit/pytest/server logs in CI artifacts). Required CI job
-      `python-conformance` runs release Rust + validator + SQLite/Postgres core;
-      `python-conformance-full` runs the pinned optional-dependency suite
-      nightly/manual. Release build, generator stability, validator, Ruff,
-      Python baseline 3/3, and both local DB matrices exited 0.
+      The test index is now mechanically classified from AST fixture chains:
+      the initial 36-definition/42-case candidate band, 183 client-only SDK
+      definitions, and 3,343 `python_internal` definitions. The baseline is now
+      mechanically Python-over-HTTP on the same backend: the review-queue
+      `test_sdk_end_to_end` test fabricates `tr-1`/`tr-2`, which Python's handler
+      rejects while validating trace existence (`mlflow/server/handlers.py:4840`),
+      so it is store-only and `python_internal` by definition. Final counts are
+      35 repointable definitions (41 collected cases), 183 client-only, and
+      3,344 `python_internal`; every test and suite has a concrete reason.
+
+      Per-test server/database isolation removes shared-state coupling for both
+      Python HTTP and Rust (including unfiltered `search_datasets()`): the full
+      Python-HTTP baseline is 41/41 on SQLite and 41/41 on Postgres 16. Release
+      Rust matches exactly at 41/41 on each backend. Client-only is 292 passed /
+      1 documented skip per backend; required Rust core is server 3/3 plus
+      client-only 11/11 per backend. Reports:
+      `rust/compliance/report/t22_2_{required,full}.{json,md}`.
+
+      **ASSESSMENTS PARITY BUG FOUND + FIXED (`84340d2e2`):** Rust's
+      `start_trace_input_from_proto` discarded `TraceInfoV3.assessments`, and
+      `StartTraceInput` had no field for them, so assessments buffered during an
+      active trace vanished on `POST /api/3.0/mlflow/traces`. The fix reuses the
+      assessment proto/entity/row paths, backfills an unset `trace_id`, persists
+      rows in the trace transaction (with conflict-path upsert parity), and
+      returns them in StartTraceV3/GetTraceInfoV3 TraceInfo. Store and HTTP
+      regressions pass; the new StartTraceV3-with-assessment corpus round trip is
+      12 trace cases with zero non-allowlisted diffs, zero status mismatches, and
+      zero errors. Required CI covers core + validator on both backends; the full
+      exact-ID matrix remains nightly/manual. T22.3 is next.
 - [ ] **T22.3 SSE/streaming differential** (gateway + assistant) green
       frame-by-frame against mocks/stubs.
       **AC/VER:** recorder CI job.

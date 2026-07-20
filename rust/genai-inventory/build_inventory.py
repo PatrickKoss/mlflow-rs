@@ -70,10 +70,193 @@ TEST_KEYWORDS = (
 )
 
 
+TRACKING_FIXTURE_ROOTS = {"db_uri"}
+FORBIDDEN_IMPLEMENTATION_PREFIXES = (
+    "mlflow.server",
+    "mlflow.store.jobs",
+    "mlflow.store.tracking",
+    "mlflow.tracking._",
+)
+PYTHON_HTTP_BASELINE_EXCLUSIONS = {
+    "tests/genai/review_queues/test_review_queues_sdk.py::test_sdk_end_to_end": (
+        "Python-over-HTTP baseline exclusion: the test attaches fabricated trace IDs, and the "
+        "Python handler validates trace existence (mlflow/server/handlers.py:4840); it only "
+        "passes against the in-process store."
+    ),
+}
+
+
+def _fixture_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        (isinstance(decorator, ast.Name) and decorator.id == "fixture")
+        or (isinstance(decorator, ast.Attribute) and decorator.attr == "fixture")
+        or (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "fixture"
+        )
+        for decorator in node.decorator_list
+    )
+
+
+def _autouse_fixture(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "fixture"
+        and any(
+            keyword.arg == "autouse"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+            for keyword in decorator.keywords
+        )
+        for decorator in node.decorator_list
+    )
+
+
+def _argument_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    return [
+        argument.arg
+        for argument in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        if argument.arg not in {"self", "cls"}
+    ]
+
+
+def _attribute_name(node: ast.AST) -> str | None:
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def _node_blocker(node: ast.AST, forbidden_imports: dict[str, str]) -> str | None:
+    for child in ast.walk(node):
+        if isinstance(child, ast.ImportFrom) and (module := child.module):
+            if module.startswith(FORBIDDEN_IMPLEMENTATION_PREFIXES):
+                return f"direct Python implementation import {module}"
+    used_names = {child.id for child in ast.walk(node) if isinstance(child, ast.Name)}
+    for name in sorted(used_names):
+        if target := forbidden_imports.get(name):
+            return f"direct Python implementation dependency {target}"
+
+    for child in ast.walk(node):
+        if isinstance(child, ast.Attribute):
+            target = _attribute_name(child)
+            if target and target.startswith(FORBIDDEN_IMPLEMENTATION_PREFIXES):
+                return f"direct Python implementation dependency {target}"
+            if child.attr.startswith("_") and not child.attr.startswith("__"):
+                return f"private Python attribute access {target or child.attr}"
+        if not isinstance(child, ast.Call):
+            continue
+        call_name = _attribute_name(child.func) or ""
+        if call_name.endswith("patch") and child.args:
+            target = child.args[0]
+            if (
+                isinstance(target, ast.Constant)
+                and isinstance(target.value, str)
+                and target.value.startswith("mlflow.")
+            ):
+                return f"patches MLflow implementation {target.value}"
+        if call_name.endswith("setattr") and len(child.args) >= 2:
+            target = _attribute_name(child.args[0])
+            if target and target.startswith("mlflow"):
+                return f"monkeypatches MLflow implementation {target}"
+    return None
+
+
+def _client_only_reason(test_id: str) -> str | None:
+    client_markers = {
+        "/agent_server": "agent-server process/client contract",
+        "/agent_tester": "agent-tester SDK behavior",
+        "/git_versioning": "SDK git-versioning behavior",
+        "/labeling/": "SDK labeling helper behavior",
+        "/simulators/": "SDK simulator behavior",
+        "/scorers/google_adk/": "optional Google ADK client integration",
+        "/scorers/guardrails/": "optional Guardrails client integration",
+        "/judges/optimizers/test_dspy": "optional DSPy optimizer client execution",
+        "/judges/optimizers/test_gepa": "optional GEPA optimizer client execution",
+        "/judges/optimizers/test_simba": "optional SIMBA optimizer client execution",
+    }
+    return next((reason for marker, reason in client_markers.items() if marker in test_id), None)
+
+
 def _walk_test_defs(path: Path) -> list[dict[str, Any]]:
     tree = ast.parse(path.read_text())
     rel = path.relative_to(ROOT).as_posix()
     records: list[dict[str, Any]] = []
+    fixtures = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _fixture_decorator(node)
+    }
+    autouse_fixtures = [name for name, fixture in fixtures.items() if _autouse_fixture(fixture)]
+    forbidden_imports: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and (module := node.module):
+            if module.startswith(FORBIDDEN_IMPLEMENTATION_PREFIXES):
+                for imported in node.names:
+                    forbidden_imports[imported.asname or imported.name] = (
+                        f"{module}.{imported.name}"
+                    )
+        elif isinstance(node, ast.Import):
+            for imported in node.names:
+                if imported.name.startswith(FORBIDDEN_IMPLEMENTATION_PREFIXES):
+                    forbidden_imports[imported.asname or imported.name.split(".", 1)[0]] = (
+                        imported.name
+                    )
+
+    def fixture_chain(
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> tuple[list[str], list[ast.AST]]:
+        ordered: list[str] = []
+        nodes: list[ast.AST] = [node]
+        pending = [*_argument_names(node), *autouse_fixtures]
+        while pending:
+            name = pending.pop(0)
+            if name in ordered:
+                continue
+            ordered.append(name)
+            if fixture := fixtures.get(name):
+                nodes.append(fixture)
+                pending.extend(_argument_names(fixture))
+        return ordered, nodes
+
+    def classify(test_id: str, node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str]:
+        if reason := _client_only_reason(test_id):
+            return "client_only", f"Explicit SDK-only family: {reason}."
+        if reason := PYTHON_HTTP_BASELINE_EXCLUSIONS.get(test_id):
+            return "python_internal", reason
+
+        chain, relevant_nodes = fixture_chain(node)
+        if databricks_fixture := next(
+            (name for name in chain if "databricks" in name.lower()), None
+        ):
+            return (
+                "python_internal",
+                f"Databricks-only/stub fixture dependency: {databricks_fixture}.",
+            )
+        for relevant in relevant_nodes:
+            if blocker := _node_blocker(relevant, forbidden_imports):
+                return "python_internal", f"AST exclusion: {blocker}."
+        tracking_roots = [name for name in chain if name in TRACKING_FIXTURE_ROOTS]
+        if tracking_roots:
+            local_chain = [name for name in chain if name in fixtures or name in tracking_roots]
+            return (
+                "server_reachable",
+                "AST repointable: public client/fluent test reaches tracking fixture chain "
+                + " -> ".join(local_chain)
+                + "; no MLflow-internal patch, direct store/handler dependency, or "
+                "Databricks stub.",
+            )
+        return (
+            "python_internal",
+            "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP "
+            "boundary.",
+        )
 
     def walk(body: list[ast.stmt], parents: list[str]) -> None:
         for node in body:
@@ -82,11 +265,15 @@ def _walk_test_defs(path: Path) -> list[dict[str, Any]]:
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 qualname = ".".join([*parents, node.name])
                 if node.name.startswith("test_"):
+                    test_id = f"{rel}::{qualname}"
+                    classification, reason = classify(test_id, node)
                     records.append({
-                        "id": f"{rel}::{qualname}",
+                        "id": test_id,
                         "path": rel,
                         "line": node.lineno,
                         "qualname": qualname,
+                        "classification": classification,
+                        "reason": reason,
                     })
                 walk(node.body, [*parents, node.name])
 
@@ -101,35 +288,8 @@ def _test_inventory() -> list[dict[str, Any]]:
         in_scope_dir = rel.startswith(TEST_SCOPE_DIRS)
         if not in_scope_dir and not any(keyword in rel.lower() for keyword in TEST_KEYWORDS):
             continue
-        for record in _walk_test_defs(path):
-            record["classification"] = _classify_test(record["id"])
-            records.append(record)
+        records.extend(_walk_test_defs(path))
     return records
-
-
-def _classify_test(test_id: str) -> str:
-    client_markers = (
-        "/agent_server",
-        "/agent_tester",
-        "/git_versioning",
-        "/labeling/",
-        "/simulators/",
-        "/scorers/google_adk/",
-        "/scorers/guardrails/",
-        "/judges/optimizers/test_dspy",
-        "/judges/optimizers/test_gepa",
-        "/judges/optimizers/test_simba",
-    )
-    if any(marker in test_id for marker in client_markers):
-        return "client_only"
-    if test_id.startswith("tests/genai/test_rust_http_conformance.py::"):
-        return "server_reachable"
-    # The remaining tests exercise Python handlers, stores, workers, or
-    # monkeypatched implementation classes directly. Their source targets may
-    # be server-reachable, but the test process cannot be repointed across an
-    # HTTP boundary. T22.2 retains them in the inventory without presenting
-    # them as Rust-server conformance.
-    return "python_internal"
 
 
 SERVER_RULES: tuple[tuple[str, str, str, str, str], ...] = (
@@ -1764,6 +1924,9 @@ def main() -> None:
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     git_sha = REFERENCE_MLFLOW_GIT_SHA
     tests = _test_inventory()
+    tests_by_suite: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for test in tests:
+        tests_by_suite[test["path"]].append(test)
     scorers = _scorer_manifest(git_sha)
     providers = _provider_manifest(git_sha)
     algorithms = _algorithms_manifest(git_sha)
@@ -1797,6 +1960,40 @@ def main() -> None:
         },
         "items": items,
         "tests": tests,
+        "test_suites": [
+            {
+                "path": path,
+                "classifications": [
+                    {
+                        "classification": classification,
+                        "tests": sum(
+                            test["classification"] == classification for test in suite_tests
+                        ),
+                        "reasons": sorted({
+                            test["reason"]
+                            for test in suite_tests
+                            if test["classification"] == classification
+                        }),
+                    }
+                    for classification in sorted({test["classification"] for test in suite_tests})
+                ],
+            }
+            for path, suite_tests in sorted(tests_by_suite.items())
+        ],
+        "test_classification_criterion": {
+            "server_reachable": (
+                "AST-derived: the test transitively consumes db_uri or a tracking-URI fixture "
+                "through local fixtures and has no MLflow-internal patch, direct Python "
+                "store/handler dependency, or Databricks-only/stub fixture; it must also pass "
+                "against the Python HTTP server on the same isolated backend."
+            ),
+            "client_only": "Explicit SDK-only test families that do not exercise server behavior.",
+            "python_internal": (
+                "No repointable tracking fixture chain, or an AST exclusion for MLflow-internal "
+                "patching, direct Python store/handler use, Databricks-only/stub fixtures, or a "
+                "failure against the Python HTTP baseline."
+            ),
+        },
         "fixture_oracles": fixture_oracles,
         "manifest_counts": manifest_counts,
         "manifest_sha256": {

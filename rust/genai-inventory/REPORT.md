@@ -13,11 +13,20 @@ The ledger contains 1,892 items: 186 `mlflow/genai` modules, 1,580 definitions, 
 
 | Test execution classification | Tests |
 | --- | --- |
-| server_reachable | 3 |
+| server_reachable | 35 |
 | client_only | 183 |
-| python_internal | 3376 |
+| python_internal | 3344 |
 
 `python_internal` tests exercise Python handlers, stores, workers, or monkeypatched implementation classes directly; they remain inventory evidence but are not falsely reported as repointable Rust HTTP conformance.
+
+The repointable band is derived mechanically from the Python AST: a test must transitively consume `db_uri` through its local fixture graph, and is rejected if that graph or test patches MLflow internals, imports/uses Python store or handler implementations, accesses private Python attributes, or consumes Databricks stubs. The resulting candidate must also pass against a Python HTTP server on the same per-test-isolated backend; store-only behavior is `python_internal` by definition.
+
+### Repointable suites
+
+| Suite | Tests | Mechanical reason |
+| --- | --- | --- |
+| tests/genai/datasets/test_fluent.py | 32 | AST repointable: public client/fluent test reaches tracking fixture chain client -> db_uri; no MLflow-internal patch, direct store/handler dependency, or Databricks stub. / AST repointable: public client/fluent test reaches tracking fixture chain client -> experiment -> db_uri; no MLflow-internal patch, direct store/handler dependency, or Databricks stub. / AST repointable: public client/fluent test reaches tracking fixture chain experiment -> client -> db_uri; no MLflow-internal patch, direct store/handler dependency, or Databricks stub. / AST repointable: public client/fluent test reaches tracking fixture chain experiments -> client -> db_uri; no MLflow-internal patch, direct store/handler dependency, or Databricks stub. |
+| tests/genai/test_rust_http_conformance.py | 3 | AST repointable: public client/fluent test reaches tracking fixture chain tracking_client -> db_uri; no MLflow-internal patch, direct store/handler dependency, or Databricks stub. |
 
 | Classification | Items |
 | --- | --- |

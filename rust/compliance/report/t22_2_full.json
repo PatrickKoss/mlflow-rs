@@ -1,4 +1,6 @@
 {
+  "coverage_note": "Python-HTTP baseline, Rust repointable, and client-only runs are present on both backends; repointable tests used a fresh server and database per test.",
+  "coverage_status": "complete",
   "ledger_counts": {
     "client_only": 346,
     "dead": 0,
@@ -7,8 +9,8 @@
   "ledger_reference": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
   "ledger_test_counts": {
     "client_only": 183,
-    "python_internal": 3376,
-    "server_reachable": 3
+    "python_internal": 3344,
+    "server_reachable": 35
   },
   "profile": "full",
   "runs": [
@@ -16,14 +18,23 @@
       "backend": "sqlite",
       "classification": "server_reachable",
       "evidence": {
-        "junit": "rust/compliance/report/t22_2_full_server_reachable_sqlite.xml",
-        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_sqlite.log",
-        "server_log": "rust/compliance/report/t22_2_full_server_reachable_sqlite.server.log"
+        "junit": "rust/compliance/report/t22_2_full_server_reachable_python_http_sqlite.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_python_http_sqlite.log",
+        "server_log": "rust/compliance/report/t22_2_full_server_reachable_python_http_sqlite.server.log"
       },
       "exit_code": 0,
-      "ledger_test_definitions": 3,
-      "selector_count": 1,
+      "isolation": "fresh_server_and_database_per_test",
+      "ledger_test_definitions": 35,
+      "selector_count": 35,
+      "server_implementation": "python_http",
       "suites": {
+        "tests/genai/datasets/test_fluent.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 32,
+          "passed": 38,
+          "skipped": 0
+        },
         "tests/genai/test_rust_http_conformance.py": {
           "error": 0,
           "failed": 0,
@@ -35,7 +46,115 @@
       "totals": {
         "error": 0,
         "failed": 0,
-        "passed": 3,
+        "passed": 41,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "postgres",
+      "classification": "server_reachable",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_full_server_reachable_python_http_postgres.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_python_http_postgres.log",
+        "server_log": "rust/compliance/report/t22_2_full_server_reachable_python_http_postgres.server.log"
+      },
+      "exit_code": 0,
+      "isolation": "fresh_server_and_database_per_test",
+      "ledger_test_definitions": 35,
+      "selector_count": 35,
+      "server_implementation": "python_http",
+      "suites": {
+        "tests/genai/datasets/test_fluent.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 32,
+          "passed": 38,
+          "skipped": 0
+        },
+        "tests/genai/test_rust_http_conformance.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 41,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "sqlite",
+      "classification": "server_reachable",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_full_server_reachable_rust_sqlite.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_rust_sqlite.log",
+        "server_log": "rust/compliance/report/t22_2_full_server_reachable_rust_sqlite.server.log"
+      },
+      "exit_code": 0,
+      "isolation": "fresh_server_and_database_per_test",
+      "ledger_test_definitions": 35,
+      "selector_count": 35,
+      "server_implementation": "rust",
+      "suites": {
+        "tests/genai/datasets/test_fluent.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 32,
+          "passed": 38,
+          "skipped": 0
+        },
+        "tests/genai/test_rust_http_conformance.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 41,
+        "skipped": 0
+      }
+    },
+    {
+      "backend": "postgres",
+      "classification": "server_reachable",
+      "evidence": {
+        "junit": "rust/compliance/report/t22_2_full_server_reachable_rust_postgres.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_rust_postgres.log",
+        "server_log": "rust/compliance/report/t22_2_full_server_reachable_rust_postgres.server.log"
+      },
+      "exit_code": 0,
+      "isolation": "fresh_server_and_database_per_test",
+      "ledger_test_definitions": 35,
+      "selector_count": 35,
+      "server_implementation": "rust",
+      "suites": {
+        "tests/genai/datasets/test_fluent.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 32,
+          "passed": 38,
+          "skipped": 0
+        },
+        "tests/genai/test_rust_http_conformance.py": {
+          "error": 0,
+          "failed": 0,
+          "ledger_test_definitions": 3,
+          "passed": 3,
+          "skipped": 0
+        }
+      },
+      "totals": {
+        "error": 0,
+        "failed": 0,
+        "passed": 41,
         "skipped": 0
       }
     },
@@ -43,13 +162,15 @@
       "backend": "sqlite",
       "classification": "client_only",
       "evidence": {
-        "junit": "rust/compliance/report/t22_2_full_client_only_sqlite.xml",
-        "pytest_log": "rust/compliance/report/t22_2_full_client_only_sqlite.log",
-        "server_log": "rust/compliance/report/t22_2_full_client_only_sqlite.server.log"
+        "junit": "rust/compliance/report/t22_2_full_client_only_rust_sqlite.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_client_only_rust_sqlite.log",
+        "server_log": "rust/compliance/report/t22_2_full_client_only_rust_sqlite.server.log"
       },
       "exit_code": 0,
+      "isolation": "shared_server",
       "ledger_test_definitions": 183,
-      "selector_count": 12,
+      "selector_count": 183,
+      "server_implementation": "rust",
       "suites": {
         "tests/genai/judges/optimizers/test_dspy_base.py": {
           "error": 0,
@@ -145,42 +266,17 @@
     },
     {
       "backend": "postgres",
-      "classification": "server_reachable",
-      "evidence": {
-        "junit": "rust/compliance/report/t22_2_full_server_reachable_postgres.xml",
-        "pytest_log": "rust/compliance/report/t22_2_full_server_reachable_postgres.log",
-        "server_log": "rust/compliance/report/t22_2_full_server_reachable_postgres.server.log"
-      },
-      "exit_code": 0,
-      "ledger_test_definitions": 3,
-      "selector_count": 1,
-      "suites": {
-        "tests/genai/test_rust_http_conformance.py": {
-          "error": 0,
-          "failed": 0,
-          "ledger_test_definitions": 3,
-          "passed": 3,
-          "skipped": 0
-        }
-      },
-      "totals": {
-        "error": 0,
-        "failed": 0,
-        "passed": 3,
-        "skipped": 0
-      }
-    },
-    {
-      "backend": "postgres",
       "classification": "client_only",
       "evidence": {
-        "junit": "rust/compliance/report/t22_2_full_client_only_postgres.xml",
-        "pytest_log": "rust/compliance/report/t22_2_full_client_only_postgres.log",
-        "server_log": "rust/compliance/report/t22_2_full_client_only_postgres.server.log"
+        "junit": "rust/compliance/report/t22_2_full_client_only_rust_postgres.xml",
+        "pytest_log": "rust/compliance/report/t22_2_full_client_only_rust_postgres.log",
+        "server_log": "rust/compliance/report/t22_2_full_client_only_rust_postgres.server.log"
       },
       "exit_code": 0,
+      "isolation": "shared_server",
       "ledger_test_definitions": 183,
-      "selector_count": 12,
+      "selector_count": 183,
+      "server_implementation": "rust",
       "suites": {
         "tests/genai/judges/optimizers/test_dspy_base.py": {
           "error": 0,
@@ -276,5 +372,14 @@
     }
   ],
   "schema_version": 1,
-  "task": "T22.2"
+  "server_implementations": [
+    "python_http",
+    "rust"
+  ],
+  "task": "T22.2",
+  "test_classification_criterion": {
+    "client_only": "Explicit SDK-only test families that do not exercise server behavior.",
+    "python_internal": "No repointable tracking fixture chain, or an AST exclusion for MLflow-internal patching, direct Python store/handler use, Databricks-only/stub fixtures, or a failure against the Python HTTP baseline.",
+    "server_reachable": "AST-derived: the test transitively consumes db_uri or a tracking-URI fixture through local fixtures and has no MLflow-internal patch, direct Python store/handler dependency, or Databricks-only/stub fixture; it must also pass against the Python HTTP server on the same isolated backend."
+  }
 }
