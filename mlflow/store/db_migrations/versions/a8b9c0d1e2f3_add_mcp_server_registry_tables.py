@@ -9,7 +9,9 @@ from alembic import op
 from sqlalchemy.dialects import mssql
 
 revision = "a8b9c0d1e2f3"
-down_revision = "b7e4c1a90f23"
+# Re-parented onto the fork's migration head during the 2026-07-20 upstream sync;
+# upstream chains this from b7e4c1a90f23. Keeps the fork's Alembic graph linear.
+down_revision = "c4a9b7d3e812"
 branch_labels = None
 depends_on = None
 
