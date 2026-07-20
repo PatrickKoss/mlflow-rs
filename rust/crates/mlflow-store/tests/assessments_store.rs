@@ -58,6 +58,7 @@ async fn insert_trace(s: &TrackingStore, workspace: &str, experiment_id: &str, t
             tags: vec![],
             trace_metadata: vec![],
             trace_metrics: vec![],
+            assessments: vec![],
         },
     )
     .await

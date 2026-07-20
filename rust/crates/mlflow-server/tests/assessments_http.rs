@@ -144,6 +144,7 @@ impl TestServer {
             tags: Vec::new(),
             trace_metadata: Vec::new(),
             trace_metrics: Vec::new(),
+            assessments: Vec::new(),
         };
         self.store
             .start_trace(WORKSPACE, &input)

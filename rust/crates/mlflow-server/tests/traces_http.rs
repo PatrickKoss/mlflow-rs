@@ -262,6 +262,52 @@ async fn start_and_get_trace_info_on_both_prefixes() {
 }
 
 #[tokio::test]
+async fn start_trace_v3_embedded_assessment_round_trips_through_get_trace_info_v3() {
+    let server = TestServer::start("start_embedded_assessment").await;
+    let trace_id = "tr-with-embedded-assessment";
+    let body = json!({
+        "trace": {
+            "trace_info": {
+                "trace_id": trace_id,
+                "trace_location": {
+                    "type": "MLFLOW_EXPERIMENT",
+                    "mlflow_experiment": {"experiment_id": EXP_ID}
+                },
+                "request_time": "2024-01-01T00:00:00Z",
+                "state": "OK",
+                "assessments": [{
+                    "assessment_id": "a-embedded-http",
+                    "assessment_name": "expected_answer",
+                    "span_id": "span-1",
+                    "source": {"source_type": "CODE", "source_id": "http-regression"},
+                    "create_time": "2024-01-01T00:00:01Z",
+                    "last_update_time": "2024-01-01T00:00:02Z",
+                    "expectation": {"value": "MLflow"},
+                    "rationale": "known answer",
+                    "metadata": {"suite": "traces_http"}
+                }]
+            }
+        }
+    })
+    .to_string();
+
+    let started = post(&server, "/api/3.0", "/mlflow/traces", &body).await;
+    assert_eq!(started.status, StatusCode::OK, "{}", started.body);
+    let started_json = started.json();
+    let started_assessment = &started_json["trace"]["trace_info"]["assessments"][0];
+    assert_eq!(started_assessment["assessment_id"], "a-embedded-http");
+    assert_eq!(started_assessment["trace_id"], trace_id);
+    assert_eq!(started_assessment["expectation"]["value"], "MLflow");
+
+    let got = get_q(&server, "/api/3.0", &format!("/mlflow/traces/{trace_id}")).await;
+    assert_eq!(got.status, StatusCode::OK, "{}", got.body);
+    let got_json = got.json();
+    let got_assessment = &got_json["trace"]["trace_info"]["assessments"][0];
+    assert_eq!(got_assessment, started_assessment);
+    assert_eq!(got_assessment["trace_id"], trace_id);
+}
+
+#[tokio::test]
 async fn start_trace_v3_non_rfc3339_request_time_partial_parses_to_200() {
     // T12.5 lenient-parse parity: `request_time: "1000"` is not RFC3339, so
     // `parse_dict` fails on that field (swallowed). trace_id + trace_location —

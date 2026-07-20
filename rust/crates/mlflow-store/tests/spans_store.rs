@@ -413,6 +413,7 @@ async fn log_spans_does_not_overwrite_finalized_trace() {
         tags: vec![],
         trace_metadata: vec![],
         trace_metrics: vec![],
+        assessments: vec![],
     };
     s.start_trace(WS, &input).await.unwrap();
 

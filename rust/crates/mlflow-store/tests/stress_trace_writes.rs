@@ -52,6 +52,7 @@ fn start_input(trace_id: &str, exp: &str) -> StartTraceInput {
             ("t_b".into(), 2.0),
             ("t_c".into(), 3.0),
         ],
+        assessments: vec![],
     }
 }
 

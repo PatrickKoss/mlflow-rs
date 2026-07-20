@@ -48,6 +48,7 @@ async fn seed_trace(store: &TrackingStore, experiment_id: &str, content: &str) {
                 tags: Vec::new(),
                 trace_metadata: Vec::new(),
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await
@@ -413,6 +414,7 @@ async fn inherited_workspace_config_scopes_archive_repository_path() {
                 tags: Vec::new(),
                 trace_metadata: Vec::new(),
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

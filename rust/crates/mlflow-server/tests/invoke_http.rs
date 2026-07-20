@@ -370,6 +370,7 @@ async fn session_scorer_batches_by_session_and_orders_each_by_timestamp() {
                         })
                         .unwrap_or_default(),
                     trace_metrics: Vec::new(),
+                    assessments: Vec::new(),
                 },
             )
             .await

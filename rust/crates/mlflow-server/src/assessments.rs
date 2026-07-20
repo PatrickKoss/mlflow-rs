@@ -275,7 +275,7 @@ fn path_param_pairs(
 /// issue" dispatch (`assessment.py:83-88`, surfaced via `Assessment.from_proto`'s
 /// `WhichOneof` dispatch, `assessment.py:157-168`) and its `run_id`-from-metadata
 /// extraction (`assessment.py:114-120`).
-fn new_assessment_from_proto(
+pub(crate) fn new_assessment_from_proto(
     proto: apb::Assessment,
     trace_id: String,
 ) -> Result<NewAssessment, MlflowError> {

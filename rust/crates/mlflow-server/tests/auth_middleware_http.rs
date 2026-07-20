@@ -217,6 +217,7 @@ impl TestServer {
                     tags: vec![],
                     trace_metadata: vec![],
                     trace_metrics: vec![],
+                    assessments: vec![],
                 },
             )
             .await

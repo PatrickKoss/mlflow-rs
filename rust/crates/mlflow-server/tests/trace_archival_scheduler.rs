@@ -70,6 +70,7 @@ async fn seed_trace(store: &TrackingStore, workspace: &str, suffix: u128) -> Str
                 tags: Vec::new(),
                 trace_metadata: Vec::new(),
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

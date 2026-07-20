@@ -48,6 +48,7 @@ async fn create_trace(
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect(),
         trace_metrics: vec![],
+        assessments: vec![],
     };
     s.start_trace(WS, &input).await.unwrap();
 }

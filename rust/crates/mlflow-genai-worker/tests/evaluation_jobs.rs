@@ -112,6 +112,7 @@ async fn seed_trace(
                 tags: Vec::new(),
                 trace_metadata: metadata,
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

@@ -8,7 +8,9 @@
 
 #![allow(clippy::too_many_arguments, clippy::cloned_ref_to_slice_refs)]
 
-use mlflow_store::{StartTraceInput, TrackingStore};
+use mlflow_store::{
+    AssessmentSource, AssessmentValue, NewAssessment, StartTraceInput, TrackingStore,
+};
 use mlflow_test_support::TempDb;
 
 const WS: &str = "default";
@@ -46,6 +48,7 @@ fn trace_input(
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect(),
         trace_metrics: vec![],
+        assessments: vec![],
     }
 }
 
@@ -116,6 +119,45 @@ async fn start_trace_and_get_info() {
     // Round-trips through get_trace_info.
     let got = s.get_trace_info(WS, "tr-123").await.unwrap();
     assert_eq!(got, ti);
+}
+
+#[tokio::test]
+async fn start_trace_persists_embedded_assessments_atomically() {
+    let tmp = TempDb::new("start_assessments").await;
+    let s = store(&tmp).await;
+    let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+    let mut input = trace_input("tr-with-assessment", &exp, 1234, Some(100), "OK", &[], &[]);
+    input.assessments.push(NewAssessment {
+        trace_id: input.trace_id.clone(),
+        name: "expected_answer".to_string(),
+        value: AssessmentValue::Expectation {
+            value_json: "\"MLflow\"".to_string(),
+        },
+        source: AssessmentSource {
+            source_type: "CODE".to_string(),
+            source_id: Some("store-regression".to_string()),
+        },
+        run_id: None,
+        span_id: Some("span-1".to_string()),
+        rationale: Some("known answer".to_string()),
+        metadata: None,
+        create_time_ms: Some(1_700_000_000_000),
+        last_update_time_ms: Some(1_700_000_000_001),
+        assessment_id: Some("a-embedded-store".to_string()),
+        overrides: None,
+    });
+
+    let started = s.start_trace(WS, &input).await.unwrap();
+    assert_eq!(started.assessments.len(), 1);
+    let assessment = &started.assessments[0];
+    assert_eq!(assessment.assessment_id, "a-embedded-store");
+    assert_eq!(assessment.trace_id, "tr-with-assessment");
+    assert_eq!(assessment.name, "expected_answer");
+    assert_eq!(assessment.assessment_type, "expectation");
+    assert_eq!(assessment.value, "\"MLflow\"");
+
+    let got = s.get_trace_info(WS, "tr-with-assessment").await.unwrap();
+    assert_eq!(got.assessments, started.assessments);
 }
 
 #[tokio::test]

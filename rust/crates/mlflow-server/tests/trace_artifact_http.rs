@@ -219,6 +219,7 @@ async fn start_trace(store: &TrackingStore, trace_id: &str) {
                 tags: Vec::new(),
                 trace_metadata: Vec::new(),
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

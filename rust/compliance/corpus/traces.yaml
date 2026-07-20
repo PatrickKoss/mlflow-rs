@@ -31,6 +31,35 @@ cases:
     normalize:
       drop_paths: ["$.trace.trace_info.tags", "$.trace_info.tags"]
 
+  - name: trace_start_v3_with_assessment
+    method: POST
+    path: /api/3.0/mlflow/traces
+    body:
+      trace:
+        trace_info:
+          trace_id: tr-compliance-assessment
+          trace_location:
+            type: MLFLOW_EXPERIMENT
+            mlflow_experiment: {experiment_id: "${traces_exp}"}
+          request_time: "2024-01-01T00:00:00Z"
+          state: OK
+          assessments:
+            - assessment_id: a-compliance-embedded
+              assessment_name: expected_answer
+              source: {source_type: CODE, source_id: compliance}
+              create_time: "2024-01-01T00:00:01Z"
+              last_update_time: "2024-01-01T00:00:02Z"
+              expectation: {value: MLflow}
+              metadata: {suite: traces}
+    normalize:
+      drop_paths: ["$.trace.trace_info.tags"]
+
+  - name: trace_get_info_v3_with_assessment
+    method: GET
+    path: /api/3.0/mlflow/traces/tr-compliance-assessment
+    normalize:
+      drop_paths: ["$.trace.trace_info.tags", "$.trace_info.tags"]
+
   - name: trace_set_tag_v3
     method: POST
     path: /api/3.0/mlflow/traces/tr-compliance-1/tags

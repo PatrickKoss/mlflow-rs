@@ -62,6 +62,7 @@ async fn seeded_shared_db_submits_the_same_python_and_rust_jobs() {
                     tags: vec![],
                     trace_metadata: vec![("mlflow.trace.session".to_string(), "s1".to_string())],
                     trace_metrics: vec![],
+                    assessments: vec![],
                 },
             )
             .await

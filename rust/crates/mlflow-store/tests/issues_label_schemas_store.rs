@@ -31,6 +31,7 @@ async fn trace(store: &TrackingStore, experiment_id: &str, trace_id: &str) {
                 tags: vec![],
                 trace_metadata: vec![],
                 trace_metrics: vec![],
+                assessments: vec![],
             },
         )
         .await

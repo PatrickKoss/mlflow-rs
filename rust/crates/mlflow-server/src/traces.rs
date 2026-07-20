@@ -560,9 +560,22 @@ fn start_trace_input_from_proto(
 
     let tags: Vec<(String, String)> = info.tags.into_iter().collect();
     let trace_metadata: Vec<(String, String)> = info.trace_metadata.into_iter().collect();
+    let trace_id = info.trace_id.unwrap_or_default();
+    let assessments = info
+        .assessments
+        .into_iter()
+        .map(|assessment| {
+            let assessment_trace_id = assessment
+                .trace_id
+                .clone()
+                .filter(|trace_id| !trace_id.is_empty())
+                .unwrap_or_else(|| trace_id.clone());
+            crate::assessments::new_assessment_from_proto(assessment, assessment_trace_id)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(mlflow_store::StartTraceInput {
-        trace_id: info.trace_id.unwrap_or_default(),
+        trace_id,
         experiment_id,
         request_time,
         execution_duration,
@@ -575,6 +588,7 @@ fn start_trace_input_from_proto(
         // Token-usage-derived metrics are computed from spans (log_spans), not
         // on start_trace; the V3 TraceInfo has no metrics field.
         trace_metrics: Vec::new(),
+        assessments,
     })
 }
 

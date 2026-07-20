@@ -49,6 +49,7 @@ async fn seed_gateway_cost(
                     Vec::new()
                 },
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

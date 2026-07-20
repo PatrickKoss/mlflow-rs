@@ -63,7 +63,7 @@ use std::collections::BTreeMap;
 use mlflow_error::MlflowError;
 use uuid::Uuid;
 
-use super::dbutil::{RowLike, Val};
+use super::dbutil::{RowLike, Tx, Val};
 use super::entities::{Assessment, AssessmentError, AssessmentSource, AssessmentValue};
 use super::experiments::{internal, now_millis};
 use super::TrackingStore;
@@ -126,6 +126,125 @@ pub struct AssessmentUpdate {
     pub metadata: Option<BTreeMap<String, String>>,
 }
 
+/// Insert an assessment as part of an existing transaction. `start_trace`
+/// uses the upsert form because Python's trace-conflict merge path calls
+/// `session.merge` for embedded assessments; standalone create keeps strict
+/// insert semantics so caller-supplied ID collisions remain errors.
+pub(crate) async fn insert_assessment_tx(
+    tx: &mut Tx<'_>,
+    dialect: Dialect,
+    assessment: &NewAssessment,
+    upsert: bool,
+) -> Result<Assessment, sqlx::Error> {
+    const COLUMNS: &[&str] = &[
+        "assessment_id",
+        "trace_id",
+        "name",
+        "assessment_type",
+        "value",
+        "error",
+        "created_timestamp",
+        "last_updated_timestamp",
+        "source_type",
+        "source_id",
+        "run_id",
+        "span_id",
+        "rationale",
+        "overrides",
+        "valid",
+        "assessment_metadata",
+    ];
+    const UPDATE_COLUMNS: &[&str] = &[
+        "trace_id",
+        "name",
+        "assessment_type",
+        "value",
+        "error",
+        "created_timestamp",
+        "last_updated_timestamp",
+        "source_type",
+        "source_id",
+        "run_id",
+        "span_id",
+        "rationale",
+        "overrides",
+        "valid",
+        "assessment_metadata",
+    ];
+
+    let assessment_id = assessment
+        .assessment_id
+        .clone()
+        .unwrap_or_else(new_assessment_id);
+    let now = now_millis();
+    let create_time_ms = assessment.create_time_ms.unwrap_or(now);
+    let last_update_time_ms = assessment.last_update_time_ms.unwrap_or(now);
+    let (assessment_type, value_json, error_json) = encode_value(&assessment.value);
+    let assessment_metadata = metadata_json(assessment.metadata.as_ref());
+
+    let sql = if upsert {
+        dialect.upsert(&crate::dialect::UpsertSpec {
+            table: ASSESSMENTS,
+            columns: COLUMNS,
+            pk_columns: &["assessment_id"],
+            update_columns: UPDATE_COLUMNS,
+            ..Default::default()
+        })
+    } else {
+        let columns = COLUMNS
+            .iter()
+            .map(|column| dialect.quote_ident(column))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let values = (1..=COLUMNS.len())
+            .map(|index| dialect.placeholder(index))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "INSERT INTO {} ({columns}) VALUES ({values})",
+            dialect.quote_ident(ASSESSMENTS)
+        )
+    };
+    tx.exec(
+        &sql,
+        &[
+            Val::Text(assessment_id.clone()),
+            Val::Text(assessment.trace_id.clone()),
+            Val::Text(assessment.name.clone()),
+            Val::Text(assessment_type.to_string()),
+            Val::Text(value_json),
+            Val::OptText(error_json),
+            Val::Int(create_time_ms),
+            Val::Int(last_update_time_ms),
+            Val::Text(assessment.source.source_type.clone()),
+            Val::OptText(assessment.source.source_id.clone()),
+            Val::OptText(assessment.run_id.clone()),
+            Val::OptText(assessment.span_id.clone()),
+            Val::OptText(assessment.rationale.clone()),
+            Val::OptText(assessment.overrides.clone()),
+            Val::Bool(true),
+            Val::OptText(assessment_metadata),
+        ],
+    )
+    .await?;
+
+    Ok(Assessment {
+        assessment_id,
+        trace_id: assessment.trace_id.clone(),
+        name: assessment.name.clone(),
+        value: assessment.value.clone(),
+        source: assessment.source.clone(),
+        run_id: assessment.run_id.clone(),
+        span_id: assessment.span_id.clone(),
+        rationale: assessment.rationale.clone(),
+        metadata: assessment.metadata.clone(),
+        create_time_ms,
+        last_update_time_ms,
+        overrides: assessment.overrides.clone(),
+        valid: true,
+    })
+}
+
 impl TrackingStore {
     /// `create_assessment`. Validates the trace is accessible in `workspace`,
     /// then (if `overrides` is set) marks the overridden assessment invalid,
@@ -139,14 +258,6 @@ impl TrackingStore {
     ) -> Result<Assessment, MlflowError> {
         self.validate_trace_accessible(workspace, &assessment.trace_id)
             .await?;
-
-        let assessment_id = assessment
-            .assessment_id
-            .clone()
-            .unwrap_or_else(new_assessment_id);
-        let now = now_millis();
-        let create_time_ms = assessment.create_time_ms.unwrap_or(now);
-        let last_update_time_ms = assessment.last_update_time_ms.unwrap_or(now);
 
         let dialect = self.db().dialect();
         let mut tx = self.db().begin_tx().await.map_err(internal)?;
@@ -179,62 +290,15 @@ impl TrackingStore {
             }
         }
 
-        let (assessment_type, value_json, error_json) = encode_value(&assessment.value);
-        let metadata_json = metadata_json(assessment.metadata.as_ref());
-
-        let insert_sql = format!(
-            "INSERT INTO {ASSESSMENTS} \
-             (assessment_id, trace_id, name, assessment_type, value, error, \
-              created_timestamp, last_updated_timestamp, source_type, source_id, \
-              run_id, span_id, rationale, overrides, valid, assessment_metadata) \
-             VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
-            dialect.placeholder(1),
-            dialect.placeholder(2),
-            dialect.placeholder(3),
-            dialect.placeholder(4),
-            dialect.placeholder(5),
-            dialect.placeholder(6),
-            dialect.placeholder(7),
-            dialect.placeholder(8),
-            dialect.placeholder(9),
-            dialect.placeholder(10),
-            dialect.placeholder(11),
-            dialect.placeholder(12),
-            dialect.placeholder(13),
-            dialect.placeholder(14),
-            Val::sql_bool(dialect, true),
-            dialect.placeholder(15),
-        );
-        let insert_result = tx
-            .exec(
-                &insert_sql,
-                &[
-                    Val::Text(assessment_id.clone()),
-                    Val::Text(assessment.trace_id.clone()),
-                    Val::Text(assessment.name.clone()),
-                    Val::Text(assessment_type.to_string()),
-                    Val::Text(value_json),
-                    Val::OptText(error_json),
-                    Val::Int(create_time_ms),
-                    Val::Int(last_update_time_ms),
-                    Val::Text(assessment.source.source_type.clone()),
-                    Val::OptText(assessment.source.source_id.clone()),
-                    Val::OptText(assessment.run_id.clone()),
-                    Val::OptText(assessment.span_id.clone()),
-                    Val::OptText(assessment.rationale.clone()),
-                    Val::OptText(assessment.overrides.clone()),
-                    Val::OptText(metadata_json),
-                ],
-            )
-            .await;
+        let insert_result = insert_assessment_tx(&mut tx, dialect, &assessment, false).await;
 
         // A missing trace (e.g. deleted between the accessibility check and
         // this insert) or a duplicate caller-supplied assessment_id both trip
         // constraints on flush. `validate_trace_accessible` above already
         // covers the ordinary "trace gone" case; this is the residual race +
         // duplicate-PK case Python's `except IntegrityError` handles.
-        match insert_result {
-            Ok(_) => {}
+        let created = match insert_result {
+            Ok(created) => created,
             Err(_) => {
                 drop(tx);
                 if self
@@ -252,25 +316,11 @@ impl TrackingStore {
                     assessment.trace_id
                 )));
             }
-        }
+        };
 
         tx.commit().await.map_err(internal)?;
 
-        Ok(Assessment {
-            assessment_id,
-            trace_id: assessment.trace_id,
-            name: assessment.name,
-            value: assessment.value,
-            source: assessment.source,
-            run_id: assessment.run_id,
-            span_id: assessment.span_id,
-            rationale: assessment.rationale,
-            metadata: assessment.metadata,
-            create_time_ms,
-            last_update_time_ms,
-            overrides: assessment.overrides,
-            valid: true,
-        })
+        Ok(created)
     }
 
     /// `get_assessment`.

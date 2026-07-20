@@ -1373,6 +1373,7 @@ async fn persist_gateway_trace(
         )],
         trace_metadata: metadata,
         trace_metrics: Vec::new(),
+        assessments: Vec::new(),
     };
     trace
         .state
@@ -1822,6 +1823,7 @@ async fn persist_budget_error_trace(
                 tags: vec![("mlflow.traceName".to_string(), name.clone())],
                 trace_metadata: vec![("mlflow.trace_schema.version".to_string(), "3".to_string())],
                 trace_metrics: Vec::new(),
+                assessments: Vec::new(),
             },
         )
         .await

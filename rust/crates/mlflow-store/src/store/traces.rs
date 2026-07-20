@@ -24,6 +24,7 @@ use std::time::Duration;
 use mlflow_error::{ErrorCode, MlflowError};
 use uuid::Uuid;
 
+use super::assessments::insert_assessment_tx;
 use super::dbutil::{Tx, Val};
 use super::entities::{
     TraceAssessment, TraceInfo, TraceWithSpans, MLFLOW_ARTIFACT_LOCATION,
@@ -31,7 +32,7 @@ use super::entities::{
 };
 use super::experiments::{internal, parse_experiment_id, ViewType};
 use super::spans::load_spans_for_traces;
-use super::{TrackingStore, ARTIFACTS_FOLDER_NAME};
+use super::{NewAssessment, TrackingStore, ARTIFACTS_FOLDER_NAME};
 use crate::dialect::Dialect;
 use crate::schema::traces::{
     ASSESSMENTS, TRACE_INFO, TRACE_METRICS, TRACE_REQUEST_METADATA, TRACE_TAGS,
@@ -71,6 +72,9 @@ pub struct StartTraceInput {
     pub trace_metadata: Vec<(String, String)>,
     /// Token-usage-derived metrics (key → value), already parsed by the caller.
     pub trace_metrics: Vec<(String, f64)>,
+    /// Assessments exported with the trace. They are persisted in the same
+    /// transaction as the trace row, matching SQLAlchemy's relationship cascade.
+    pub assessments: Vec<NewAssessment>,
 }
 
 impl TrackingStore {
@@ -164,6 +168,11 @@ impl TrackingStore {
         }
         for (k, v) in &metrics {
             upsert_trace_metric(&mut tx, dialect, trace_id, k, *v).await?;
+        }
+        for assessment in &input.assessments {
+            insert_assessment_tx(&mut tx, dialect, assessment, true)
+                .await
+                .map_err(map_db_err)?;
         }
 
         tx.commit().await.map_err(map_db_err)?;
@@ -391,6 +400,7 @@ impl TrackingStore {
             tags: Vec::new(),
             trace_metadata: Vec::new(),
             trace_metrics: Vec::new(),
+            assessments: Vec::new(),
         };
 
         let mut tx = self.db().begin_tx().await.map_err(internal)?;
