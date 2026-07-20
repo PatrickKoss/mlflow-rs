@@ -958,6 +958,34 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
 
 ### Phase 22 — Compliance & cutover
 
+- [ ] **T22.0 S3 artifact proxy/factory support (pre-cutover bugfix, added
+      2026-07-20)**: wire the `object_store` AWS backend into
+      `factory::repo_from_uri` (`rust/crates/mlflow-artifacts/src/repo.rs`) so
+      `s3://bucket/prefix` resolves for the `--serve-artifacts` proxy
+      (`--artifacts-destination s3://…`) and every internal factory consumer
+      (trace archival ARCHIVE_REPO, promptlab, genai artifacts). The crate's
+      `aws` feature already exists but is never enabled; enable it for the
+      server build so a stock deployment gets S3 without a rebuild. Config
+      parity with Python's `_get_s3_client`
+      (`mlflow/store/artifact/s3_artifact_repo.py`): standard `AWS_*` env
+      creds, `AWS_REGION`/`AWS_DEFAULT_REGION`, `MLFLOW_S3_ENDPOINT_URL`
+      (S3-compatible endpoints incl. MinIO), `MLFLOW_S3_IGNORE_TLS`, and
+      `MLFLOW_BOTO_CLIENT_ADDRESSING_STYLE` (path-style for MinIO). Multipart
+      proxy endpoints match Python `S3ArtifactRepository`'s
+      `MultipartUploadMixin` semantics where the proxy exposes them; if
+      presigned-URL parity is not achievable with `object_store` alone, use the
+      raw S3 REST calls or document the divergence and match wire errors.
+      GCS/Azure stay documented seams (unchanged `NOT_IMPLEMENTED`). Surfaced
+      by the T14.2 soak and T23.4 (Rust artifact factory lacked S3; runbook
+      workaround was "route artifact-proxy traffic to Python", which T22.4
+      removes — hence pre-cutover).
+      **AC:** proxy put/get/list/delete + multipart lifecycle green against
+      MinIO; trace-archival pass with an `s3://` ARCHIVE_REPO green; Python-vs-
+      Rust proxy differential on MinIO shows zero non-allowlisted diffs;
+      local-FS behavior byte-identical to before.
+      **VER:** cargo integration suite gated on MinIO availability + the
+      differential run + T14.3 runbook updated to drop the Python-routing
+      workaround.
 - [ ] **T22.1 Differential corpus genai sections** for every Tier A surface,
       invoke submission, and §15 semantic-engine category; compliance CI stays
       a required gate.

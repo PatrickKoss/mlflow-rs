@@ -51,11 +51,11 @@ Phase 22 (compliance & cutover) is the only remaining planned work.**
   COMPLETE** 2026-07-20: all of T23.1–T23.5 done; soak passed the no-leak
   RSS check both sides; final report `rust/bench/genai_eval.md` written
   (Rust faster across families, 117.8× less RSS in soak, all regressions
-  disclosed). Per user directive (2026-07-20) work STOPS here; Phase 22
-  (compliance & cutover) is left for a separate session and must NOT be
-  auto-started. When resumed: Phase 22 (compliance & cutover; Phase 23
-  already finished, so its precondition on the Python container — T22.4
-  removes it — is satisfied).
+  disclosed). **Phase 22 STARTED 2026-07-20 per user directive** (the earlier
+  stop-after-Phase-23 directive is fulfilled): T22.0 (S3 artifact proxy/
+  factory support) added as a pre-cutover bugfix task — see
+  `part2-work-breakdown.md` §16 Phase 22. Phase 23 already finished, so
+  T22.4's precondition on the Python container is satisfied.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row in `part2-decisions-and-appendix.md`).
@@ -65,11 +65,10 @@ Phase 22 (compliance & cutover) is the only remaining planned work.**
   tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
   tests.
 - **Rust artifact proxy lacks cloud schemes (S3/GCS/Azure)** — surfaced by
-  the T14.2 soak: `--serve-artifacts` with `--artifacts-destination s3://...`
-  is Python-only today; Rust proxies local FS only. Client-direct uploads
-  (the common client path) are unaffected. Document in the T14.3 runbook
-  (route artifact-proxy traffic to Python, or use client-direct); candidate
-  follow-up task for Part 2 era.
+  the T14.2 soak and re-confirmed by T23.4: `--serve-artifacts` with
+  `--artifacts-destination s3://...` is Python-only today; Rust proxies local
+  FS only. S3 is now in scope as **T22.0** (pre-cutover bugfix; must land
+  before T22.4 deletes the Python server). GCS/Azure remain documented seams.
 - Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
   messages (serde text vs Python's "Invalid value … for parameter …"); #3
   HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
