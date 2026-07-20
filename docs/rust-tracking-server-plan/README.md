@@ -5,19 +5,19 @@ Phases 15–23): the genai port — added 2026-07-17; goal is full Python-app pa
 in a Python-free Rust deployment, retiring both the Python server plane and the
 Python job-execution runtime.
 
-Status: **Part 1 COMPLETE except T9.9/T11.6 (browser-driven UI validation,
-deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 done
-except those two UI checks. Corpus GREEN + required CI gate; client suites 0
-failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
-operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
-Phase 22 is in progress (T22.0–T22.5 done; T22.6 next) and is the only
-remaining planned work.**
+Status: **THE RUST TRACKING-SERVER REWRITE PLAN IS CLOSED — no planned
+implementation tasks remain. Part 1 is complete except T9.9/T11.6
+(browser-driven UI validation, deliberately deferred outside plan closure):
+Phases 2–8, 10, 12, 13, and 14 are done; Phase 9/11 are done except those two
+checks. Corpus GREEN + required CI gate; client suites 0 failures vs Rust;
+benchmarks, soak (67–106x memory reduction, 0 errors), and operational docs
+landed. Part 2 (genai port) Phases 15–23 are COMPLETE, including Phase 22.**
 · Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
 
 **Resume notes (2026-07-18):** implementation subagents now run via Codex
 (gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
 
-**Open:**
+**Completed rewrite summary and deferred follow-ups:**
 - **Part 2 (genai port)** — Phases 15, 16, AND 17 COMPLETE 2026-07-18.
   Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
   at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
@@ -89,9 +89,16 @@ remaining planned work.**
   The deterministic suite and seeder live in `rust/e2e/`; the committed
   checklist is `rust/compliance/report/t22_5_ui_smoke.md`. It also fixed the
   usage dashboard's missing Rust time-bucket/Postgres-percentile metrics and
-  the judges page's missing experiment trace-location context. T22.6 (Ops
-  docs) is next and is the final planned task. See
-  `part2-work-breakdown.md` §16 Phase 22.
+  the judges page's missing experiment trace-location context. **PHASE 22
+  COMPLETE 2026-07-20:** T22.6 extended the cutover deployment/migration/
+  rollback guidance with KEK lifecycle, native worker sizing/supervision,
+  pinned-manifest upgrades, shared Redis budgets, and optional Assistant CLI
+  prerequisites; added the [trace archival runbook](../../rust/docs/ARCHIVAL_RUNBOOK.md);
+  and recorded a green [fresh-operator compose walkthrough](../../rust/docs/walkthroughs/t22_6_fresh_operator.md)
+  including KEK version coexistence, worker fail-loud validation, archival
+  startup validation, and full teardown. **This closes Phase 22 and the rewrite
+  plan; there are no open planned tasks.** See `part2-work-breakdown.md` §16
+  Phase 22.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
   approach 2026-07-18; rejection errors must point at builtin/instructions-
   judge equivalents (see D23 row in `part2-decisions-and-appendix.md`).
@@ -145,12 +152,12 @@ here if the phase-level state changed.
 | `part1-work-breakdown.md` | §7 Work Breakdown (Phases 0–14) | Every Part I task with checkbox/AC/VER and DONE notes | Picking up or checking off a Part I task (T0.x–T14.x). |
 | `part1-verification-and-decisions.md` | §8 Verification quick-ref, §9 Open decisions & risks, §10 Research appendix | How to confirm the whole Part I stack works; Part I decision log; where Part I facts came from | You need the end-to-end smoke commands, a Part I decision rationale (D1–D13), or a source citation. |
 | `part2-overview.md` | Part II banner, §11 Goals & execution boundary, §12 GenAI API surface, §13 Storage & crypto, §14 Runtime engines, §15 Compliance (Part II) | The Part II *spec*: the Python-free execution boundary, every genai route (§12.1–§12.12), crypto/storage, the runtime engines to build, Part II compliance | Implementing or verifying any genai (Part II) task — start here for the genai contract, especially the §12 route inventory. |
-| `part2-work-breakdown.md` | §16 Work Breakdown (Phases 15–23) | Every Part II task with checkbox/AC/VER and DONE notes | Picking up or checking off a genai task (T15.x–T23.x). **Phase 22 lives here and is the only unfinished work.** |
+| `part2-work-breakdown.md` | §16 Work Breakdown (Phases 15–23) | Every Part II task with checkbox/AC/VER and DONE notes | Reviewing completed genai tasks (T15.x–T23.x), including the Phase 22 cutover closure. |
 | `part2-decisions-and-appendix.md` | §17 Open decisions & risks (Part II), §18 Research appendix (Part II) | Part II decision log (D14–D23, incl. the Phoenix/D23 resolution) and Part II source citations | You need a genai decision rationale (e.g. D14 worker-subprocess model, D23 Phoenix rejection) or a Part II source citation. |
 
 ### Typical reading paths
 
-- **Continue Phase 22 (the remaining work):** README (status) → `part2-work-breakdown.md` (§16, find the first `- [ ]` T22.x) → `part2-overview.md` (§12/§15 for the contract that task matches) → `part2-decisions-and-appendix.md` (any D-row the task cites).
+- **Review the completed cutover:** README (status) → `part2-work-breakdown.md` (§16 Phase 22 DONE notes) → `rust/docs/DEPLOYMENT.md` and its linked runbooks → `part2-decisions-and-appendix.md` (the decisions and retained risks).
 - **Pick up a non-genai task:** README → `part1-work-breakdown.md` (find the task) → `part1-api-and-contracts.md` (the contract) → `part1-verification-and-decisions.md` (how to verify + relevant decision).
 - **Just orienting:** README → `part1-overview.md` then `part2-overview.md`.
 

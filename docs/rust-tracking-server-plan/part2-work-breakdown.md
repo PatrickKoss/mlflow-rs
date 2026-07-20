@@ -1132,13 +1132,31 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       experiment outlets now receive their computed trace-location context so
       the judges prefetch does not send `locations: []`. Seeding also required a
       native `ResponseLength` scorer worker job to reach `SUCCEEDED`. The compose
-      stack, volumes, and browsers were removed after verification. T22.6 is
-      next.
-- [ ] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
+      stack, volumes, and browsers were removed after verification. T22.6
+      followed.
+- [x] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
       rotation, native worker concurrency/memory/process supervision, pinned
       scorer/provider/GEPA manifest upgrades, Redis budget tracker option,
       assistant CLI prerequisites, and the archival runbook.
       **AC/VER:** fresh-operator walkthrough.
+
+      **DONE (2026-07-20):** extended the T22.4 deployment, migration, and
+      rollback docs without changing their settled topology; added exact KEK
+      fallback/detection and version-rotation procedures, native worker process
+      math plus cgroup sizing, pinned-manifest rebuild/compliance gates, shared
+      Redis budget semantics, and optional Assistant CLI image prerequisites.
+      Added `rust/docs/ARCHIVAL_RUNBOOK.md` for enablement, interval/pass sizing,
+      monitoring, forced and per-experiment retention, archive-backed reads,
+      and recovery. The recorded fresh-operator walkthrough brought up the
+      all-Rust compose with an explicit KEK, proved fake-provider secret
+      decryption, proved stored KEK versions 1 and 2 decrypt together after a
+      rewrite, ran the native worker at configured concurrency (35/35 smoke,
+      job `SUCCEEDED`) and proved zero fails loud, accepted valid archival YAML
+      and rejected invalid retention at startup, then removed every container,
+      volume, and network. It also recorded the known silent KEK fallback and a
+      finding that Rust `server-info` still hard-codes archival disabled despite
+      the active scheduler. Phase 22 and the Rust rewrite plan are complete;
+      no planned implementation tasks remain.
 
 ### Phase 23 — GenAI performance & resource evaluation (Python vs Rust)
 

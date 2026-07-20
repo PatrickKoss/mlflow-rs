@@ -29,6 +29,12 @@ database URLs, artifact configuration, and any fixes made after that commit.
    a broad incident rollback can send every non-static route to Python.
 4. Keep nginx/static serving in place if it is healthy. A Python UI fallback is
    optional rollback scope, not a prerequisite.
+5. Recover the exact `MLFLOW_CRYPTO_KEK_PASSPHRASE` used by Rust. Preserve
+   `MLFLOW_CRYPTO_KEK_VERSION` as well so new writes remain on the intended
+   version. A successful health check does not prove the KEK can decrypt rows.
+6. Decide whether the restored service continues Redis budget tracking and
+   trace archival. Keep the Redis data and archive repository intact while
+   making that decision; see [ARCHIVAL_RUNBOOK.md](ARCHIVAL_RUNBOOK.md).
 
 Never restore a pre-cutover database over a live database. Valid writes may
 have committed after the backup.
@@ -36,8 +42,9 @@ have committed after the backup.
 ## 2. Re-add the Python service
 
 Create a Python Service/compose service using the compatible image, current
-backend URI, auth config, webhook encryption key, artifact destination, and
-shared volumes. Start it privately with job execution disabled:
+backend URI, auth config, webhook encryption key, KEK passphrase/version,
+artifact destination, and shared volumes. Start it privately with job execution
+disabled:
 
 ```yaml
 python:
@@ -56,12 +63,22 @@ python:
 ```
 
 Add a private healthcheck and wait for `/health` 200. Verify authenticated
-tracking, GenAI discovery, and artifact access directly against port 5001
+tracking, GenAI discovery, an existing encrypted gateway secret through a
+credential-free provider mock, and artifact access directly against port 5001
 before adding `python_backend` to nginx.
 
 If the Python service will own artifact proxying, include its exact production
 artifact settings. Do not infer credentials or destination from the Rust
 configuration.
+
+If budgets used Redis before rollback, pass the same
+`MLFLOW_GATEWAY_BUDGET_REDIS_URL` to a compatible Python service. Do not delete
+the `mlflow:budget:` keys: switching to an unset URL creates process-local
+windows and abandons shared in-flight state, so enforcement can differ during
+the transition. Keep only the chosen serving plane handling requests while
+verifying a fake-cost budget canary. If archival continues, transfer scheduler
+ownership with the job runner and preserve the same config and archive root; if
+it pauses, leave the archive readable for existing traces.
 
 ## 3. Restore routing atomically
 
@@ -116,6 +133,8 @@ Confirm:
 - GenAI discovery and stubbed streaming work;
 - artifact upload/download matches the configured destination;
 - auth, workspace selection, webhook signatures, and one job succeed;
+- an existing encrypted gateway secret decrypts with the carried KEK;
+- Redis budget and archival ownership match the rollback decision;
 - only one job runtime is enabled.
 
 Watch error rate, Python worker memory, database locks, and pool saturation.
@@ -129,4 +148,5 @@ a restored copy, and obtain database-owner approval. Never downgrade merely to
 speed up a routing rollback.
 
 Record the restored Python image digest, manifest/pre-cutover reference, nginx
-checksum, database heads, job-runner handoff time, and rollback start/end times.
+checksum, database heads, KEK version identifier, Redis/archive ownership,
+job-runner handoff time, and rollback start/end times.

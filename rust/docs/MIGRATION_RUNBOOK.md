@@ -24,8 +24,16 @@ artifact-only exception instead of claiming a Python-free cutover.
 3. Back up tracking/registry and auth databases with native database tools and
    test restoring both backups into disposable databases.
 4. Retain the auth config, webhook encryption key, object-store credentials,
-   and their secret-manager version identifiers. Do not log their values.
-5. Audit the exact Rust image before it is eligible for promotion:
+   `MLFLOW_CRYPTO_KEK_PASSPHRASE`, and
+   `MLFLOW_CRYPTO_KEK_VERSION`, plus their secret-manager version identifiers.
+   A missing or wrong KEK does not fail Rust startup; it makes existing gateway
+   secrets fail only when read. Do not log any secret value.
+5. If gateway budgets use Redis, retain
+   `MLFLOW_GATEWAY_BUDGET_REDIS_URL`, the Redis data, and access credentials.
+   If trace archival is enabled, retain its YAML, archive-store credentials,
+   and a database/archive backup pair. See
+   [ARCHIVAL_RUNBOOK.md](ARCHIVAL_RUNBOOK.md).
+6. Audit the exact Rust image before it is eligible for promotion:
 
    ```bash
    bash rust/deploy/audit_image.sh YOUR_RUST_IMAGE@sha256:...
@@ -57,8 +65,9 @@ start against a missing, older, or newer head.
 
 Start the audited Rust image on an internal address with the production backend
 URI, artifact configuration, auth config, workspace mode, and persistent
-`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`. Keep public traffic on Python during
-this staging step.
+`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`. Inject the existing
+`MLFLOW_CRYPTO_KEK_PASSPHRASE` and `MLFLOW_CRYPTO_KEK_VERSION` unchanged. Keep
+public traffic on Python during this staging step.
 
 Do not set `MLFLOW_GENAI_WORKER_PATH` for the stock image: the worker is
 co-installed beside `mlflow-server`. Leave native job execution enabled so a
@@ -73,11 +82,23 @@ curl -fsS -H 'Content-Type: application/json' \
   -d '{"max_results":1}' \
   "$RUST_URL/api/2.0/mlflow/experiments/search"
 curl -fsS "$RUST_URL/ajax-api/3.0/mlflow/gateway/supported-providers"
+curl -fsS "$RUST_URL/ajax-api/3.0/mlflow/gateway/secrets/config"
 ```
 
-Also run deterministic gateway/Assistant mocks and one native scorer job. The
-reference `rust/deploy/smoke.sh` demonstrates a provider-free `ResponseLength`
-job and requires it to reach `SUCCEEDED` through the jobs API.
+Require the secrets response to show `using_default_passphrase:false`, then
+exercise one existing encrypted secret through a deterministic provider mock.
+The configuration response cannot detect a wrong passphrase. Also run
+deterministic gateway/Assistant mocks and one native scorer job. The reference
+`rust/deploy/smoke.sh` demonstrates a provider-free `ResponseLength` job and
+requires it to reach `SUCCEEDED` through the jobs API. Size worker process caps
+and memory using [DEPLOYMENT.md](DEPLOYMENT.md#native-worker-capacity-and-supervision)
+before production traffic.
+
+For more than one Rust replica, set
+`MLFLOW_GATEWAY_BUDGET_REDIS_URL` on every replica before canary traffic. An
+unset URL makes enforcement per-replica. If archival will continue through the
+cutover, mount and validate the same config and archive root using the archival
+runbook; do not enable a second scheduler against a different root.
 
 For S3, verify PUT/GET plus multipart create/upload/complete using the exact
 endpoint and addressing-style configuration intended for production.
@@ -121,8 +142,9 @@ route those requests to Rust.
 
 4. Require the smoke footer to report the native worker job succeeded and zero
    responses carried `X-MLflow-Backend: python`.
-5. Record the Rust image digest, database heads, nginx config checksum, secret
-   versions, and cutover timestamp.
+5. Record the Rust image digest, database heads, nginx config checksum, KEK
+   passphrase/version identifiers, Redis budget backend, archival config/archive
+   root, and cutover timestamp.
 
 ## 6. Remove the Python serving plane
 
