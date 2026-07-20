@@ -7,9 +7,8 @@
 //!   `mlflow.utils.uri.validate_path_is_safe`, the path-traversal guard every
 //!   artifact endpoint runs first.
 //! * [`repo::ArtifactRepo`] — a streaming repository abstraction over the
-//!   `object_store` crate (local FS wired now; S3/GCS/Azure are structurally
-//!   supported behind cargo features and resolved by
-//!   [`repo::factory::repo_from_uri`], but not enabled in v1).
+//!   `object_store` crate (local FS and S3 are wired in the stock server;
+//!   GCS/Azure remain feature-gated seams).
 //! * [`get_artifact::send_artifact`] — the store-agnostic streaming core of the
 //!   `/get-artifact` download handler (the run/model → repo resolution is Phase
 //!   5 server wiring).
@@ -28,10 +27,13 @@ pub mod mime;
 pub mod path_safety;
 pub mod repo;
 pub mod router;
+#[cfg(feature = "aws")]
+mod s3;
 
 pub use get_artifact::{send_artifact, send_artifact_response};
 pub use path_safety::validate_path_is_safe;
 pub use repo::{
-    factory, local_repo, ArtifactDownload, ArtifactFileInfo, ArtifactRepo, ObjectStoreRepo,
+    factory, local_repo, multipart_upload_path, presigned_download_ttl_seconds, ArtifactDownload,
+    ArtifactFileInfo, ArtifactRepo, ObjectStoreRepo, PresignedDownloadResult,
 };
 pub use router::{artifacts_router, artifacts_router_with_state, ArtifactsState};

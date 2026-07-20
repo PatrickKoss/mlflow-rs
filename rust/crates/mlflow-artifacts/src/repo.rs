@@ -12,10 +12,9 @@
 //!
 //! ## Why `object_store`
 //!
-//! One API for local FS / S3 / GCS / Azure. v1 wires only the local `fs`
-//! backend (no cloud SDK deps). [`factory::repo_from_uri`] is the single
-//! resolution point where cloud schemes get plugged in later (feature-gated
-//! `object_store` backends), so Phase 5 just fills in the `match` arms.
+//! One API for local FS / S3 / GCS / Azure. The stock server wires local `fs`
+//! plus S3; [`factory::repo_from_uri`] remains the single resolution point for
+//! the GCS/Azure backends that are not implemented yet.
 //!
 //! ## Path model
 //!
@@ -32,7 +31,7 @@ use futures::stream::{BoxStream, StreamExt};
 use mlflow_error::MlflowError;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjPath;
-use object_store::{GetOptions, ObjectStore, PutMultipartOptions, PutPayload};
+use object_store::{GetOptions, ObjectStore, PutMultipartOptions, WriteMultipart};
 
 /// One entry of a non-recursive artifact listing. Field semantics match
 /// `mlflow.entities.FileInfo` / the `FileInfo` proto: `is_dir` true for
@@ -111,6 +110,16 @@ pub trait ArtifactRepo: Send + Sync {
     ) -> Result<(), MlflowError> {
         Err(multipart_not_supported())
     }
+
+    async fn get_download_presigned_url(
+        &self,
+        _path: &str,
+        _expiration_seconds: u64,
+    ) -> Result<PresignedDownloadResult, MlflowError> {
+        Err(MlflowError::not_implemented(
+            "Presigned download URLs are not supported for the current artifact store",
+        ))
+    }
 }
 
 /// Result of `create_multipart_upload`, shaped like the proto response.
@@ -132,6 +141,27 @@ pub struct MultipartUploadPart {
     pub part_number: i64,
     pub etag: String,
     pub url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PresignedDownloadResult {
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub file_size: Option<i64>,
+}
+
+pub fn presigned_download_ttl_seconds() -> Result<u64, MlflowError> {
+    match std::env::var("MLFLOW_PRESIGNED_DOWNLOAD_URL_TTL_SECONDS") {
+        Ok(value) => value.parse().map_err(|error| {
+            MlflowError::internal_error(format!(
+                "Failed to convert {value:?} for MLFLOW_PRESIGNED_DOWNLOAD_URL_TTL_SECONDS: {error}"
+            ))
+        }),
+        Err(std::env::VarError::NotPresent) => Ok(300),
+        Err(error) => Err(MlflowError::internal_error(format!(
+            "Failed to read MLFLOW_PRESIGNED_DOWNLOAD_URL_TTL_SECONDS: {error}"
+        ))),
+    }
 }
 
 /// Mirrors `_UnsupportedMultipartUploadException` (`handlers.py`): the message
@@ -157,7 +187,7 @@ impl ObjectStoreRepo {
     /// Join a repo-relative path onto the root, producing a full store path.
     /// `object_store::Path::from` normalizes and rejects `..`, so this is
     /// traversal-safe (defense in depth on top of `validate_path_is_safe`).
-    fn full_path(&self, rel: &str) -> ObjPath {
+    pub(crate) fn full_path(&self, rel: &str) -> ObjPath {
         let mut p = self.root.clone();
         for part in rel.split('/').filter(|s| !s.is_empty()) {
             p = p.join(part);
@@ -197,20 +227,22 @@ impl ArtifactRepo for ObjectStoreRepo {
         // `put_multipart` streams parts to the backend as the body arrives; we
         // pump the request-body stream chunk-by-chunk into it, so peak memory
         // is bounded by one buffered part, not the whole upload.
-        let mut upload = self
+        let upload = self
             .store
             .put_multipart_opts(&full, PutMultipartOptions::default())
             .await
             .map_err(store_error)?;
+        // Request-body chunks are transport framing, not valid cloud MPU part
+        // boundaries. Coalesce them into S3's minimum 5 MiB chunks while
+        // retaining bounded memory and back-pressure.
+        let mut upload = WriteMultipart::new(upload);
         let mut body = body;
         while let Some(chunk) = body.next().await {
             let chunk = chunk?;
-            upload
-                .put_part(PutPayload::from_bytes(chunk))
-                .await
-                .map_err(store_error)?;
+            upload.wait_for_capacity(8).await.map_err(store_error)?;
+            upload.put(chunk);
         }
-        upload.complete().await.map_err(store_error)?;
+        upload.finish().await.map_err(store_error)?;
         Ok(())
     }
 
@@ -312,10 +344,23 @@ fn basename(path: &str) -> &str {
     }
 }
 
+/// Build the repository-relative S3 key used by Python's multipart mixin:
+/// `posixpath.join(artifact_path, os.path.basename(local_file))`.
+pub fn multipart_upload_path(local_file: &str, artifact_path: &str) -> String {
+    let file_name = basename(local_file);
+    if artifact_path.is_empty() {
+        file_name.to_string()
+    } else if file_name.is_empty() {
+        format!("{}/", artifact_path.trim_end_matches('/'))
+    } else {
+        format!("{}/{}", artifact_path.trim_end_matches('/'), file_name)
+    }
+}
+
 /// Map an `object_store` error to an `MlflowError`. Not-found is handled at call
 /// sites (it carries endpoint-specific messages); everything else is an internal
 /// error, matching how Flask would surface an unexpected repo exception (500).
-fn store_error(e: object_store::Error) -> MlflowError {
+pub(crate) fn store_error(e: object_store::Error) -> MlflowError {
     MlflowError::internal_error(format!("Artifact store error: {e}"))
 }
 
@@ -351,9 +396,9 @@ pub fn local_repo(artifact_dir: &std::path::Path) -> Result<ObjectStoreRepo, Mlf
     Ok(ObjectStoreRepo::new(Arc::new(store), ObjPath::default()))
 }
 
-/// URI → repo resolution. This is the single seam where cloud backends are
-/// added later (Phase 5). Today only local paths / `file:` URIs resolve; cloud
-/// schemes return a `NOT_IMPLEMENTED` describing what feature to enable.
+/// URI → repo resolution. Local paths / `file:` always resolve; `s3:` resolves
+/// when the `aws` feature is enabled (as it is by the stock server build).
+/// GCS/Azure schemes retain their `NOT_IMPLEMENTED` response.
 pub mod factory {
     use super::*;
 
@@ -368,9 +413,15 @@ pub mod factory {
                 let path = local_path_from_uri(uri);
                 Ok(Arc::new(local_repo(std::path::Path::new(&path))?))
             }
-            // Cloud schemes are structurally supported (feature-gated
-            // `object_store` backends) but not wired for v1.
-            Some(other @ ("s3" | "gs" | "gcs" | "wasbs" | "abfss" | "az" | "azure")) => {
+            #[cfg(feature = "aws")]
+            Some("s3") => Ok(Arc::new(crate::s3::S3ArtifactRepo::from_uri(uri)?)),
+            #[cfg(not(feature = "aws"))]
+            Some("s3") => Err(MlflowError::not_implemented(
+                "Artifact scheme 's3' is not enabled in this build; rebuild with the \
+                 mlflow-artifacts 'aws' feature",
+            )),
+            // GCS and Azure remain Python-only seams.
+            Some(other @ ("gs" | "gcs" | "wasbs" | "abfss" | "az" | "azure")) => {
                 Err(MlflowError::not_implemented(format!(
                     "Artifact scheme '{other}' is not yet enabled in the Rust server; \
                      rebuild with the corresponding object_store feature"
@@ -532,5 +583,18 @@ mod tests {
         let listed = repo.list(None).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].path, "real.txt");
+    }
+
+    #[test]
+    fn multipart_path_matches_python_posix_join_and_basename() {
+        assert_eq!(
+            multipart_upload_path("/tmp/local.bin", "run/artifacts"),
+            "run/artifacts/local.bin"
+        );
+        assert_eq!(multipart_upload_path("local.bin", ""), "local.bin");
+        assert_eq!(
+            multipart_upload_path("dir/local.bin", "prefix/"),
+            "prefix/local.bin"
+        );
     }
 }

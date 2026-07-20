@@ -11,11 +11,17 @@ repository.workspace = true
 workspace = true
 
 [features]
-# Cloud object-store backends are wired structurally (see `repo::factory`) but the
-# SDK-bearing `object_store` features stay off by default so no cloud deps are
-# pulled. Phase 5 enables these once credentials/config plumbing lands.
+# Cloud backends stay feature-gated at the library boundary. The stock server
+# and store consumers enable `aws`; GCS/Azure remain unwired seams.
 default = []
-aws = ["object_store/aws"]
+aws = [
+  "object_store/aws",
+  "dep:chrono",
+  "dep:hmac",
+  "dep:sha2",
+  "dep:reqwest",
+  "dep:quick-xml",
+]
 gcp = ["object_store/gcp"]
 azure = ["object_store/azure"]
 
@@ -35,6 +41,11 @@ thiserror = { workspace = true }
 
 # Local filesystem object store (`fs` feature only — no cloud SDKs by default).
 object_store = { version = "0.14.0", default-features = false, features = ["fs"] }
+chrono = { workspace = true, optional = true }
+hmac = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+quick-xml = { version = "0.40.1", features = ["serialize"], optional = true }
 # Streaming adapters between `bytes`/`futures` streams and async readers.
 tokio-util = { version = "0.7.18", features = ["io"] }
 # Exact port of Python's `urllib.parse.unquote` decode loop in `validate_path_is_safe`.

@@ -85,8 +85,8 @@ async fn main() -> anyhow::Result<()> {
             let registry_store = RegistryStore::new(store.db().clone());
 
             // Resolve the `--artifacts-destination` proxy repo once (parity with
-            // Python's memoized `_artifact_repo`). Only local-FS/`file:` URIs are
-            // wired in v1; cloud schemes error at request time.
+            // Python's memoized `_artifact_repo`). Stock builds include local
+            // filesystems and S3; GCS/Azure remain fail-loud seams.
             let proxied_repo = match &config.artifacts_destination {
                 Some(dest) => Some(mlflow_artifacts::factory::repo_from_uri(dest)?),
                 None => None,

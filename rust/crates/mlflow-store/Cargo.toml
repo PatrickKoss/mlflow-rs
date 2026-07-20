@@ -24,7 +24,7 @@ mlflow-error = { workspace = true }
 # AST into EXISTS semi-joins + keyset SQL; parse errors are mapped to
 # `MlflowError` at the boundary.
 mlflow-search = { workspace = true }
-mlflow-artifacts = { workspace = true }
+mlflow-artifacts = { workspace = true, features = ["aws"] }
 # Run UUIDs (uuid4 hex) and the randomness source for random run-name generation
 # (avoids pulling in the `rand` crate — see `store::names`).
 uuid = { workspace = true }

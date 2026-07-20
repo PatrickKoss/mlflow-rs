@@ -139,10 +139,11 @@ Verification:
 
 1. Start Rust with the same backend URI, artifact root, auth INI, Fernet key,
    workspace mode, and security settings. Do not put it in nginx yet.
-2. If the artifact destination is S3, GCS, or Azure, start Rust with
-   `--no-serve-artifacts`; keep Python's `--serve-artifacts` destination and
-   route the artifact-proxy family to Python as shown in
-   [DEPLOYMENT.md](DEPLOYMENT.md#known-limitation-cloud-artifact-proxy).
+2. If the artifact destination is S3, configure the same `AWS_*` and MLflow S3
+   variables on Rust, enable `--serve-artifacts`, and privately verify PUT/GET
+   plus multipart create/upload/complete. For GCS or Azure, start Rust with
+   `--no-serve-artifacts`; keep the artifact-proxy family on Python as shown in
+   [DEPLOYMENT.md](DEPLOYMENT.md#cloud-artifact-proxy-support).
 3. Wait for startup. A schema error is a hard stop; do not bypass the head pin.
 
 Verification against the private Rust Service:
@@ -160,8 +161,8 @@ Check that Rust's logs show both database connections and no Alembic mismatch.
 ## 6. Canary
 
 Route canaries only among endpoints implemented by both servers. Never send the
-GenAI exception routes to Rust, and never send a cloud-backed artifact-proxy
-request to Rust.
+GenAI exception routes to Rust. S3 artifact-proxy requests may be sent to Rust;
+GCS/Azure artifact-proxy requests must remain on Python.
 
 Choose one method:
 
@@ -228,7 +229,7 @@ Confirm the receiver saw `X-MLflow-Signature`, `X-MLflow-Timestamp`, and
 4. Record image digests, both Alembic heads, secret versions, nginx config
    checksum, and the cutover time.
 5. Scale Python only to the capacity required by GenAI, jobs, UI fallback, and
-   cloud artifact-proxy traffic.
+   any GCS/Azure artifact-proxy traffic.
 
 If any verification fails, follow [ROLLBACK.md](ROLLBACK.md). Do not downgrade a
 database as part of the first response.

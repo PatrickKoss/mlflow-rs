@@ -958,7 +958,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
 
 ### Phase 22 — Compliance & cutover
 
-- [ ] **T22.0 S3 artifact proxy/factory support (pre-cutover bugfix, added
+- [x] **T22.0 S3 artifact proxy/factory support (pre-cutover bugfix, added
       2026-07-20)**: wire the `object_store` AWS backend into
       `factory::repo_from_uri` (`rust/crates/mlflow-artifacts/src/repo.rs`) so
       `s3://bucket/prefix` resolves for the `--serve-artifacts` proxy
@@ -986,6 +986,23 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       **VER:** cargo integration suite gated on MinIO availability + the
       differential run + T14.3 runbook updated to drop the Python-routing
       workaround.
+      **DONE (2026-07-20, Codex):** `factory::repo_from_uri` now constructs an
+      `AmazonS3Builder`-backed repository for `s3://` URIs, with the AWS and
+      MLflow endpoint/TLS/addressing-style environment mappings enabled in
+      stock `mlflow-server` and `mlflow-store` builds. Multipart create,
+      presigned UploadPart URLs, complete, and abort use raw S3 REST requests
+      signed with SigV4 and credentials from object_store's AWS provider;
+      presigned artifact downloads use the same signer. GCS/Azure remain
+      unchanged `NOT_IMPLEMENTED` seams. Verification: 43 artifact, 288 store,
+      and 762 server tests passed; four MinIO-gated live tests passed (artifact
+      round trips + multipart, HTTP proxy + multipart, trace archival); strict
+      clippy, formatting, and the release server build passed. The Python/Rust
+      MinIO differential passed 10/10 request cases with zero non-allowlisted
+      differences; evidence is in
+      `rust/tools/results/t22_0_s3_differential.json` and
+      `rust/tools/results/t22_0_verification.md`. T14.3 deployment and migration
+      docs now route S3 to Rust while retaining the Python exception for
+      GCS/Azure.
 - [ ] **T22.1 Differential corpus genai sections** for every Tier A surface,
       invoke submission, and §15 semantic-engine category; compliance CI stays
       a required gate.
@@ -1229,4 +1246,3 @@ zero live provider calls anywhere in this phase.
       Artifacts: `rust/bench/genai/results/t23_5/` (soak raw + summary),
       driver `rust/bench/genai/t23_5.py`, report `rust/bench/genai_eval.md`.
       Gates: ruff 0, harness tests 16 passed, route parity 372, replay 0.
-

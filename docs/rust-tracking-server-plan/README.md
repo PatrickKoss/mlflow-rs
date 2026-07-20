@@ -53,7 +53,7 @@ Phase 22 (compliance & cutover) is the only remaining planned work.**
   (Rust faster across families, 117.8× less RSS in soak, all regressions
   disclosed). **Phase 22 STARTED 2026-07-20 per user directive** (the earlier
   stop-after-Phase-23 directive is fulfilled): T22.0 (S3 artifact proxy/
-  factory support) added as a pre-cutover bugfix task — see
+  factory support) is COMPLETE 2026-07-20; T22.1 is next — see
   `part2-work-breakdown.md` §16 Phase 22. Phase 23 already finished, so
   T22.4's precondition on the Python container is satisfied.
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
@@ -64,11 +64,11 @@ Phase 22 (compliance & cutover) is the only remaining planned work.**
 - Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
   tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
   tests.
-- **Rust artifact proxy lacks cloud schemes (S3/GCS/Azure)** — surfaced by
-  the T14.2 soak and re-confirmed by T23.4: `--serve-artifacts` with
-  `--artifacts-destination s3://...` is Python-only today; Rust proxies local
-  FS only. S3 is now in scope as **T22.0** (pre-cutover bugfix; must land
-  before T22.4 deletes the Python server). GCS/Azure remain documented seams.
+- **GCS/Azure artifact proxy schemes remain Python-only.** The S3 gap surfaced
+  by T14.2/T23.4 is CLOSED by **T22.0** (2026-07-20): stock Rust builds now
+  proxy S3-compatible destinations, including MinIO, multipart uploads,
+  presigned downloads, and trace archival. GCS/Azure retain their documented
+  `NOT_IMPLEMENTED` factory seams until separately implemented.
 - Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
   messages (serde text vs Python's "Invalid value … for parameter …"); #3
   HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
@@ -109,7 +109,7 @@ here if the phase-level state changed.
 | `part1-work-breakdown.md` | §7 Work Breakdown (Phases 0–14) | Every Part I task with checkbox/AC/VER and DONE notes | Picking up or checking off a Part I task (T0.x–T14.x). |
 | `part1-verification-and-decisions.md` | §8 Verification quick-ref, §9 Open decisions & risks, §10 Research appendix | How to confirm the whole Part I stack works; Part I decision log; where Part I facts came from | You need the end-to-end smoke commands, a Part I decision rationale (D1–D13), or a source citation. |
 | `part2-overview.md` | Part II banner, §11 Goals & execution boundary, §12 GenAI API surface, §13 Storage & crypto, §14 Runtime engines, §15 Compliance (Part II) | The Part II *spec*: the Python-free execution boundary, every genai route (§12.1–§12.12), crypto/storage, the runtime engines to build, Part II compliance | Implementing or verifying any genai (Part II) task — start here for the genai contract, especially the §12 route inventory. |
-| `part2-work-breakdown.md` | §16 Work Breakdown (Phases 15–23) | Every Part II task with checkbox/AC/VER and DONE notes | Picking up or checking off a genai task (T15.x–T23.x). **Phase 22 lives here and is the only unstarted work.** |
+| `part2-work-breakdown.md` | §16 Work Breakdown (Phases 15–23) | Every Part II task with checkbox/AC/VER and DONE notes | Picking up or checking off a genai task (T15.x–T23.x). **Phase 22 lives here and is the only unfinished work.** |
 | `part2-decisions-and-appendix.md` | §17 Open decisions & risks (Part II), §18 Research appendix (Part II) | Part II decision log (D14–D23, incl. the Phoenix/D23 resolution) and Part II source citations | You need a genai decision rationale (e.g. D14 worker-subprocess model, D23 Phoenix rejection) or a Part II source citation. |
 
 ### Typical reading paths

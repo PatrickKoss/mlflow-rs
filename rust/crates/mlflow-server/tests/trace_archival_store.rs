@@ -140,6 +140,73 @@ async fn archive_read_delete_cycle_preserves_payload_and_state() {
     assert!(store.get_trace_info(WORKSPACE, TRACE_ID).await.is_err());
 }
 
+#[tokio::test]
+async fn s3_archive_read_delete_cycle() {
+    if std::env::var("MLFLOW_TEST_S3_ENDPOINT").is_err() {
+        eprintln!("skipped: MLFLOW_TEST_S3_ENDPOINT is unset");
+        return;
+    }
+    let bucket =
+        std::env::var("MLFLOW_TEST_S3_BUCKET").unwrap_or_else(|_| "mlflow-soak".to_string());
+    let archive_root = format!(
+        "s3://{bucket}/t22-0/trace-archive-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let (_db, store, experiment_id) = test_store("s3-archive-cycle").await;
+    seed_trace(&store, &experiment_id, root_content()).await;
+    let before = store.get_trace(WORKSPACE, TRACE_ID, true).await.unwrap();
+    let expected_payload = stored_spans_to_traces_pb(&before.spans).unwrap();
+
+    assert_eq!(
+        archive_traces_at(
+            &store,
+            WORKSPACE,
+            &archive_root,
+            "1m",
+            &[],
+            Some(10),
+            60_000,
+        )
+        .await
+        .unwrap(),
+        1
+    );
+    let info = store.get_trace_info(WORKSPACE, TRACE_ID).await.unwrap();
+    assert_eq!(
+        info.tag(TRACE_TAG_SPANS_LOCATION),
+        Some(SPANS_LOCATION_ARCHIVE_REPO)
+    );
+    let archive_uri = info.tag(TRACE_TAG_ARCHIVE_LOCATION).unwrap().to_string();
+    let repo = mlflow_artifacts::factory::repo_from_uri(&archive_uri).unwrap();
+    let mut stream = repo.get(TRACE_ARCHIVAL_FILENAME).await.unwrap().stream;
+    let mut raw = Vec::new();
+    use futures::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        raw.extend_from_slice(&chunk.unwrap());
+    }
+    assert_eq!(raw, expected_payload);
+    assert_eq!(download_archived_spans(&info).await.unwrap().len(), 1);
+
+    assert_eq!(
+        store
+            .delete_traces(
+                WORKSPACE,
+                &experiment_id,
+                None,
+                None,
+                Some(&[TRACE_ID.to_string()]),
+            )
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(repo.get(TRACE_ARCHIVAL_FILENAME).await.is_err());
+}
+
 #[test]
 fn python_backend_archive_cycle_matches_rust_contract() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");

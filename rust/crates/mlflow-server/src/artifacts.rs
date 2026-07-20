@@ -514,7 +514,7 @@ pub async fn proxy_list(State(state): State<AppState>, parts: Parts) -> Response
 /// `MultipartUploadMixin`, so this returns `NOT_IMPLEMENTED`.
 pub async fn proxy_create_multipart(
     State(state): State<AppState>,
-    Path(_artifact_path): Path<String>,
+    Path(artifact_path): Path<String>,
     parts: Parts,
     body: Bytes,
 ) -> Response {
@@ -523,10 +523,11 @@ pub async fn proxy_create_multipart(
     }
     let result = async {
         let repo = state.proxied_artifacts_repo()?;
-        mlflow_artifacts::validate_path_is_safe(&_artifact_path)?;
+        let artifact_path = mlflow_artifacts::validate_path_is_safe(&artifact_path)?;
         let req: art_pb::CreateMultipartUpload =
             parse_control_body(&body, "mlflow.artifacts.CreateMultipartUpload")?;
-        let path = req.path.unwrap_or_default();
+        let path =
+            mlflow_artifacts::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let num_parts = req.num_parts.unwrap_or_default();
         let res = repo.create_multipart_upload(&path, num_parts).await?;
         Ok::<_, MlflowError>(art_pb::create_multipart_upload::Response {
@@ -553,7 +554,7 @@ pub async fn proxy_create_multipart(
 /// `_complete_multipart_upload_artifact` (`handlers.py:3783`).
 pub async fn proxy_complete_multipart(
     State(state): State<AppState>,
-    Path(_artifact_path): Path<String>,
+    Path(artifact_path): Path<String>,
     parts: Parts,
     body: Bytes,
 ) -> Response {
@@ -562,10 +563,11 @@ pub async fn proxy_complete_multipart(
     }
     let result = async {
         let repo = state.proxied_artifacts_repo()?;
-        mlflow_artifacts::validate_path_is_safe(&_artifact_path)?;
+        let artifact_path = mlflow_artifacts::validate_path_is_safe(&artifact_path)?;
         let req: art_pb::CompleteMultipartUpload =
             parse_control_body(&body, "mlflow.artifacts.CompleteMultipartUpload")?;
-        let path = req.path.unwrap_or_default();
+        let path =
+            mlflow_artifacts::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let upload_id = req.upload_id.unwrap_or_default();
         let parts: Vec<mlflow_artifacts::repo::MultipartUploadPart> = req
             .parts
@@ -594,7 +596,7 @@ pub async fn proxy_complete_multipart(
 /// `_abort_multipart_upload_artifact` (`handlers.py:3817`).
 pub async fn proxy_abort_multipart(
     State(state): State<AppState>,
-    Path(_artifact_path): Path<String>,
+    Path(artifact_path): Path<String>,
     parts: Parts,
     body: Bytes,
 ) -> Response {
@@ -603,10 +605,11 @@ pub async fn proxy_abort_multipart(
     }
     let result = async {
         let repo = state.proxied_artifacts_repo()?;
-        mlflow_artifacts::validate_path_is_safe(&_artifact_path)?;
+        let artifact_path = mlflow_artifacts::validate_path_is_safe(&artifact_path)?;
         let req: art_pb::AbortMultipartUpload =
             parse_control_body(&body, "mlflow.artifacts.AbortMultipartUpload")?;
-        let path = req.path.unwrap_or_default();
+        let path =
+            mlflow_artifacts::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let upload_id = req.upload_id.unwrap_or_default();
         repo.abort_multipart_upload(&path, &upload_id).await?;
         Ok::<_, MlflowError>(())
@@ -633,18 +636,23 @@ pub async fn proxy_presigned_download(
         return disabled_response(&parts);
     }
     let result = async {
-        // Python resolves the repo first (`_get_artifact_repo_mlflow_artifacts`),
-        // then `_validate_support_multipart_download` raises NOT_IMPLEMENTED for
-        // local FS. Validate the path for parity with the other handlers.
-        state.proxied_artifacts_repo()?;
-        mlflow_artifacts::validate_path_is_safe(&artifact_path)?;
-        Err::<(), _>(MlflowError::not_implemented(
-            "Presigned download URLs are not supported for the current artifact store",
-        ))
+        let repo = state.proxied_artifacts_repo()?;
+        let path = mlflow_artifacts::validate_path_is_safe(&artifact_path)?;
+        let ttl = mlflow_artifacts::presigned_download_ttl_seconds()?;
+        repo.get_download_presigned_url(&path, ttl).await
     }
     .await;
     match result {
-        Ok(()) => unreachable!(),
+        Ok(result) => (
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            serde_json::json!({
+                "url": result.url,
+                "headers": result.headers.into_iter().collect::<std::collections::BTreeMap<_, _>>(),
+                "file_size": result.file_size,
+            })
+            .to_string(),
+        )
+            .into_response(),
         Err(e) => e.into_response(),
     }
 }

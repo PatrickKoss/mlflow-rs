@@ -9,9 +9,9 @@ for reversal, use [ROLLBACK.md](ROLLBACK.md).
 
 ```text
 clients -> nginx -> Rust: tracking, tracing, OTLP, registry, auth/RBAC,
-                   webhooks, workspaces, GraphQL, local artifact proxy, ops
+                   webhooks, workspaces, GraphQL, local/S3 artifact proxy, ops
                  -> Python: GenAI, gateway, assistant/SSE, jobs, PromptLab,
-                    cloud-backed artifact proxy, packaged UI
+                    GCS/Azure artifact proxy when configured, packaged UI
         -> shared tracking/registry DB
         -> shared auth DB
         -> shared artifact store
@@ -36,7 +36,7 @@ the default location:
 | `/ajax-api/2.0/mlflow/runs/create-promptlab-run` | Python | PromptLab execution |
 | `/(api|ajax-api)/3.0/mlflow/scorer/invoke` | Python | scorer execution |
 | `/python/health` | Python | rewrite to `/health` |
-| `/(api|ajax-api)/2.0/mlflow-artifacts[/*]` | Python only for S3/GCS/Azure proxy destinations | Keep on Rust only for local/file proxy destinations |
+| `/(api|ajax-api)/2.0/mlflow-artifacts[/*]` | Rust for local/file/S3 destinations; Python for GCS/Azure | Routing is deployment-wide and must match the configured destination |
 | `/`, `/static-files/*` | static image/CDN; Python fallback in the example | UI, not an API plane |
 | everything else | Rust | Includes tracking, registry, auth, webhooks, `/graphql`, `/v1/traces`, `/health`, `/version`, and `/metrics` |
 
@@ -51,8 +51,8 @@ Root `/get-artifact`, `/model-versions/get-artifact`, and
 
 The example uses PostgreSQL for tracking/registry, the default shared SQLite
 auth database on a named volume, MinIO, local source builds for both MLflow
-images, and the cloud-artifact exception: Rust has `--no-serve-artifacts`, while
-Python proxies the `mlflow-artifacts` routes to MinIO. The committed source must
+images, and an S3 artifact destination served directly by Rust. Python retains
+the non-artifact exception routes. The committed source must
 contain tracking head `c4a9b7d3e812` and auth head `f1a2b3c4d5e6`.
 
 1. Save the following as `docker-compose.yml` in the repository root. The fixed
@@ -149,10 +149,16 @@ services:
         condition: service_completed_successfully
       migrate-auth:
         condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
     environment:
       RUST_LOG: info
       MLFLOW_AUTH_CONFIG_PATH: /etc/mlflow/auth.ini
       MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - --host
       - 0.0.0.0
@@ -162,7 +168,9 @@ services:
       - postgresql://mlflow:mlflow-local-only@postgres:5432/mlflow
       - --app-name
       - basic-auth
-      - --no-serve-artifacts
+      - --serve-artifacts
+      - --artifacts-destination
+      - s3://mlflow/artifacts
       - --default-artifact-root
       - mlflow-artifacts:/
     configs:
@@ -183,16 +191,10 @@ services:
         condition: service_completed_successfully
       migrate-auth:
         condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
     environment:
       MLFLOW_AUTH_CONFIG_PATH: /etc/mlflow/auth.ini
       MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
       MLFLOW_FLASK_SERVER_SECRET_KEY: local-python-session-key-change-me
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
-      AWS_DEFAULT_REGION: us-east-1
       MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
     command:
       - mlflow
@@ -205,9 +207,7 @@ services:
       - postgresql://mlflow:mlflow-local-only@postgres:5432/mlflow
       - --app-name
       - basic-auth
-      - --serve-artifacts
-      - --artifacts-destination
-      - s3://mlflow/artifacts
+      - --no-serve-artifacts
     configs:
       - source: auth-ini
         target: /etc/mlflow/auth.ini
@@ -307,13 +307,6 @@ configs:
           add_header X-MLflow-Backend python always;
         }
 
-        # Rust's artifact proxy cannot use S3/GCS/Azure destinations.
-        location ~ ^/(api|ajax-api)/2\.0/mlflow-artifacts(/|$$) {
-          proxy_pass http://python_backend;
-          proxy_set_header Host $$host;
-          add_header X-MLflow-Backend python always;
-        }
-
         location = /python/health {
           rewrite ^ /health break;
           proxy_pass http://python_backend;
@@ -366,7 +359,7 @@ volumes:
      http://localhost:8080/api/2.0/mlflow/experiments/search
 
    curl -i -u admin:change-this-local-password \
-     -X PUT --data-binary 'artifact-through-python' \
+     -X PUT --data-binary 'artifact-through-rust' \
      http://localhost:8080/api/2.0/mlflow-artifacts/artifacts/smoke/hello.txt
 
    curl -i -u admin:change-this-local-password \
@@ -374,8 +367,8 @@ volumes:
    ```
 
    The first response must be successful and contain `X-MLflow-Backend: rust`.
-   The artifact upload must contain `X-MLflow-Backend: python`; a following GET
-   of the same URL must return `artifact-through-python`. The GenAI request may
+   The artifact upload must contain `X-MLflow-Backend: rust`; a following GET
+   of the same URL must return `artifact-through-rust`. The GenAI request may
    return a version-dependent 404, but its backend header must be `python`.
 
 4. Always tear the walkthrough down, including data volumes:
@@ -509,11 +502,6 @@ data:
         proxy_set_header Host $host;
         add_header X-MLflow-Backend python always;
       }
-      location ~ ^/(api|ajax-api)/2\.0/mlflow-artifacts(/|$) {
-        proxy_pass http://python_backend;
-        proxy_set_header Host $host;
-        add_header X-MLflow-Backend python always;
-      }
       location = /python/health {
         rewrite ^ /health break;
         proxy_pass http://python_backend;
@@ -563,7 +551,9 @@ spec:
             - "5000"
             - --app-name
             - basic-auth
-            - --no-serve-artifacts
+            - --serve-artifacts
+            - --artifacts-destination
+            - s3://REPLACE_BUCKET/mlflow
             - --default-artifact-root
             - mlflow-artifacts:/
           env:
@@ -575,6 +565,14 @@ spec:
             - name: MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef: {name: mlflow-split-secrets, key: webhook-fernet-key}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: mlflow-split-secrets, key: aws-access-key-id}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: mlflow-split-secrets, key: aws-secret-access-key}
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: MLFLOW_S3_ENDPOINT_URL, value: https://REPLACE_OBJECT_STORE_ENDPOINT}
           ports:
             - {name: http, containerPort: 5000}
           readinessProbe:
@@ -627,9 +625,7 @@ spec:
             - "5001"
             - --app-name
             - basic-auth
-            - --serve-artifacts
-            - --artifacts-destination
-            - s3://REPLACE_BUCKET/mlflow
+            - --no-serve-artifacts
           env:
             - name: MLFLOW_BACKEND_STORE_URI
               valueFrom:
@@ -641,14 +637,6 @@ spec:
             - name: MLFLOW_FLASK_SERVER_SECRET_KEY
               valueFrom:
                 secretKeyRef: {name: mlflow-split-secrets, key: flask-session-key}
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef: {name: mlflow-split-secrets, key: aws-access-key-id}
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef: {name: mlflow-split-secrets, key: aws-secret-access-key}
-            - {name: AWS_DEFAULT_REGION, value: us-east-1}
-            - {name: MLFLOW_S3_ENDPOINT_URL, value: https://REPLACE_OBJECT_STORE_ENDPOINT}
             - {name: MLFLOW_SERVER_ENABLE_JOB_EXECUTION, value: "true"}
           ports:
             - {name: http, containerPort: 5001}
@@ -743,7 +731,7 @@ flags are listed because deploy scripts commonly carry them forward.
 | `--registry-store-uri` | `MLFLOW_REGISTRY_STORE_URI` | Backend URI; a different URI is rejected |
 | `--default-artifact-root` | `MLFLOW_DEFAULT_ARTIFACT_ROOT` | `./mlruns` when unset |
 | `--serve-artifacts` / `--no-serve-artifacts` | `MLFLOW_SERVE_ARTIFACTS` | `true` |
-| `--artifacts-destination` | `MLFLOW_ARTIFACTS_DESTINATION` | `./mlartifacts`; only local/file is implemented |
+| `--artifacts-destination` | `MLFLOW_ARTIFACTS_DESTINATION` | `./mlartifacts`; local/file and S3 are implemented |
 | `--artifacts-only` | `MLFLOW_ARTIFACTS_ONLY` | `false`; registers proxy plus root get/upload routes only |
 | `--host` / `-H` | `MLFLOW_HOST` | `127.0.0.1` |
 | `--port` / `-p` | `MLFLOW_PORT` | `5000` |
@@ -773,20 +761,19 @@ SQL pool environment mapping:
 
 Without pool variables, Rust uses maximum 15 and minimum 0 connections.
 
-## Known limitation: cloud artifact proxy
+## Cloud artifact proxy support
 
-> **KNOWN LIMITATION:** Rust's artifact proxy supports local paths and `file:`
-> URIs only. `--serve-artifacts --artifacts-destination s3://...`, `gs://...`,
-> or Azure destinations fail at request time with `NOT_IMPLEMENTED`.
+Rust's stock server image supports local paths, `file:` URIs, and `s3://`
+destinations, including S3-compatible endpoints and multipart uploads. It reads
+standard `AWS_*` credentials/regions plus `MLFLOW_S3_ENDPOINT_URL`,
+`MLFLOW_S3_IGNORE_TLS`, and `MLFLOW_BOTO_CLIENT_ADDRESSING_STYLE`. Custom
+endpoints default to path-style addressing; set the latter variable to
+`virtual` to override it.
 
-Use one of these configurations:
+> **KNOWN LIMITATION:** `gs://`, `gcs://`, `wasbs://`, `abfss://`, `az://`,
+> and `azure://` destinations still return `NOT_IMPLEMENTED` in Rust.
 
-1. Keep `--serve-artifacts` on Python, start Rust with
-   `--no-serve-artifacts`, and route
-   `^/(api|ajax-api)/2\.0/mlflow-artifacts(/|$)` to Python, as above.
-2. Use client-direct uploads to S3/GCS/Azure and do not expose an artifact proxy.
-3. Use Rust's proxy only with a shared local/file volume.
-
-Do not point Rust's proxy at MinIO merely because MinIO is local to the cluster;
-an `s3://` URI is still a cloud-scheme backend. The soak used client-direct S3
-uploads for Rust for this reason; see [`../bench/soak.md`](../bench/soak.md).
+For GCS/Azure, keep `--serve-artifacts` on Python, start Rust with
+`--no-serve-artifacts`, and route the entire artifact-proxy family to Python; or
+use client-direct uploads. For S3/MinIO, route the family to Rust as in the
+examples above.

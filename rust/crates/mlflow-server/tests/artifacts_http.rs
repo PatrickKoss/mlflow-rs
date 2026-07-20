@@ -84,7 +84,7 @@ struct TestServer {
     handle: Option<tokio::task::JoinHandle<()>>,
     _db: TempDb,
     /// The `--artifacts-destination` root (proxy repo storage).
-    dest_dir: TempDir,
+    dest_dir: Option<TempDir>,
     /// The default experiment/run artifact root (local FS).
     _art_dir: TempDir,
 }
@@ -102,9 +102,17 @@ impl TestServer {
     }
 
     async fn start_with(tag: &str, serve_artifacts: bool, artifacts_only: bool) -> Self {
+        Self::start_with_destination(tag, serve_artifacts, artifacts_only, None).await
+    }
+
+    async fn start_with_destination(
+        tag: &str,
+        serve_artifacts: bool,
+        artifacts_only: bool,
+        destination: Option<String>,
+    ) -> Self {
         let db_file = TempDb::new(tag);
         let art_dir = TempDir::new().expect("art dir");
-        let dest_dir = TempDir::new().expect("dest dir");
         let art_root = format!("file://{}", art_dir.path().display());
 
         let db = Db::connect(&db_file.uri(), PoolConfig::default())
@@ -112,7 +120,11 @@ impl TestServer {
             .expect("connect temp fixture");
         let store = TrackingStore::new(db, art_root);
 
-        let dest_uri = format!("file://{}", dest_dir.path().display());
+        let dest_dir = destination
+            .is_none()
+            .then(|| TempDir::new().expect("dest dir"));
+        let dest_uri = destination
+            .unwrap_or_else(|| format!("file://{}", dest_dir.as_ref().unwrap().path().display()));
         let proxy_repo = mlflow_artifacts::factory::repo_from_uri(&dest_uri).expect("proxy repo");
 
         let config = ServerConfig {
@@ -163,7 +175,7 @@ impl TestServer {
     /// Path to a file under the `--artifacts-destination` root, for direct
     /// filesystem setup/inspection in proxy tests.
     fn dest_file(&self, rel: &str) -> PathBuf {
-        self.dest_dir.path().join(rel)
+        self.dest_dir.as_ref().unwrap().path().join(rel)
     }
 }
 
@@ -435,6 +447,142 @@ async fn proxy_multipart_create_is_not_implemented() {
     .await;
     assert_eq!(res.status, StatusCode::NOT_IMPLEMENTED, "{}", res.text());
     assert!(res.text().contains("NOT_IMPLEMENTED"), "{}", res.text());
+}
+
+#[tokio::test]
+async fn s3_proxy_roundtrip_and_multipart_lifecycle() {
+    if std::env::var("MLFLOW_TEST_S3_ENDPOINT").is_err() {
+        eprintln!("skipped: MLFLOW_TEST_S3_ENDPOINT is unset");
+        return;
+    }
+    let bucket =
+        std::env::var("MLFLOW_TEST_S3_BUCKET").unwrap_or_else(|_| "mlflow-soak".to_string());
+    let destination = format!(
+        "s3://{bucket}/t22-0/proxy-{}-{}",
+        std::process::id(),
+        uniq()
+    );
+    let server =
+        TestServer::start_with_destination("s3_proxy", true, false, Some(destination)).await;
+
+    let artifact = "ordinary/nested.txt";
+    let upload = send_bytes(
+        &server,
+        Method::PUT,
+        &format!("/api/2.0/mlflow-artifacts/artifacts/{artifact}"),
+        Some(b"through-rust-s3-proxy".to_vec()),
+    )
+    .await;
+    assert_eq!(upload.status, StatusCode::OK, "{}", upload.text());
+    let listing = get(&server, "/api/2.0/mlflow-artifacts/artifacts?path=ordinary").await;
+    assert_eq!(listing.status, StatusCode::OK, "{}", listing.text());
+    assert_eq!(listing.json()["files"][0]["path"], "nested.txt");
+    let downloaded = get(
+        &server,
+        &format!("/api/2.0/mlflow-artifacts/artifacts/{artifact}"),
+    )
+    .await;
+    assert_eq!(downloaded.body, b"through-rust-s3-proxy");
+    let presigned = get(
+        &server,
+        &format!("/api/2.0/mlflow-artifacts/presigned/{artifact}"),
+    )
+    .await;
+    assert_eq!(presigned.status, StatusCode::OK, "{}", presigned.text());
+    assert_eq!(presigned.json()["file_size"], 21);
+    let direct_download = reqwest::get(presigned.json()["url"].as_str().unwrap())
+        .await
+        .unwrap();
+    assert!(direct_download.status().is_success());
+    assert_eq!(
+        direct_download.bytes().await.unwrap().as_ref(),
+        b"through-rust-s3-proxy"
+    );
+
+    let created = post(
+        &server,
+        "/api/2.0/mlflow-artifacts/mpu/create/multipart",
+        r#"{"path":"joined.bin","num_parts":2}"#,
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::OK, "{}", created.text());
+    let created = created.json();
+    let upload_id = created["upload_id"].as_str().unwrap();
+    let credentials = created["credentials"].as_array().unwrap();
+    let payloads = [vec![b'x'; 5 * 1024 * 1024], b"end".to_vec()];
+    let direct = reqwest::Client::new();
+    let mut completed_parts = Vec::new();
+    for (credential, payload) in credentials.iter().zip(payloads) {
+        let part_number = credential["part_number"].as_i64().unwrap();
+        let response = direct
+            .put(credential["url"].as_str().unwrap())
+            .body(payload)
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "{}",
+            response.text().await.unwrap()
+        );
+        let etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        completed_parts.push(serde_json::json!({
+            "part_number": part_number,
+            "etag": etag,
+            "url": credential["url"],
+        }));
+    }
+    let complete = post(
+        &server,
+        "/api/2.0/mlflow-artifacts/mpu/complete/multipart",
+        &serde_json::json!({
+            "path": "joined.bin",
+            "upload_id": upload_id,
+            "parts": completed_parts,
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(complete.status, StatusCode::OK, "{}", complete.text());
+    let joined = get(
+        &server,
+        "/api/2.0/mlflow-artifacts/artifacts/multipart/joined.bin",
+    )
+    .await;
+    assert_eq!(joined.body.len(), 5 * 1024 * 1024 + 3);
+
+    let aborted = post(
+        &server,
+        "/api/2.0/mlflow-artifacts/mpu/create/multipart",
+        r#"{"path":"aborted.bin","num_parts":1}"#,
+    )
+    .await
+    .json();
+    let abort = post(
+        &server,
+        "/api/2.0/mlflow-artifacts/mpu/abort/multipart",
+        &serde_json::json!({
+            "path": "aborted.bin",
+            "upload_id": aborted["upload_id"],
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(abort.status, StatusCode::OK, "{}", abort.text());
+
+    let deleted = send_bytes(
+        &server,
+        Method::DELETE,
+        &format!("/api/2.0/mlflow-artifacts/artifacts/{artifact}"),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::OK, "{}", deleted.text());
 }
 
 #[tokio::test]

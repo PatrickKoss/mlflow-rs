@@ -232,10 +232,10 @@ async fn create_multipart_upload(
     body: Body,
 ) -> Response {
     let result = async {
-        validate_path_is_safe(&artifact_path)?;
+        let artifact_path = validate_path_is_safe(&artifact_path)?;
         let req: pb::CreateMultipartUpload =
             parse_json_body(body, "mlflow.artifacts.CreateMultipartUpload").await?;
-        let path = req.path.unwrap_or_default();
+        let path = crate::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let num_parts = req.num_parts.unwrap_or_default();
         let res = state.repo.create_multipart_upload(&path, num_parts).await?;
         Ok::<_, MlflowError>(pb::create_multipart_upload::Response {
@@ -265,10 +265,10 @@ async fn complete_multipart_upload(
     body: Body,
 ) -> Response {
     let result = async {
-        validate_path_is_safe(&artifact_path)?;
+        let artifact_path = validate_path_is_safe(&artifact_path)?;
         let req: pb::CompleteMultipartUpload =
             parse_json_body(body, "mlflow.artifacts.CompleteMultipartUpload").await?;
-        let path = req.path.unwrap_or_default();
+        let path = crate::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let upload_id = req.upload_id.unwrap_or_default();
         let parts: Vec<MultipartUploadPart> = req
             .parts
@@ -302,10 +302,10 @@ async fn abort_multipart_upload(
     body: Body,
 ) -> Response {
     let result = async {
-        validate_path_is_safe(&artifact_path)?;
+        let artifact_path = validate_path_is_safe(&artifact_path)?;
         let req: pb::AbortMultipartUpload =
             parse_json_body(body, "mlflow.artifacts.AbortMultipartUpload").await?;
-        let path = req.path.unwrap_or_default();
+        let path = crate::multipart_upload_path(&req.path.unwrap_or_default(), &artifact_path);
         let upload_id = req.upload_id.unwrap_or_default();
         state.repo.abort_multipart_upload(&path, &upload_id).await?;
         Ok::<_, MlflowError>(())
@@ -322,21 +322,26 @@ async fn abort_multipart_upload(
 }
 
 async fn get_presigned_download_url(
-    State(_state): State<ArtifactsState>,
+    State(state): State<ArtifactsState>,
     Path(artifact_path): Path<String>,
 ) -> Response {
-    // Local FS has no presigned URLs — parity with Python, whose
-    // `LocalArtifactRepository` lacks `MultipartDownloadMixin`, so
-    // `_validate_support_multipart_download` raises NOT_IMPLEMENTED.
     let result = async {
-        validate_path_is_safe(&artifact_path)?;
-        Err::<(), _>(MlflowError::not_implemented(
-            "Presigned download URLs are not supported for the current artifact store",
-        ))
+        let path = validate_path_is_safe(&artifact_path)?;
+        let ttl = crate::presigned_download_ttl_seconds()?;
+        state.repo.get_download_presigned_url(&path, ttl).await
     }
     .await;
     match result {
-        Ok(()) => unreachable!(),
+        Ok(result) => (
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            serde_json::json!({
+                "url": result.url,
+                "headers": result.headers.into_iter().collect::<std::collections::BTreeMap<_, _>>(),
+                "file_size": result.file_size,
+            })
+            .to_string(),
+        )
+            .into_response(),
         Err(e) => e.into_response(),
     }
 }

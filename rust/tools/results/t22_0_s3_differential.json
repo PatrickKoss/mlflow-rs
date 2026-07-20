@@ -1,0 +1,311 @@
+{
+  "bucket": "mlflow-soak",
+  "cases": 10,
+  "endpoint": "http://127.0.0.1:59090",
+  "known_delta_allowlist": [
+    "HTTP reason-phrase casing (none encountered)"
+  ],
+  "non_allowlisted_diffs": 0,
+  "python": {
+    "delete": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "get": {
+      "body": "artifact-proxy-differential",
+      "headers": {
+        "content-disposition": "attachment; filename=plain.txt",
+        "content-type": "text/plain"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "list": {
+      "body": {
+        "files": [
+          {
+            "file_size": 27,
+            "is_dir": false,
+            "path": "plain.txt"
+          }
+        ]
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_abort": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_complete": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_create": {
+      "body": {
+        "credentials": [
+          {
+            "headers": {},
+            "part_number": 1,
+            "url": {
+              "netloc": "127.0.0.1:59090",
+              "path": "/mlflow-soak/<destination>/differential/joined.bin",
+              "query": {
+                "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+                "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+                "X-Amz-Date": "<volatile>",
+                "X-Amz-Expires": "3600",
+                "X-Amz-Signature": "<volatile>",
+                "X-Amz-SignedHeaders": "host",
+                "partNumber": "1",
+                "uploadId": "<volatile>"
+              },
+              "scheme": "http"
+            }
+          },
+          {
+            "headers": {},
+            "part_number": 2,
+            "url": {
+              "netloc": "127.0.0.1:59090",
+              "path": "/mlflow-soak/<destination>/differential/joined.bin",
+              "query": {
+                "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+                "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+                "X-Amz-Date": "<volatile>",
+                "X-Amz-Expires": "3600",
+                "X-Amz-Signature": "<volatile>",
+                "X-Amz-SignedHeaders": "host",
+                "partNumber": "2",
+                "uploadId": "<volatile>"
+              },
+              "scheme": "http"
+            }
+          }
+        ],
+        "upload_id": "<upload-id>"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_get": {
+      "body": {
+        "length": 5242884,
+        "tail": "tail"
+      },
+      "headers": {
+        "content-disposition": "attachment; filename=joined.bin",
+        "content-type": "application/octet-stream"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "presigned": {
+      "body": {
+        "file_size": 27,
+        "headers": {},
+        "url": {
+          "netloc": "127.0.0.1:59090",
+          "path": "/mlflow-soak/<destination>/dir/plain.txt",
+          "query": {
+            "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+            "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+            "X-Amz-Date": "<volatile>",
+            "X-Amz-Expires": "300",
+            "X-Amz-Signature": "<volatile>",
+            "X-Amz-SignedHeaders": "host"
+          },
+          "scheme": "http"
+        }
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "presigned_get": {
+      "body": "artifact-proxy-differential",
+      "reason": "OK",
+      "status": 200
+    },
+    "put": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    }
+  },
+  "rust": {
+    "delete": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "get": {
+      "body": "artifact-proxy-differential",
+      "headers": {
+        "content-disposition": "attachment; filename=plain.txt",
+        "content-type": "text/plain"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "list": {
+      "body": {
+        "files": [
+          {
+            "file_size": 27,
+            "is_dir": false,
+            "path": "plain.txt"
+          }
+        ]
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_abort": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_complete": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_create": {
+      "body": {
+        "credentials": [
+          {
+            "headers": {},
+            "part_number": 1,
+            "url": {
+              "netloc": "127.0.0.1:59090",
+              "path": "/mlflow-soak/<destination>/differential/joined.bin",
+              "query": {
+                "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+                "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+                "X-Amz-Date": "<volatile>",
+                "X-Amz-Expires": "3600",
+                "X-Amz-Signature": "<volatile>",
+                "X-Amz-SignedHeaders": "host",
+                "partNumber": "1",
+                "uploadId": "<volatile>"
+              },
+              "scheme": "http"
+            }
+          },
+          {
+            "headers": {},
+            "part_number": 2,
+            "url": {
+              "netloc": "127.0.0.1:59090",
+              "path": "/mlflow-soak/<destination>/differential/joined.bin",
+              "query": {
+                "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+                "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+                "X-Amz-Date": "<volatile>",
+                "X-Amz-Expires": "3600",
+                "X-Amz-Signature": "<volatile>",
+                "X-Amz-SignedHeaders": "host",
+                "partNumber": "2",
+                "uploadId": "<volatile>"
+              },
+              "scheme": "http"
+            }
+          }
+        ],
+        "upload_id": "<upload-id>"
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "mpu_get": {
+      "body": {
+        "length": 5242884,
+        "tail": "tail"
+      },
+      "headers": {
+        "content-disposition": "attachment; filename=joined.bin",
+        "content-type": "application/octet-stream"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "presigned": {
+      "body": {
+        "file_size": 27,
+        "headers": {},
+        "url": {
+          "netloc": "127.0.0.1:59090",
+          "path": "/mlflow-soak/<destination>/dir/plain.txt",
+          "query": {
+            "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+            "X-Amz-Credential": "minioadmin/20260720/us-east-1/s3/aws4_request",
+            "X-Amz-Date": "<volatile>",
+            "X-Amz-Expires": "300",
+            "X-Amz-Signature": "<volatile>",
+            "X-Amz-SignedHeaders": "host"
+          },
+          "scheme": "http"
+        }
+      },
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    },
+    "presigned_get": {
+      "body": "artifact-proxy-differential",
+      "reason": "OK",
+      "status": 200
+    },
+    "put": {
+      "body": {},
+      "headers": {
+        "content-type": "application/json"
+      },
+      "reason": "OK",
+      "status": 200
+    }
+  },
+  "status": "PASS",
+  "task": "T22.0 S3 artifact proxy differential"
+}
