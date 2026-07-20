@@ -1,0 +1,76 @@
+# Upstream drift report
+
+- Sync anchor: `ee51c63ca0f541a47eb65a811b627755717da0a2`
+- Upstream ref: `upstream/master` at `9f872c10cd88eaa062e612b6726b06cedbd75084`
+- First-parent commits since anchor: **41**
+- Rust-relevant server API commits: **13**
+
+## Bucket counts
+
+| Bucket | Commits |
+|---|---:|
+| `server-api` | 13 |
+| `ui` | 9 |
+| `client-sdk` | 9 |
+| `infra` | 10 |
+
+## server-api
+
+| Commit | Subject | Files | Key paths | Mixed |
+|---|---|---:|---|---|
+| `2dd3419beb` | Never surface an empty error message from the MLflow Assistant (#24417) | 7 | `mlflow/assistant/providers/claude_code.py`<br>`mlflow/assistant/providers/codex.py`<br>`mlflow/assistant/providers/openai_compatible.py`<br>`mlflow/assistant/types.py` | `server-api`, `infra` |
+| `b7ad147433` | Update model catalog from upstream sources (#24450) | 2 | `mlflow/utils/model_catalog/gemini.json`<br>`mlflow/utils/model_catalog/vertex_ai.json` | — |
+| `14414ab000` | Add MCP registry backend and clients (#24380) | 53 | `mlflow/entities/__init__.py`<br>`mlflow/entities/mcp_access_endpoint.py`<br>`mlflow/entities/mcp_server.py`<br>`mlflow/entities/mcp_server_version.py` | `server-api`, `client-sdk`, `infra` |
+| `2efc3f8445` | [Model Registry] (1/4) Add UC-native model-registry protos (additive) (#24412) | 18 | `mlflow/protos/unity_catalog_messages.proto`<br>`mlflow/protos/unity_catalog_messages_pb2.py`<br>`mlflow/protos/unity_catalog_messages_pb2.pyi`<br>`mlflow/protos/unity_catalog_oss_messages_pb2.py` | `server-api`, `infra` |
+| `2447f582ee` | Tighten MLflow assistant prompt: scope guard + response-length discipline (#24445) | 2 | `mlflow/assistant/providers/claude_code.py`<br>`mlflow/assistant/providers/prompts.py` | — |
+| `a716c25e78` | Allow remote access to the MLflow Assistant for API-based providers (#24040) | 16 | `mlflow/assistant/providers/base.py`<br>`mlflow/assistant/providers/mlflow_gateway.py`<br>`mlflow/assistant/providers/openai_compatible.py`<br>`mlflow/server/assistant/api.py` | `server-api`, `ui`, `infra` |
+| `abb91a264d` | [Model Registry] Restore oneof on TemporaryCredentials.credentials (#24489) | 3 | `mlflow/protos/unity_catalog_messages.proto`<br>`mlflow/protos/unity_catalog_messages_pb2.py`<br>`mlflow/protos/unity_catalog_messages_pb2.pyi` | — |
+| `abc652d7c0` | Fix gateway Try-in-Browser traces rendering as raw `kvlist` data in the UI (#24400) | 7 | `mlflow/gateway/tracing_utils.py`<br>`mlflow/server/js/src/shared/web-shared/genai-traces-table/utils/TraceUtils.test.ts`<br>`mlflow/server/js/src/shared/web-shared/genai-traces-table/utils/TraceUtils.ts`<br>`mlflow/server/js/src/shared/web-shared/model-trace-explorer/ModelTrace.types.ts` | `server-api`, `ui`, `infra` |
+| `bdc41820cd` | Fix double-counted trace token usage for rollup parent spans in `SqlAlchemyStore.log_spans` (#24339) | 4 | `mlflow/store/tracking/sqlalchemy_store.py`<br>`mlflow/tracing/utils/__init__.py`<br>`tests/store/tracking/sqlalchemy_store/test_sqlalchemy_store_traces.py`<br>`tests/tracing/test_otel_loading.py` | `server-api`, `client-sdk`, `infra` |
+| `2b4acea79f` | Fix Huey orphan shutdown and periodic lock recovery (#24492) | 6 | `mlflow/server/jobs/_huey_consumer.py`<br>`mlflow/server/jobs/_job_subproc_entry.py`<br>`mlflow/server/jobs/_periodic_tasks_consumer.py`<br>`mlflow/server/jobs/utils.py` | `server-api`, `infra` |
+| `d527716388` | Harden MCP registry auth, validation, and migration edges (#24479) | 15 | `mlflow/server/auth/__init__.py`<br>`mlflow/server/auth/sqlalchemy_store.py`<br>`mlflow/store/db/workspace_migration.py`<br>`mlflow/store/tracking/mcp_server_registry/rest_mixin.py` | `server-api`, `infra` |
+| `7240aa5a27` | [1/4] Store experiment views as versioned tag envelopes (#24359) | 2 | `mlflow/server/js/src/experiment-tracking/components/experiment-page/utils/savedViewEnvelope.test.ts`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/utils/savedViewEnvelope.ts` | `server-api`, `ui` |
+| `9f872c10cd` | Update model catalog from upstream sources (#24539) | 1 | `mlflow/utils/model_catalog/fireworks_ai.json` | — |
+
+## ui
+
+| Commit | Subject | Files | Key paths | Mixed |
+|---|---|---:|---|---|
+| `efc23643b5` | Stop eagerly prefetching full neighboring traces in tracing UI (#24411) | 1 | `mlflow/server/js/src/shared/web-shared/genai-traces-table/components/GenAiEvaluationTracesReviewModal.tsx` | — |
+| `f477db8d82` | Add `deleteExperimentTagApi` redux action (#24358) | 2 | `mlflow/server/js/src/experiment-tracking/actions.test.ts`<br>`mlflow/server/js/src/experiment-tracking/actions.ts` | — |
+| `e27bfd13ed` | Fix artifact viewer crash on text files with many lines (#23899) | 4 | `mlflow/server/js/src/experiment-tracking/components/artifact-view-components/ShowArtifactTextView.enzyme.test.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/artifact-view-components/ShowArtifactTextView.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/artifact-view-components/artifactTextVirtualizedRenderer.test.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/artifact-view-components/artifactTextVirtualizedRenderer.tsx` | — |
+| `49408bd845` | Fix `Columns` dropdown anchoring on the runs table (#24419) | 3 | `mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/ExperimentViewRunsColumnSelector.test.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/ExperimentViewRunsColumnSelector.tsx`<br>`.github/actions/check-component-ids/componentId-registry.js` | `ui`, `infra` |
+| `e518ac6b36` | Support resizable table columns in evaluation datasets (#23676) | 10 | `mlflow/server/js/src/experiment-tracking/pages/experiment-evaluation-datasets-v2/components/DatasetDetailPageContent.tsx`<br>`mlflow/server/js/src/experiment-tracking/pages/experiment-evaluation-datasets-v2/components/DatasetRecordsColumnSelector.tsx`<br>`mlflow/server/js/src/experiment-tracking/pages/experiment-evaluation-datasets-v2/components/DatasetRecordsTable.tsx`<br>`mlflow/server/js/src/experiment-tracking/pages/experiment-evaluation-datasets-v2/hooks/useDatasetRecordsController.ts` | — |
+| `89c272f27d` | Fix admin permission grants failing with `FEATURE_DISABLED` when workspaces are disabled (#24383) | 4 | `mlflow/server/js/src/admin/components/CreateUserModal.test.tsx`<br>`mlflow/server/js/src/admin/components/CreateUserModal.tsx`<br>`mlflow/server/js/src/admin/components/EditAccessModal.test.tsx`<br>`mlflow/server/js/src/admin/components/EditAccessModal.tsx` | — |
+| `a00b6eef8a` | [fix] Fix runs-table column reordering before pinned anchors (#24465) | 4 | `mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/ExperimentViewRunsTable.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/agGridColumnPrefsAdapter.test.ts`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/agGridColumnPrefsAdapter.ts`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/utils/experimentPage.column-utils.tsx` | — |
+| `4ed37db380` | Fix role modal resource pickers failing with `FEATURE_DISABLED` when workspaces are disabled (#24441) | 4 | `mlflow/server/js/src/admin/components/CreateRoleModal.test.tsx`<br>`mlflow/server/js/src/admin/components/CreateRoleModal.tsx`<br>`mlflow/server/js/src/admin/components/EditRoleModal.test.tsx`<br>`mlflow/server/js/src/admin/components/EditRoleModal.tsx` | — |
+| `09bb53a480` | fix: sort tags alphabetically in runs tag multiselect dropdown (#24134) | 2 | `mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/ExperimentViewRunsControlsActionsSelectTags.test.tsx`<br>`mlflow/server/js/src/experiment-tracking/components/experiment-page/components/runs/ExperimentViewRunsControlsActionsSelectTags.tsx` | — |
+
+## client-sdk
+
+| Commit | Subject | Files | Key paths | Mixed |
+|---|---|---:|---|---|
+| `43c1455e7f` | fix: store OpenAI agent Generation span attributes under correct SpanAttributeKey constants (#24290) | 2 | `mlflow/openai/_agent_tracer.py`<br>`tests/openai/test_openai_agent_autolog.py` | `client-sdk`, `infra` |
+| `fb4ec7c36c` | Fix async trace export dropping workspace context (#24093) (#24275) | 3 | `mlflow/tracing/export/mlflow_v3.py`<br>`mlflow/tracing/trace_manager.py`<br>`tests/tracing/export/test_mlflow_v3_exporter.py` | `client-sdk`, `infra` |
+| `0a6761707c` | Fix `llama_index` streaming trace finalization and `model_dict` key handling (#24480) | 2 | `mlflow/llama_index/tracer.py`<br>`tests/llama_index/test_llama_index_tracer.py` | `client-sdk`, `infra` |
+| `24c0e4075d` | Fix keras tests for 3.15.0 optimizer name uniquification (#24484) | 4 | `mlflow/ml-package-versions.yml`<br>`mlflow/ml_package_versions.py`<br>`tests/keras/test_autolog.py`<br>`tests/keras/test_callback.py` | `client-sdk`, `infra` |
+| `c557df01e3` | Fix `MlflowSparkStudy` pruner and direction handling (#24425) | 2 | `mlflow/pyspark/optuna/study.py`<br>`tests/pyspark/optuna/test_study.py` | `client-sdk`, `infra` |
+| `3417b7e91f` | Fix `pydantic_ai` autologging to instrument the capabilities-era request path (#24482) | 6 | `mlflow/ml-package-versions.yml`<br>`mlflow/ml_package_versions.py`<br>`mlflow/pydantic_ai/__init__.py`<br>`mlflow/pydantic_ai/autolog.py` | `client-sdk`, `infra` |
+| `1e17c160ff` | Fix pytorch `pt2` export for batch-size-1 `input_example` (use `Dim.AUTO`) (#24494) | 2 | `mlflow/pytorch/__init__.py`<br>`tests/pytorch/test_pytorch_model_export.py` | `client-sdk`, `infra` |
+| `3f42cb5de1` | Fix LLM cost on autologged `ChatDatabricks` traces by preferring `ls_provider` (#24185) | 2 | `mlflow/langchain/langchain_tracer.py`<br>`tests/langchain/test_langchain_tracer.py` | `client-sdk`, `infra` |
+| `0882b28316` | Fix spurious path-traversal rejection for non-existent artifact leaf on Windows (#24521) | 2 | `mlflow/utils/uri.py`<br>`tests/utils/test_uri.py` | `client-sdk`, `infra` |
+
+## infra
+
+| Commit | Subject | Files | Key paths | Mixed |
+|---|---|---:|---|---|
+| `6c190d9532` | Track Guardrails, Phoenix, and TruLens third-party scorers in telemetry (#24437) | 5 | `mlflow/telemetry/constant.py`<br>`mlflow/telemetry/events.py`<br>`tests/genai/scorers/guardrails/test_guardrails.py`<br>`tests/genai/scorers/phoenix/test_phoenix.py` | — |
+| `f776466c1b` | Add TypeScript integration minimum-version CI gate (#24268) | 3 | `.github/workflows/typescript.yml`<br>`libs/typescript/scripts/check-min-mlflow-deps.sh`<br>`libs/typescript/scripts/known-floor-violations.txt` | — |
+| `11b01bb426` | Empty the TypeScript min-version floor-violation allowlist (#24446) | 1 | `libs/typescript/scripts/known-floor-violations.txt` | — |
+| `a3bdc7ffeb` | Update `uv.lock` (#24458) | 1 | `uv.lock` | — |
+| `20b83f7599` | Bump NaiLaOpus orchestrator ref to fix trace export (#24490) | 1 | `.github/workflows/nailaopus.yml` | — |
+| `0df8410b15` | Widen job-runner test timeouts in `tests/server/jobs/test_endpoint.py` (#24460) | 1 | `tests/server/jobs/test_endpoint.py` | — |
+| `c155845068` | Fix shap pip-requirements test for skops default serialization (#24481) | 1 | `tests/shap/test_log.py` | — |
+| `7b628bf555` | docs: update auth REST API docs to reflect new RBAC endpoints (#23965) | 1 | `docs/api_reference/source/auth/rest-api.rst` | — |
+| `f6896a4bb8` | Harden batch-processor thread-leak tests against ambient tracer-provider state (#24495) | 1 | `tests/tracing/test_provider.py` | — |
+| `53e5ddac23` | Update `uv.lock` (#24529) | 1 | `uv.lock` | — |

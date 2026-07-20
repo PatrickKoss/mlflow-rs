@@ -1,0 +1,68 @@
+name: Upstream drift radar
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history is required: a shallow clone can silently omit the recorded sync
+      # anchor and make the first-parent range incorrect.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Fetch upstream master
+        run: |
+          git remote add upstream https://github.com/mlflow/mlflow.git
+          git fetch --no-tags upstream master
+
+      - name: Analyze drift
+        run: |
+          python rust/sync/analyze_upstream.py --no-fetch --json > upstream-drift.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("upstream-drift.json").read_text())
+          Path("upstream-drift.md").write_text(payload["markdown"])
+          with Path("drift.env").open("w") as output:
+              output.write(f"COMMITS_TOTAL={payload['commits_total']}\n")
+          PY
+
+      - name: Create, update, or close drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source drift.env
+          issue_number="$(
+            gh issue list --state all --search '"Upstream drift report" in:title' \
+              --limit 10 --json number,title \
+              --jq 'map(select(.title == "Upstream drift report")) | first | .number // empty'
+          )"
+
+          if [[ "${COMMITS_TOTAL}" == "0" ]]; then
+            if [[ -n "${issue_number}" ]] && \
+              [[ "$(gh issue view "${issue_number}" --json state --jq .state)" == "OPEN" ]]; then
+              gh issue close "${issue_number}" \
+                --comment "The recorded Rust sync anchor has caught up with upstream."
+            fi
+            exit 0
+          fi
+
+          if [[ -z "${issue_number}" ]]; then
+            gh issue create --title "Upstream drift report" --body-file upstream-drift.md
+          else
+            if [[ "$(gh issue view "${issue_number}" --json state --jq .state)" == "CLOSED" ]]; then
+              gh issue reopen "${issue_number}"
+            fi
+            gh issue edit "${issue_number}" --body-file upstream-drift.md
+          fi
