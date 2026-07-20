@@ -1,0 +1,72 @@
+## 17. Open decisions & risks (Part II)
+
+| ID | Decision/Risk | Notes | Status |
+|---|---|---|---|
+| D14 | **Python-free execution model**: Rust owns wire, storage, queueing, scheduling, and all GenAI semantics. Each async job runs in a per-job `mlflow-genai-worker` Rust subprocess linked to the same `mlflow-genai` crate as the server; workers use the existing Rust HTTP APIs for store/gateway access. No Python interpreter, package, venv, sidecar, or fallback is permitted in production. The Python `mlflow.genai` SDK remains a compatible client/test oracle; OSS decorator-scorer rejection is preserved. | Keeps hard cancel/timeout/crash isolation while eliminating Python. `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=0` still disables execution explicitly; a missing native worker is a startup/deployment error, not a reduced-function fallback mode. | decided |
+| D15 | **Legacy standalone YAML gateway** (`mlflow gateway start`) stays Python and deprecated; only the DB-backed embedded gateway is ported. | The `gateway-proxy` bridge route IS ported. | decided (T15.1 pass 2026-07-18) |
+| D16 | **Full native LiteLLM compatibility**: vendor a pinned, generated manifest of every fallback provider transform, model/token limit, retry rule, tokenizer mapping, and price entry reachable in the reference release; implement it in Rust alongside the explicit gateway adapters. | No Python fallback and no fallback-only-provider exception. Manifest regeneration + semantic conformance is mandatory on upgrades because cost accuracy feeds budgets. | decided |
+| D17 | **Guardrail execution**: JudgeGuardrail executes builtin/instructions judges inline through the native `ScorerExecutor`/`JudgeRuntime`; decorator and unsupported serialized scorer kinds retain Python OSS rejection behavior. | Avoids per-request worker startup while sharing identical prompt/provider/feedback logic with async jobs; no sidecar. | decided |
+| D18 | **Assistant `/message` stream_url bug** (`api.py:154` returns `/stream/{id}`, route is `/sessions/{id}/stream`): the frontend builds its own URL, so both forms are dead letters. Propose: emit the correct form, document the deviation, and verify the UI never consumes the field. | Trivial but wire-visible. | decided (T15.1 pass 2026-07-18) |
+| D19 | **Promptlab pyfunc artifact writer**: Rust writes the MLmodel/requirements/`parameters.yaml` and `eval_results_table.json` layout directly and byte-compatibly; the artifact remains loadable by the Python client. | No runtime code execution is needed to write the static layout; cross-language load/predict is a required test. | decided |
+| D20 | **Queue replacement**: the `jobs` DB table becomes the queue (Rust polls/claims); SqliteHuey queue files are not reproduced. During migration the Python and Rust runners must never run simultaneously against the same DB (double execution); after cutover only native Rust workers exist. | Recovery improves because queue and lifecycle state cannot diverge. | decided (T15.1 pass 2026-07-18) |
+| D21 | **Auth gaps ported faithfully**: datasets, issues, and online-config routes are authenticated-only in Python (no per-resource validators). Rust replicates this with `// AUTH GAP:` markers; fixing is a coordinated two-plane change proposed post-parity. | Silently hardening would break differential parity and possibly clients. | decided (T15.1 pass 2026-07-18) |
+| D22 | **FastAPI-vs-Flask error-shape split**: gateway/assistant routes emit FastAPI-style errors (`{"detail": ...}`, 422 validation shape) while Flask routes emit MLflow proto-style errors. Rust must keep the per-route split (Part I already did this for OTLP's 422). | | accepted |
+| D23 | **Phoenix evaluators license blocker** (T15.5 audit): `arize-phoenix-evals` is Elastic-2.0 — usable as a Python runtime dependency but NOT reimplementable/vendorable into Apache-2.0 MLflow. Rust explicitly REJECTS the six Phoenix-derived scorer metrics (Hallucination, QA, Relevance, SQL, Summarization, Toxicity — all LLM judges) with a clear error that (a) names the license constraint and (b) points at the functional equivalent: MLflow builtin judges (Faithfulness≈Hallucination, RelevanceToQuery≈Relevance, Correctness≈QA, Safety≈Toxicity) or a custom instructions judge (Summarization, SQL). Client-side execution via the Python SDK + user-installed phoenix remains supported (D14 client posture). Unblock paths: upstream relicense/grant, or counsel-approved clean-room lookalikes under MLflow names (post-parity product decision). The rejection is a deliberate wire deviation → Phase 22 corpus allowlist entry. All other Part II sources are MIT/Apache-2.0 (rust/genai-inventory/licenses.md). | Six LLM-judge metrics affected; everything else unblocked. | decided — USER APPROVED 2026-07-18 ("phoenix rejection approach is fine") |
+| R4 | **Provider API drift**: the explicit gateway adapters plus the pinned LiteLLM compatibility manifest chase moving upstream APIs. | Hermetic request/stream/cost conformance pins today's behavior; manifest regeneration is required with each supported MLflow/provider snapshot (extends D8). | mitigated |
+| R5 | **SSE byte-parity is fragile** across providers/chunk boundaries. | Frame-level recorder + recorded fixtures (T15.5/T22.3); allowlist only documented deviations. | mitigated |
+| R6 | **KEK/secret ops**: AAD immutability means renames brick secrets; wrong passphrase = silent unusable gateway. | Startup probe decrypts a sentinel; runbook coverage (T22.6). | open |
+| R7 | **Native compatibility-manifest drift**: scorer JSON, third-party algorithms/prompts, LiteLLM transforms/costs, and GEPA behavior can change independently upstream. | Server and worker link the same crate version; manifests carry source versions/fingerprints and upgrades cannot merge until the complete semantic corpus is regenerated and green. | mitigated |
+| R8 | **Tool-executor sandbox parity** is security-critical (LLM-driven shell + file ops). | Port confinement checks exactly + adversarial escape suite (T20.3); restricted-mode allowlist default. | mitigated |
+| R9 | **Third-party port scope and licensing**: DeepEval/Ragas/TruLens/Phoenix and GEPA contain substantial external algorithms and prompt assets. | T15.5 records provenance/license per implementation; missing or incompatible ports block release rather than silently reducing parity. Differential fixtures pin observable behavior without copying unapproved code. | open |
+
+---
+
+## 18. Research appendix (Part II — where the facts came from)
+
+- Datasets: `mlflow/protos/{service,datasets}.proto`; handlers
+  `handlers.py:5004-5089,6852-6874,7012-7242`; store
+  `sqlalchemy_store.py:6863-7700`; models `dbmodels/models.py:1554-1848,2052`;
+  eval job `mlflow/genai/evaluation/{job,base,harness}.py`.
+- Scorers/jobs: `service.proto:1790-1867,5105-5210`;
+  `handlers.py:5443-5648,6663-6720,6981-7004`; models
+  `models.py:2125-2371`; store `sqlalchemy_store.py:2561-2888`; scorer
+  serialization `mlflow/genai/scorers/{base,scorer_utils}.py`; jobs framework
+  `mlflow/server/jobs/{__init__,utils,_job_runner,_job_subproc_entry}.py`;
+  job store `mlflow/store/jobs/sqlalchemy_store.py`; online scoring
+  `mlflow/genai/scorers/online/*`, `mlflow/genai/scorers/job.py`.
+- Native semantic-engine inventory: evaluation pipeline/result normalization/
+  aggregation/session handling in `mlflow/genai/evaluation/*` and
+  `mlflow/genai/scorers/aggregation.py`; all concrete builtins in
+  `scorers/builtin_scorers.py`; instructions and trace-tool judges in
+  `judges/{instructions_judge,adapters,tools,utils}/*`; memory execution in
+  `judges/optimizers/memalign/*`; third-party serialization, registries,
+  mappings, and execution in `scorers/{deepeval,ragas,trulens,phoenix}/*`.
+- Issues/labels/review-queues/prompt-opt: protos
+  `{issues,label_schemas,review_queues,prompt_optimization}.proto` +
+  `service.proto:1377-1590,2633-3010`; handlers
+  `handlers.py:4428-4771,4925,7359-7647,7763-7784,7854-7858`; models
+  `models.py:1154,3232,3389-3691`; detection
+  `mlflow/genai/discovery/{job,pipeline,clustering,extraction,sampling,utils}.py`;
+  optimization `mlflow/genai/optimize/{job,optimize,types,util}.py` +
+  `optimizers/{base,gepa_optimizer,metaprompt_optimizer}.py`.
+- Gateway: `mlflow/server/gateway_api.py`, `mlflow/server/fastapi_app.py`;
+  providers `mlflow/gateway/providers/*` (`base.py`, `utils.py`,
+  `provider_registry.py`); schemas `mlflow/gateway/schemas/*`,
+  `mlflow/types/chat.py`; crypto `mlflow/utils/crypto.py`; store mixin
+  `mlflow/store/tracking/gateway/{sqlalchemy_mixin,config_resolver}.py`;
+  budget `mlflow/gateway/budget.py` + `budget_tracker/*`; guardrails
+  `mlflow/gateway/{guardrails,guardrail_utils}.py`; models
+  `models.py:2398-3227`; proto `service.proto:1974-2618,5209+`; legacy app
+  `mlflow/gateway/{app,cli,runner,config}.py`.
+- Assistant/promptlab: `mlflow/server/assistant/{api,session}.py`;
+  `mlflow/assistant/{types,config}.py` + `providers/*`; stubs
+  `dev/dev_stubs/`; promptlab `handlers.py:2340-2404`,
+  `mlflow/utils/promptlab_utils.py`, `mlflow/prompt/promptlab_model.py`.
+- Archival: `mlflow/tracing/{trace_archival_config,trace_archival_service}.py`,
+  `mlflow/tracing/otel/otel_archival.py`, `mlflow/tracing/constant.py:209`;
+  store `sqlalchemy_store.py:4356-4431,5830+,6390-6437`,
+  `store/tracking/utils/trace_archival.py`; repo layer
+  `store/artifact/artifact_repo.py:427-549`; validation
+  `utils/validation.py:197-235`; CLI `mlflow/cli/__init__.py:488-696`.
+- Auth for all areas: `mlflow/server/auth/__init__.py`
+  (`:2527-2641,2593-2610,2562-2566,2196,2726-2729,3566,4479-4483`).

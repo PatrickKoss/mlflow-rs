@@ -1,0 +1,126 @@
+# Rust MLflow Server — Implementation Plan (index)
+
+**Part I** (§1–§10, Phases 0–14): everything except genai. **Part II** (§11–§18,
+Phases 15–23): the genai port — added 2026-07-17; goal is full Python-app parity
+in a Python-free Rust deployment, retiring both the Python server plane and the
+Python job-execution runtime.
+
+Status: **Part 1 COMPLETE except T9.9/T11.6 (browser-driven UI validation,
+deliberately deferred) — Phases 2–8, 10, 12, 13, and 14 done; Phase 9/11 done
+except those two UI checks. Corpus GREEN + required CI gate; client suites 0
+failures vs Rust; benchmarks, soak (67–106x memory reduction, 0 errors), and
+operational docs landed. Part 2 (genai port) Phases 15–21 + 23 COMPLETE;
+Phase 22 (compliance & cutover) is the only remaining planned work.**
+· Branch: `feature/rust-tracking-server` · Last updated: 2026-07-20
+
+**Resume notes (2026-07-18):** implementation subagents now run via Codex
+(gpt-5.6-sol); the orchestrator verifies, merges, and ticks the plan.
+
+**Open:**
+- **Part 2 (genai port)** — Phases 15, 16, AND 17 COMPLETE 2026-07-18.
+  Phase 16: all six CRUD tasks, zero new migrations (every table pre-existed
+  at head `c4a9b7d3e812`). Phase 17: runner + native worker + scheduler +
+  invoke endpoints; jobs execute Python-free end to end (fixture mode for
+  Phase 19 semantics). Phase 18 (gateway) COMPLETE 2026-07-19: all seven
+  tasks — CRUD + crypto, discovery + proxy bridge, runtime core with SSE
+  parity, full provider matrix (191/191 pinned providers, zero Python
+  fallback), traffic split + fallback, budget enforcement, guardrails.
+  Every §12 route family fully accounted (§12.8 78/0, §12.9 10/0). Replay
+  corpus 188 cases, zero non-allowlisted diffs. Phase 19 (native GenAI
+  execution) COMPLETE 2026-07-19: scorers + judges, evaluation/invoke/
+  online scoring, third-party scorer parity (T19.3+T19.3b), issue
+  discovery, prompt optimization (exact CPython MT19937 GEPA) — all five
+  tasks native, Python-free, with six pinned oracles as gates. Also
+  2026-07-19: root-caused the day's "load-correlated flakes"/ICEs to
+  leaked uvicorn reference servers exhausting the WSL2 cgroup pid limit
+  (see T19.5 note); post-cleanup full suite 1,353 tests green. Phase 20
+  (assistant + promptlab) COMPLETE 2026-07-19: all four tasks — sessions +
+  9 routes with SSE/localhost parity, CLI providers (20/20 stub-frame
+  differentials), OpenAI-compatible provider + openat2 tool sandbox with
+  all-negative escape suite, promptlab + demo routes with cross-language
+  pyfunc load. ALL §12 external route families now implemented — zero
+  planned routes remain. Phase 21 (trace archival) COMPLETE 2026-07-19,
+  **D6 CLOSED**: config/flag with 20/20 byte-identical error parity +
+  5 s-TTL cache, store paths (archive→read→delete cycle matching Python
+  on sqlite + live Postgres 16, T4.1/T4.5 stubs removed), OTLP traces.pb
+  codec with cross-language golden fixtures byte-exact both directions,
+  scheduler with same-seed decision differential (fairness = name-sort +
+  shuffle, shared per-pass budget). Phase 23 added 2026-07-19 per user
+  directive: genai perf/resource evaluation Python-vs-Rust (Phase 14
+  style, deterministic fake providers, 1k–10k+ reqs/cell). **PHASE 23
+  COMPLETE** 2026-07-20: all of T23.1–T23.5 done; soak passed the no-leak
+  RSS check both sides; final report `rust/bench/genai_eval.md` written
+  (Rust faster across families, 117.8× less RSS in soak, all regressions
+  disclosed). Per user directive (2026-07-20) work STOPS here; Phase 22
+  (compliance & cutover) is left for a separate session and must NOT be
+  auto-started. When resumed: Phase 22 (compliance & cutover; Phase 23
+  already finished, so its precondition on the Python container — T22.4
+  removes it — is satisfied).
+- **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
+  approach 2026-07-18; rejection errors must point at builtin/instructions-
+  judge equivalents (see D23 row in `part2-decisions-and-appendix.md`).
+- **T9.9 + T11.6** — browser-driven UI validation, deliberately deferred to be
+  done together.
+- Deferred seams: postgres corpus support in replay.py (TODO(T12.5) markers),
+  tracking read-replica split (T11.1 SEAM), workspaces_store.rs sqlite-only
+  tests.
+- **Rust artifact proxy lacks cloud schemes (S3/GCS/Azure)** — surfaced by
+  the T14.2 soak: `--serve-artifacts` with `--artifacts-destination s3://...`
+  is Python-only today; Rust proxies local FS only. Client-direct uploads
+  (the common client path) are unaffected. Document in the T14.3 runbook
+  (route artifact-proxy traffic to Python, or use client-direct); candidate
+  follow-up task for Part 2 era.
+- Parity backlog opened by T12.1 (see its note): #1 type-mismatch validation
+  messages (serde text vs Python's "Invalid value … for parameter …"); #3
+  HTTP reason-phrase casing (gated in tests via `MLFLOW_RUST_STORE_TESTING`).
+  #2 (auth enforcement) was closed by T9.4.
+
+This document is the master plan for reimplementing the MLflow server in Rust for all
+**non-genai** functionality: tracking, tracing, artifacts, GraphQL, **model registry,
+webhooks, auth/RBAC (incl. the admin/account UI backend), and workspaces** — fronted by
+nginx, with full wire-level feature parity against the Python implementation. GenAI
+features (gateway, scorers, evaluation, issues, label schemas, review queues, prompt
+optimization, assistant, jobs) stay on the Python server **during Part I only** —
+Part II (§11 onward) ports their wire, storage, orchestration, and execution paths;
+its end state contains no Python runtime in the server deployment (D14).
+
+It is written so that individual tasks can be picked up by other contributors/models:
+every task has a checkbox, acceptance criteria (AC), and a verification method (VER).
+All facts were derived from the current codebase (file/line references included).
+When in doubt, the Python implementation is the spec.
+
+---
+
+## How this plan is split (read this before picking up a task)
+
+The plan was one 4,100-line file; it is now split across the files below so a
+single agent can load only the parts a task needs. **The section numbering (§1–§18)
+is continuous and unchanged across files** — a cross-reference like "see §12.8" or
+"per D14" points to whatever file contains that section/decision, per the map below.
+This README is the only file that carries the live **Status/Open** block above; the
+section files carry the durable spec. When you complete a task, update **two** places:
+the task's checkbox + DONE note in its work-breakdown file, and the Status/Open block
+here if the phase-level state changed.
+
+| File | Sections | What it is | Read it when… |
+|---|---|---|---|
+| `README.md` (this file) | Status/Open + this map | Live project state + navigation | Always start here — it tells you what's done and where to look. |
+| `part1-overview.md` | §1 Goal & Non-Goals, §2 Target Architecture | Part I framing: scope, the nginx-fronted Rust architecture, tech choices | You need the big picture or the crate/deployment layout for non-genai work. |
+| `part1-api-and-contracts.md` | §3 API Surface, §4 Wire-Compat Contract, §5 Storage & DB, §6 Compliance Strategy | The Part I *spec*: every endpoint to match, must-match wire behaviors, storage/migration strategy, how compliance is proven | Implementing or verifying a Part I (non-genai) task — this is the contract you match against. |
+| `part1-work-breakdown.md` | §7 Work Breakdown (Phases 0–14) | Every Part I task with checkbox/AC/VER and DONE notes | Picking up or checking off a Part I task (T0.x–T14.x). |
+| `part1-verification-and-decisions.md` | §8 Verification quick-ref, §9 Open decisions & risks, §10 Research appendix | How to confirm the whole Part I stack works; Part I decision log; where Part I facts came from | You need the end-to-end smoke commands, a Part I decision rationale (D1–D13), or a source citation. |
+| `part2-overview.md` | Part II banner, §11 Goals & execution boundary, §12 GenAI API surface, §13 Storage & crypto, §14 Runtime engines, §15 Compliance (Part II) | The Part II *spec*: the Python-free execution boundary, every genai route (§12.1–§12.12), crypto/storage, the runtime engines to build, Part II compliance | Implementing or verifying any genai (Part II) task — start here for the genai contract, especially the §12 route inventory. |
+| `part2-work-breakdown.md` | §16 Work Breakdown (Phases 15–23) | Every Part II task with checkbox/AC/VER and DONE notes | Picking up or checking off a genai task (T15.x–T23.x). **Phase 22 lives here and is the only unstarted work.** |
+| `part2-decisions-and-appendix.md` | §17 Open decisions & risks (Part II), §18 Research appendix (Part II) | Part II decision log (D14–D23, incl. the Phoenix/D23 resolution) and Part II source citations | You need a genai decision rationale (e.g. D14 worker-subprocess model, D23 Phoenix rejection) or a Part II source citation. |
+
+### Typical reading paths
+
+- **Continue Phase 22 (the remaining work):** README (status) → `part2-work-breakdown.md` (§16, find the first `- [ ]` T22.x) → `part2-overview.md` (§12/§15 for the contract that task matches) → `part2-decisions-and-appendix.md` (any D-row the task cites).
+- **Pick up a non-genai task:** README → `part1-work-breakdown.md` (find the task) → `part1-api-and-contracts.md` (the contract) → `part1-verification-and-decisions.md` (how to verify + relevant decision).
+- **Just orienting:** README → `part1-overview.md` then `part2-overview.md`.
+
+### Conventions (unchanged from the original plan)
+
+- Every task has a checkbox (`- [ ]` / `- [x]`), **AC** (acceptance criteria), and **VER** (verification method). Completed tasks carry a **DONE** note with date, merge commit, and evidence.
+- When in doubt, the Python implementation is the spec.
+- Decisions are referenced by ID (D1, D14, …) and live in the two decision sections; risks/seams are tracked in the Open block above and the decision sections.
