@@ -9,8 +9,8 @@ use mlflow_server::trace_archival_scheduler::{
 };
 use mlflow_server::{ServerConfig, TraceArchivalConfigClock, TraceArchivalConfigProvider};
 use mlflow_store::{
-    JobStore, SpanInput, StartTraceInput, TraceTimeRange, TrackingStore, Workspace, WorkspaceStore,
-    SPANS_LOCATION_ARCHIVE_REPO, TRACE_TAG_SPANS_LOCATION,
+    Db, JobStore, SpanInput, StartTraceInput, TraceTimeRange, TrackingStore, Workspace,
+    WorkspaceStore, SPANS_LOCATION_ARCHIVE_REPO, TRACE_TAG_SPANS_LOCATION,
 };
 use mlflow_test_support::TempDb;
 
@@ -267,6 +267,62 @@ async fn overlap_lock_skips_without_advancing_the_interval_gate() {
             .tag(TRACE_TAG_SPANS_LOCATION),
         Some(SPANS_LOCATION_ARCHIVE_REPO)
     );
+}
+
+#[tokio::test]
+async fn stale_lock_from_dead_scheduler_is_taken_over() {
+    let temp = TempDb::new("trace_archival_scheduler_stale_lock").await;
+    let db = temp.connect().await;
+    let store = TrackingStore::new(db.clone(), "file:///tmp/mlruns-unused");
+    let trace_id = seed_trace(&store, "default", 11).await;
+    let directory = tempfile::tempdir().unwrap();
+    let archive_root = directory.path().join("archive");
+    std::fs::create_dir(&archive_root).unwrap();
+    let config_path = directory.path().join("config.yaml");
+    write_config(&config_path, &archive_root, true, 1);
+    let clock = Arc::new(ManualClock::default());
+    clock.set(10_000);
+    let scheduler = TraceArchivalScheduler::with_clock(
+        store.clone(),
+        None,
+        scheduler_config(&config_path, clock.clone()),
+        clock,
+    );
+
+    let _dead_holder = JobStore::new(db.clone())
+        .try_acquire_periodic_scheduler_lock(TRACE_ARCHIVAL_SCHEDULER_LOCK, 300_000)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(scheduler.run_once_at(0, 60_000).await.unwrap(), 0);
+
+    age_scheduler_lock(&db).await;
+
+    assert_eq!(scheduler.run_once_at(0, 60_000).await.unwrap(), 1);
+    assert_eq!(
+        store
+            .get_trace_info("default", &trace_id)
+            .await
+            .unwrap()
+            .tag(TRACE_TAG_SPANS_LOCATION),
+        Some(SPANS_LOCATION_ARCHIVE_REPO)
+    );
+}
+
+async fn age_scheduler_lock(db: &Db) {
+    const SQL: &str = "UPDATE jobs SET last_update_time = 0 \
+                       WHERE job_name = '__mlflow_periodic_scheduler_lock__'";
+    match db {
+        Db::Sqlite(pool) => {
+            sqlx::query(SQL).execute(pool).await.unwrap();
+        }
+        Db::Postgres(pool) => {
+            sqlx::query(SQL).execute(pool).await.unwrap();
+        }
+        Db::MySql(pool) => {
+            sqlx::query(SQL).execute(pool).await.unwrap();
+        }
+    }
 }
 
 #[tokio::test]

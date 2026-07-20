@@ -1,6 +1,8 @@
 //! T17.1 DB-queue runner lifecycle contract.
 
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,6 +11,8 @@ use mlflow_server::job_runner::{
     Exclusive, JobExecutionFuture, JobExecutionRequest, JobExecutionResult, JobExecutor,
     JobFunction, JobRunner, JobRunnerConfig,
 };
+#[cfg(target_os = "linux")]
+use mlflow_server::native_worker::NativeWorkerExecutor;
 use mlflow_store::{JobStatus, JobStore};
 use mlflow_test_support::TempDb;
 use serde_json::{json, Value};
@@ -524,4 +528,72 @@ async fn disabled_gate_does_not_recover_or_claim() {
         store.get_job(WS, &running.job_id).await.unwrap().status,
         JobStatus::Running
     );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn dropping_runner_kills_native_worker_process() {
+    let (_temp, store) = store("runner_drop_kills_worker").await;
+    let directory = tempfile::tempdir().unwrap();
+    let pid_file = directory.path().join("worker.pid");
+    let worker = directory.path().join("worker.sh");
+    std::fs::write(
+        &worker,
+        format!(
+            "#!/bin/sh\nprintf '%s' \"$$\" > '{}'\nwhile :; do sleep 1; done\n",
+            pid_file.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&worker).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&worker, permissions).unwrap();
+
+    let job = store
+        .create_job(WS, "invoke_scorer", "{}", None)
+        .await
+        .unwrap();
+    let runner = JobRunner::new(
+        store.clone(),
+        Arc::new(NativeWorkerExecutor::new(worker)),
+        vec![JobFunction::new("invoke_scorer", 1)],
+        vec![WS.to_string()],
+        config(),
+    )
+    .start()
+    .await
+    .unwrap()
+    .unwrap();
+
+    wait_for_status(&store, WS, &job.job_id, JobStatus::Running).await;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let worker_pid = loop {
+        if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+            break pid.parse::<u32>().unwrap();
+        }
+        assert!(Instant::now() < deadline, "native worker did not start");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    };
+    assert!(linux_process_is_live(worker_pid));
+
+    drop(runner);
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while linux_process_is_live(worker_pid) {
+        assert!(
+            Instant::now() < deadline,
+            "native worker {worker_pid} outlived the dropped runner"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process_is_live(pid: u32) -> bool {
+    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    stat.rsplit_once(") ")
+        .and_then(|(_, suffix)| suffix.chars().next())
+        .is_some_and(|state| state != 'Z')
 }
