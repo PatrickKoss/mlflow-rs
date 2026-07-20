@@ -48,8 +48,10 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   directive: genai perf/resource evaluation Python-vs-Rust (Phase 14
   style, deterministic fake providers, 1k–10k+ reqs/cell). T23.1 harness
   + T23.2 CRUD matrix done (56/56 cells zero-error, equivalence PASS,
-  Rust faster everywhere; see T23.2 DONE note). Next: T23.3 (jobs +
-  native-engine matrix), then T23.4, T23.5 — strictly serial — then
+  Rust faster everywhere; see T23.2 DONE note). T23.3 jobs matrix done
+  (12/12 pairs green, leak checks flat; 3 Rust-slower large-payload
+  cells noted for the report). Next: T23.4 (streaming SSE + archival),
+  then T23.5 — strictly serial — then
   Phase 22 (compliance & cutover; Phase 23 must finish before T22.4
   removes the Python container).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
@@ -3957,7 +3959,7 @@ zero live provider calls anywhere in this phase.
       recorded in summary: Python RSS spans two serial fresh-target slices;
       host lacks cgroup pids.current (field null, /proc counts recorded).
       Measured wall time 1.94 h Python + 0.10 h Rust.
-- [ ] **T23.3 Jobs + native-engine matrix**: every job kind in the worker
+- [x] **T23.3 Jobs + native-engine matrix**: every job kind in the worker
       dispatch (evaluation/invoke, scorer runs incl. online scoring, judges,
       issue detection/discovery, prompt optimization — the full
       six-kind set) driven through the public invoke/jobs APIs with the mock
@@ -3974,7 +3976,26 @@ zero live provider calls anywhere in this phase.
       states + normalized results equivalence-checked; no worker/process
       leaks; side-by-side tables.
       **VER:** harness job-matrix module + raw metrics as in T23.2.
-- [ ] **T23.4 Streaming + interactive matrix (SSE) + archival**: gateway
+      **DONE 2026-07-20** (codex agent, merged 9d3d0ce32): 12 cell pairs, all
+      equivalence PASS with 0 errors/timeouts, identical seed 2330. Kinds:
+      evaluation, scorer invoke, online trace + session scoring, issue
+      discovery, prompt optimization; judges covered via deterministic
+      serialized instructions-judge scorers (mock gateway endpoint) inside
+      evaluation + scorer cells — judges are not a separate dispatch kind.
+      Shapes: high fan-out (1k×1-row jobs), large payload (10×1k-row),
+      mixed burst (600 jobs ≫ capacity), steady drip (84 jobs ≤ capacity).
+      Fan-out jobs/min Py→Rust: evaluation 85→14,743 (173×), scorer
+      122→14,079, online 60→1,883, issue discovery 79→4,872, prompt-opt
+      20→858. Peak process-tree RSS Py 6.0–9.3 GiB vs Rust 98–370 MiB;
+      CPU-s gaps up to 10,653 vs 27. Leak checks: all five ≥1k-job cell
+      pairs flat (proc/thread/RSS non-monotonic, settled tails). Burst
+      queue-p95 Py 10.8–344 s vs Rust 0.8–44.6 s. Rust-slower cells called
+      out honestly: prompt-opt large-payload (Rust p95 509 s vs Py 178 s;
+      1.2 vs 3.4 jobs/min) and online large trace/session (p95 33.0 vs
+      18.4 s) — worker-subprocess overhead on few-large-jobs shapes; for
+      the T23.5 report. Artifacts: `rust/bench/genai/results/t23_3/` (24
+      raw JSONs + `t23_3_summary.md`), driver `rust/bench/genai/t23_3.py`.
+      Gates: ruff 0, harness tests 12 passed, route parity 372, replay 0.
       runtime (12.9) chat completions streaming AND non-streaming,
       embeddings, passthrough with guardrails + budget tracking enabled;
       assistant (12.10) sessions + streamed turns via the scripted CLI /
