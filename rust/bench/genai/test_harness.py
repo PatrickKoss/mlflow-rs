@@ -15,6 +15,15 @@ from rust.bench.genai.t23_2 import (
     sample_sequences,
     seeded_stream,
 )
+from rust.bench.genai.t23_3 import (
+    EVALUATE,
+    ISSUES,
+    JOB_KINDS,
+    OPTIMIZE,
+    SCORER,
+    _ordered_direct_specs,
+)
+from rust.bench.genai.t23_3 import cell_matrix as job_cell_matrix
 
 
 def test_mock_provider_is_byte_stable_for_every_protocol_route() -> None:
@@ -201,3 +210,75 @@ def test_t23_2_mutable_unique_names_do_not_collide_between_cells() -> None:
             for index, left in enumerate(names_by_cell)
             for right in names_by_cell[index + 1 :]
         )
+
+
+def test_t23_3_fractional_matrix_covers_every_kind_and_shape() -> None:
+    cells = job_cell_matrix(1_000, 10, 100, 20, 1_000)
+    assert len(cells) == 12
+    for kind in JOB_KINDS:
+        kind_cells = [cell for cell in cells if kind in cell.kinds]
+        assert {"high-fanout", "large-payload"} <= {cell.shape for cell in kind_cells}
+        assert any(cell.shape == "burst" for cell in kind_cells)
+        assert any(cell.shape == "steady-drip" for cell in kind_cells)
+    assert all(
+        cell.jobs_by_kind[kind] == 1_000
+        for cell in cells
+        if cell.shape == "high-fanout"
+        for kind in cell.kinds
+    )
+
+
+def test_t23_3_steady_drip_interleaves_direct_kinds_by_schedule() -> None:
+    cell = job_cell_matrix(1_000, 10, 100, 20, 1_000)[-1]
+    specs = [
+        (OPTIMIZE, 0, 2.4),
+        (EVALUATE, 1, 3.2),
+        (ISSUES, 0, 1.6),
+        (SCORER, 0, 0.8),
+        (EVALUATE, 0, 0.0),
+    ]
+    assert _ordered_direct_specs(cell, specs) == [
+        (EVALUATE, 0, 0.0),
+        (SCORER, 0, 0.8),
+        (ISSUES, 0, 1.6),
+        (OPTIMIZE, 0, 2.4),
+        (EVALUATE, 1, 3.2),
+    ]
+
+
+def test_mock_provider_generates_nested_json_schema_instances() -> None:
+    body = {
+        "messages": [{"content": "cluster", "role": "user"}],
+        "model": "fixture",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "ClusterResponse",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "groups": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "indices": {"type": "array", "items": {"type": "integer"}},
+                                },
+                                "required": ["name", "indices"],
+                            },
+                        }
+                    },
+                    "required": ["groups"],
+                },
+            },
+        },
+    }
+    with provider_server(2330) as server:
+        response = requests.post(
+            f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+            json=body,
+            timeout=5,
+        ).json()
+    content = json.loads(response["choices"][0]["message"]["content"])
+    assert content["groups"][0]["indices"] == [0]

@@ -17,6 +17,7 @@ PREFIXED_ID_RE = re.compile(r"\b[a-zA-Z]{1,5}-[0-9a-fA-F]{16,64}\b")
 STUB_SESSION_RE = re.compile(r"mlflow-dev-stub-[A-Za-z0-9-]+")
 CONCURRENT_GATEWAY_MODEL_RE = re.compile(r"\bobvious-fake-model-\d+\b")
 LOOPBACK_PORT_RE = re.compile(r"http://127\.0\.0\.1:\d+")
+PROMPT_VERSION_RE = re.compile(r"(prompts:/[^/\s]+/)\d+")
 ID_KEYS = {
     "assessment_id",
     "digest",
@@ -54,6 +55,7 @@ def _normalize_string(value: str) -> str:
     # from a different sequence even though both requests succeed identically.
     value = CONCURRENT_GATEWAY_MODEL_RE.sub("<concurrent-model-state>", value)
     value = LOOPBACK_PORT_RE.sub("http://127.0.0.1:<port>", value)
+    value = PROMPT_VERSION_RE.sub(r"\1<version>", value)
     return value.replace("/assistant/stream/<uuid>", "/assistant/sessions/<uuid>/stream")
 
 
@@ -65,7 +67,9 @@ def normalize(value: Any, key: str = "") -> Any:
         return "<id>" if value is not None else None
     if lower.endswith("_ids") and isinstance(value, list):
         return ["<id>" for _ in value]
-    if lower.endswith("_time") or any(fragment in lower for fragment in VOLATILE_FRAGMENTS):
+    if lower.endswith(("_time", "_seconds")) or any(
+        fragment in lower for fragment in VOLATILE_FRAGMENTS
+    ):
         return "<time>" if value is not None else None
     if isinstance(value, dict):
         normalized = {

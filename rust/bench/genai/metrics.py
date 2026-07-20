@@ -268,6 +268,7 @@ def process_tree(root_pid: int) -> list[int]:
 
 def process_tree_resources(root_pid: int) -> dict[str, Any]:
     total_kib = 0
+    thread_count = 0
     utime_ticks = 0
     stime_ticks = 0
     pids = process_tree(root_pid)
@@ -276,7 +277,8 @@ def process_tree_resources(root_pid: int) -> dict[str, Any]:
             for line in Path(f"/proc/{pid}/status").read_text().splitlines():
                 if line.startswith("VmRSS:"):
                     total_kib += int(line.split()[1])
-                    break
+                elif line.startswith("Threads:"):
+                    thread_count += int(line.split()[1])
             rest = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
             utime_ticks += int(rest[11])
             stime_ticks += int(rest[12])
@@ -286,6 +288,7 @@ def process_tree_resources(root_pid: int) -> dict[str, Any]:
     return {
         "rss_bytes": total_kib * 1024,
         "process_count": len(pids),
+        "thread_count": thread_count,
         "utime_seconds": utime_ticks / ticks_per_second,
         "stime_seconds": stime_ticks / ticks_per_second,
     }
