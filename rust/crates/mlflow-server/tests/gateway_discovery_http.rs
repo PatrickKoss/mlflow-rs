@@ -268,6 +268,21 @@ async fn discovery_json_matches_python_with_empty_and_populated_gateway_stores()
                 "3e2d61fb17c531b0154e49c2e88560ca855a8fed05dcf7bd29a89367aaf99c87",
             ),
             (
+                "/ajax-api/3.0/mlflow/gateway/supported-models?provider=gemini",
+                17656,
+                "bf296d2dd1875507aa3ac20c90f987382c0c0503e15803278a4d24e38186e660",
+            ),
+            (
+                "/ajax-api/3.0/mlflow/gateway/supported-models?provider=vertex_ai",
+                51670,
+                "9b0304fffe90f94204fdd87ac4091cb6d226605e2ae3e48bdf44a3300bed10c1",
+            ),
+            (
+                "/ajax-api/3.0/mlflow/gateway/supported-models?provider=fireworks_ai",
+                123166,
+                "581a231253505376fa30740a8da58002c8ad369d204710522cf4a752ec359ff9",
+            ),
+            (
                 "/ajax-api/3.0/mlflow/gateway/provider-config?provider=openai",
                 328,
                 "4b82bd5af08109b7a5d716174a1f19478b4b13a2c84f357732cb2208e900c61d",

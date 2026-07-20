@@ -12,6 +12,24 @@ cases:
     query: {provider: openai}
     expect_status: 200
 
+  - name: gateway_supported_models_gemini
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-models
+    query: {provider: gemini}
+    expect_status: 200
+
+  - name: gateway_supported_models_vertex_ai
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-models
+    query: {provider: vertex_ai}
+    expect_status: 200
+
+  - name: gateway_supported_models_fireworks_ai
+    method: GET
+    path: /ajax-api/3.0/mlflow/gateway/supported-models
+    query: {provider: fireworks_ai}
+    expect_status: 200
+
   - name: gateway_supported_models_empty_filter
     method: GET
     path: /ajax-api/3.0/mlflow/gateway/supported-models

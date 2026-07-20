@@ -1435,6 +1435,51 @@
       "strategy": "corpus recorder needed",
       "tests": []
     },
+    "module:mlflow/genai/mcp_servers.py": {
+      "strategy": "existing_python_tests",
+      "tests": [
+        "tests/genai/test_mcp_servers.py::test_client_create_mcp_server_version",
+        "tests/genai/test_mcp_servers.py::test_client_create_mcp_server_version_does_not_create_endpoints",
+        "tests/genai/test_mcp_servers.py::test_create_and_get_mcp_access_endpoint",
+        "tests/genai/test_mcp_servers.py::test_create_mcp_access_endpoint_via_alias",
+        "tests/genai/test_mcp_servers.py::test_delete_mcp_access_endpoint",
+        "tests/genai/test_mcp_servers.py::test_delete_mcp_server",
+        "tests/genai/test_mcp_servers.py::test_delete_mcp_server_rejects_active_version",
+        "tests/genai/test_mcp_servers.py::test_delete_mcp_server_version",
+        "tests/genai/test_mcp_servers.py::test_delete_mcp_server_version_cascades_to_endpoints",
+        "tests/genai/test_mcp_servers.py::test_function_exported",
+        "tests/genai/test_mcp_servers.py::test_get_latest_mcp_server_version",
+        "tests/genai/test_mcp_servers.py::test_get_mcp_server",
+        "tests/genai/test_mcp_servers.py::test_get_mcp_server_version",
+        "tests/genai/test_mcp_servers.py::test_get_mcp_server_version_by_alias",
+        "tests/genai/test_mcp_servers.py::test_get_mcp_server_version_by_alias_latest",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_and_get_server",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_server_rejects_risky_icons",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_server_rejects_too_many_icons",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_non_initial_statuses",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_risky_server_json_icons",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_too_many_tools",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_update_version_rejects_risky_tool_icons",
+        "tests/genai/test_mcp_servers.py::test_mlflow_client_version_lifecycle",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_accepts_null_remotes",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_auto_creates_parent_server",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_creates_endpoints_for_active_status",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_creates_endpoints_from_remotes",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_defaults_null_remote_type_to_streamable_http",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_explicit_source_preserved",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_file_uri",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_invalid_scheme",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file_invalid_json",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file_not_found",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sanitizes_ipv6_source",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sanitizes_source",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sets_source_from_url",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_no_endpoints_when_flag_false",
+        "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_auto_endpoints_for_inactive_initial_status"
+      ]
+    },
     "module:mlflow/genai/optimize/__init__.py": {
       "strategy": "existing_python_tests",
       "tests": [
@@ -1997,6 +2042,7 @@
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_input_priority",
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_pass",
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_source_id",
+        "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_tracking_class_name",
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_custom_kwargs",
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_trace",
         "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_trace_failure"
@@ -2171,7 +2217,8 @@
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_negative_label",
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_none_explanation",
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_register_blocked_on_databricks",
-        "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_serialization_round_trip"
+        "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_serialization_round_trip",
+        "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_tracking_class_name"
       ]
     },
     "module:mlflow/genai/scorers/phoenix/models.py": {
@@ -2213,6 +2260,7 @@
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_none_explanation",
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_register_blocked_on_databricks",
         "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_serialization_round_trip",
+        "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_tracking_class_name",
         "tests/genai/scorers/phoenix/test_utils.py::test_check_phoenix_installed_raises_without_phoenix",
         "tests/genai/scorers/phoenix/test_utils.py::test_map_scorer_inputs_basic",
         "tests/genai/scorers/phoenix/test_utils.py::test_map_scorer_inputs_expected_response_priority",
@@ -2399,7 +2447,8 @@
         "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_none_reasons",
         "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_provider_is_real_instance",
         "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_register_blocked_on_databricks",
-        "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_serialization_round_trip"
+        "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_serialization_round_trip",
+        "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_tracking_class_name"
       ]
     },
     "module:mlflow/genai/scorers/trulens/models.py": {
@@ -2761,6 +2810,7 @@
     "surface:archival": {
       "strategy": "existing_python_tests",
       "tests": [
+        "tests/server/jobs/test_trace_archival_jobs.py::test_periodic_tasks_consumer_enables_flush_locks",
         "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_config_invalid",
         "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_configured",
         "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_unconfigured",
@@ -2793,6 +2843,7 @@
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_passes_session_id_for_resume",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_skips_rate_limit_event",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_streams_assistant_messages",
+        "tests/assistant/providers/test_claude_code_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_yields_error_when_claude_not_found",
         "tests/assistant/providers/test_claude_code_provider.py::test_build_usage_event_sums_cache_tokens",
         "tests/assistant/providers/test_claude_code_provider.py::test_check_connection_raises_not_authenticated_for_auth_error",
@@ -2809,6 +2860,7 @@
         "tests/assistant/providers/test_codex_provider.py::test_astream_saves_and_clears_process_pid",
         "tests/assistant/providers/test_codex_provider.py::test_astream_sends_prompt_via_stdin",
         "tests/assistant/providers/test_codex_provider.py::test_astream_skips_model_flag_when_default",
+        "tests/assistant/providers/test_codex_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_agent_message_text",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_error_on_nonzero_exit",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_error_when_codex_not_found",
@@ -2862,9 +2914,7 @@
         "tests/assistant/test_config.py::test_update_provider_creates_entry_when_missing",
         "tests/assistant/test_config.py::test_update_provider_does_not_deselect_existing",
         "tests/assistant/test_config.py::test_update_provider_preserves_permissions",
-        "tests/assistant/test_config.py::test_update_provider_preserves_selection",
-        "tests/assistant/test_config.py::test_update_provider_updates_api_key",
-        "tests/assistant/test_skill_installer.py::test_install_skills_copies_to_destination"
+        "tests/assistant/test_config.py::test_update_provider_preserves_selection"
       ]
     },
     "surface:datasets": {
@@ -3048,6 +3098,7 @@
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_passes_session_id_for_resume",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_skips_rate_limit_event",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_streams_assistant_messages",
+        "tests/assistant/providers/test_claude_code_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
         "tests/assistant/providers/test_claude_code_provider.py::test_astream_yields_error_when_claude_not_found",
         "tests/assistant/providers/test_claude_code_provider.py::test_build_usage_event_sums_cache_tokens",
         "tests/assistant/providers/test_claude_code_provider.py::test_check_connection_raises_not_authenticated_for_auth_error",
@@ -3064,6 +3115,7 @@
         "tests/assistant/providers/test_codex_provider.py::test_astream_saves_and_clears_process_pid",
         "tests/assistant/providers/test_codex_provider.py::test_astream_sends_prompt_via_stdin",
         "tests/assistant/providers/test_codex_provider.py::test_astream_skips_model_flag_when_default",
+        "tests/assistant/providers/test_codex_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_agent_message_text",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_error_on_nonzero_exit",
         "tests/assistant/providers/test_codex_provider.py::test_astream_yields_error_when_codex_not_found",
@@ -3117,9 +3169,7 @@
         "tests/entities/test_gateway_endpoint.py::test_endpoint_creation_full",
         "tests/entities/test_gateway_endpoint.py::test_endpoint_creation_minimal",
         "tests/entities/test_gateway_endpoint.py::test_endpoint_model_mapping_creation",
-        "tests/entities/test_gateway_endpoint.py::test_endpoint_model_mapping_proto_round_trip",
-        "tests/entities/test_gateway_endpoint.py::test_endpoint_model_mapping_without_model_definition",
-        "tests/entities/test_gateway_endpoint.py::test_endpoint_proto_round_trip"
+        "tests/entities/test_gateway_endpoint.py::test_endpoint_model_mapping_proto_round_trip"
       ]
     },
     "surface:issues": {
@@ -3232,6 +3282,10 @@
         "tests/server/jobs/test_jobs.py::test_exclusive_job_allows_different_params",
         "tests/server/jobs/test_jobs.py::test_exclusive_job_skips_duplicate",
         "tests/server/jobs/test_jobs.py::test_exec_job_fails_job_on_unexpected_error",
+        "tests/server/jobs/test_jobs.py::test_exec_job_in_subproc_passes_original_parent_pid",
+        "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_exits_when_already_orphaned",
+        "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_exits_when_parent_pid_changes",
+        "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_ignores_invalid_parent_pid_env",
         "tests/server/jobs/test_jobs.py::test_job_function_without_decorator",
         "tests/server/jobs/test_jobs.py::test_job_json_input_output",
         "tests/server/jobs/test_jobs.py::test_job_queue_parallelism",
@@ -3243,17 +3297,13 @@
         "tests/server/jobs/test_jobs.py::test_job_with_python_env",
         "tests/server/jobs/test_jobs.py::test_list_job_pagination",
         "tests/server/jobs/test_jobs.py::test_reenqueued_jobs_respect_workspace_disabled",
+        "tests/server/jobs/test_jobs.py::test_start_huey_consumer_proc_passes_original_parent_pid",
         "tests/server/jobs/test_jobs.py::test_start_job_is_atomic",
         "tests/server/jobs/test_jobs.py::test_submit_job_bad_call",
         "tests/server/jobs/test_jobs.py::test_submit_job_with_extra_envs",
         "tests/server/jobs/test_jobs.py::test_submit_job_without_extra_envs",
         "tests/server/jobs/test_jobs.py::test_submit_job_workspace_propagation",
-        "tests/server/jobs/test_jobs.py::test_submit_jobs_from_multi_processes",
-        "tests/server/jobs/test_jobs.py::test_subproc_entry_telemetry",
-        "tests/server/jobs/test_jobs.py::test_update_status_details",
-        "tests/server/jobs/test_jobs.py::test_update_status_details_merges_with_existing",
-        "tests/server/jobs/test_jobs.py::test_update_status_details_on_nonexistent_job",
-        "tests/server/jobs/test_jobs_workspace.py::test_create_job_initializes_metadata_as_none"
+        "tests/server/jobs/test_jobs.py::test_submit_jobs_from_multi_processes"
       ]
     },
     "surface:label_schemas": {
@@ -20525,6 +20575,557 @@
     },
     {
       "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:1:<module>",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": null,
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:1",
+      "symbol_kind": "module",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:29:_parse_enum",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "_parse_enum",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:29",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:41:_validate_endpoint_remotes",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "_validate_endpoint_remotes",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:41",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:71:register_mcp_server",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "register_mcp_server",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:71",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:150:_sanitize_url",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "_sanitize_url",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:150",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:160:_read_server_json_local",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "_read_server_json_local",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:160",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:177:_read_server_json_remote",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "_read_server_json_remote",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:177",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:204:register_mcp_server_from_url",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "register_mcp_server_from_url",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:204",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:256:get_mcp_server",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "get_mcp_server",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:256",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:271:search_mcp_servers",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "search_mcp_servers",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:271",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:313:update_mcp_server",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "update_mcp_server",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:313",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:343:delete_mcp_server",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_server",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:343",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:359:get_mcp_server_version",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "get_mcp_server_version",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:359",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:364:get_mcp_server_version_by_alias",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "get_mcp_server_version_by_alias",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:364",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:381:get_latest_mcp_server_version",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "get_latest_mcp_server_version",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:381",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:398:search_mcp_server_versions",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "search_mcp_server_versions",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:398",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:431:update_mcp_server_version",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "update_mcp_server_version",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:431",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:465:delete_mcp_server_version",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_server_version",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:465",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:473:create_mcp_access_endpoint",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "create_mcp_access_endpoint",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:473",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:518:get_mcp_access_endpoint",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "get_mcp_access_endpoint",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:518",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:523:search_mcp_access_endpoints",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "search_mcp_access_endpoints",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:523",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:562:update_mcp_access_endpoint",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "update_mcp_access_endpoint",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:562",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:598:delete_mcp_access_endpoint",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_access_endpoint",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:598",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:606:set_mcp_server_tag",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "set_mcp_server_tag",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:606",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:622:delete_mcp_server_tag",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_server_tag",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:622",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:627:set_mcp_server_version_tag",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "set_mcp_server_version_tag",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:627",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:644:delete_mcp_server_version_tag",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_server_version_tag",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:644",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:652:set_mcp_server_alias",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "set_mcp_server_alias",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:652",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
+      "classification": "client_only",
+      "classification_reason": "public Python SDK helper with no MLflow server/job call root",
+      "fixture_oracle": {
+        "oracle_group": "module:mlflow/genai/mcp_servers.py",
+        "strategy": "existing_python_tests"
+      },
+      "id": "genai:mlflow/genai/mcp_servers.py:667:delete_mcp_server_alias",
+      "module": "mlflow.genai.mcp_servers",
+      "native_owner_crate": null,
+      "qualname": "delete_mcp_server_alias",
+      "reachability_evidence": "mlflow/genai/mcp_servers.py:1",
+      "scope": "mlflow/genai",
+      "source": "mlflow/genai/mcp_servers.py:667",
+      "symbol_kind": "function",
+      "task": null,
+      "tier": null
+    },
+    {
+      "ambiguity": null,
       "classification": "server_reachable",
       "classification_reason": "prompt optimization job",
       "fixture_oracle": {
@@ -29865,7 +30466,7 @@
       "module": "mlflow.genai.scorers.online.__init__",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/__init__.py:1",
       "symbol_kind": "module",
@@ -29885,7 +30486,7 @@
       "module": "mlflow.genai.scorers.online.constants",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/constants.py:1",
       "symbol_kind": "module",
@@ -29905,7 +30506,7 @@
       "module": "mlflow.genai.scorers.online.entities",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/entities.py:1",
       "symbol_kind": "module",
@@ -29925,7 +30526,7 @@
       "module": "mlflow.genai.scorers.online.entities",
       "native_owner_crate": "worker",
       "qualname": "OnlineScoringConfig",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/entities.py:12",
       "symbol_kind": "class",
@@ -29945,7 +30546,7 @@
       "module": "mlflow.genai.scorers.online.entities",
       "native_owner_crate": "worker",
       "qualname": "OnlineScoringConfig.to_dict",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/entities.py:27",
       "symbol_kind": "method",
@@ -29965,7 +30566,7 @@
       "module": "mlflow.genai.scorers.online.entities",
       "native_owner_crate": "worker",
       "qualname": "OnlineScorer",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/entities.py:40",
       "symbol_kind": "class",
@@ -29985,7 +30586,7 @@
       "module": "mlflow.genai.scorers.online.entities",
       "native_owner_crate": "worker",
       "qualname": "CompletedSession",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/entities.py:55",
       "symbol_kind": "class",
@@ -30004,7 +30605,7 @@
       "module": "mlflow.genai.scorers.online.sampler",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/sampler.py:1",
       "symbol_kind": "module",
@@ -30023,7 +30624,7 @@
       "module": "mlflow.genai.scorers.online.sampler",
       "native_owner_crate": "worker",
       "qualname": "OnlineScorerSampler",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/sampler.py:16",
       "symbol_kind": "class",
@@ -30042,7 +30643,7 @@
       "module": "mlflow.genai.scorers.online.sampler",
       "native_owner_crate": "worker",
       "qualname": "OnlineScorerSampler.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/sampler.py:25",
       "symbol_kind": "method",
@@ -30061,7 +30662,7 @@
       "module": "mlflow.genai.scorers.online.sampler",
       "native_owner_crate": "worker",
       "qualname": "OnlineScorerSampler.group_scorers_by_filter",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/sampler.py:39",
       "symbol_kind": "method",
@@ -30080,7 +30681,7 @@
       "module": "mlflow.genai.scorers.online.sampler",
       "native_owner_crate": "worker",
       "qualname": "OnlineScorerSampler.sample",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/sampler.py:57",
       "symbol_kind": "method",
@@ -30099,7 +30700,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:1",
       "symbol_kind": "module",
@@ -30118,7 +30719,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringCheckpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:20",
       "symbol_kind": "class",
@@ -30137,7 +30738,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringCheckpoint.to_json",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:24",
       "symbol_kind": "method",
@@ -30156,7 +30757,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringCheckpoint.from_json",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:28",
       "symbol_kind": "method",
@@ -30175,7 +30776,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringTimeWindow",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:34",
       "symbol_kind": "class",
@@ -30194,7 +30795,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionCheckpointManager",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:39",
       "symbol_kind": "class",
@@ -30213,7 +30814,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionCheckpointManager.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:40",
       "symbol_kind": "method",
@@ -30232,7 +30833,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionCheckpointManager.get_checkpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:44",
       "symbol_kind": "method",
@@ -30251,7 +30852,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionCheckpointManager.persist_checkpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:62",
       "symbol_kind": "method",
@@ -30270,7 +30871,7 @@
       "module": "mlflow.genai.scorers.online.session_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionCheckpointManager.calculate_time_window",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_checkpointer.py:74",
       "symbol_kind": "method",
@@ -30289,7 +30890,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:1",
       "symbol_kind": "module",
@@ -30308,7 +30909,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "SessionScoringTask",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:29",
       "symbol_kind": "class",
@@ -30327,7 +30928,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:34",
       "symbol_kind": "class",
@@ -30346,7 +30947,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:56",
       "symbol_kind": "method",
@@ -30365,7 +30966,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor.create",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:71",
       "symbol_kind": "method",
@@ -30384,7 +30985,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor.process_sessions",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:96",
       "symbol_kind": "method",
@@ -30403,7 +31004,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor._fetch_and_filter_completed_sessions",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:144",
       "symbol_kind": "method",
@@ -30422,7 +31023,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor._clean_up_old_assessments",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:211",
       "symbol_kind": "method",
@@ -30441,7 +31042,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor._execute_session_scoring",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:249",
       "symbol_kind": "method",
@@ -30460,7 +31061,7 @@
       "module": "mlflow.genai.scorers.online.session_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineSessionScoringProcessor._score_session",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/session_processor.py:278",
       "symbol_kind": "method",
@@ -30479,7 +31080,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:1",
       "symbol_kind": "module",
@@ -30498,7 +31099,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringCheckpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:17",
       "symbol_kind": "class",
@@ -30517,7 +31118,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringCheckpoint.to_json",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:21",
       "symbol_kind": "method",
@@ -30536,7 +31137,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringCheckpoint.from_json",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:25",
       "symbol_kind": "method",
@@ -30555,7 +31156,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringTimeWindow",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:31",
       "symbol_kind": "class",
@@ -30574,7 +31175,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceCheckpointManager",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:36",
       "symbol_kind": "class",
@@ -30593,7 +31194,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceCheckpointManager.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:37",
       "symbol_kind": "method",
@@ -30612,7 +31213,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceCheckpointManager.get_checkpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:41",
       "symbol_kind": "method",
@@ -30631,7 +31232,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceCheckpointManager.persist_checkpoint",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:58",
       "symbol_kind": "method",
@@ -30650,7 +31251,7 @@
       "module": "mlflow.genai.scorers.online.trace_checkpointer",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceCheckpointManager.calculate_time_window",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_checkpointer.py:70",
       "symbol_kind": "method",
@@ -30669,7 +31270,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:1",
       "symbol_kind": "module",
@@ -30688,7 +31289,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceLoader",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:14",
       "symbol_kind": "class",
@@ -30707,7 +31308,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceLoader.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:15",
       "symbol_kind": "method",
@@ -30726,7 +31327,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceLoader.fetch_traces",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:18",
       "symbol_kind": "method",
@@ -30745,7 +31346,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceLoader._fetch_traces_from_artifact_repo",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:49",
       "symbol_kind": "method",
@@ -30764,7 +31365,7 @@
       "module": "mlflow.genai.scorers.online.trace_loader",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceLoader.fetch_trace_infos_in_range",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_loader.py:91",
       "symbol_kind": "method",
@@ -30783,7 +31384,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": null,
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:1",
       "symbol_kind": "module",
@@ -30802,7 +31403,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "TraceScoringTask",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:24",
       "symbol_kind": "class",
@@ -30821,7 +31422,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:32",
       "symbol_kind": "class",
@@ -30840,7 +31441,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor.__init__",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:35",
       "symbol_kind": "method",
@@ -30859,7 +31460,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor.create",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:48",
       "symbol_kind": "method",
@@ -30878,7 +31479,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor.process_traces",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:72",
       "symbol_kind": "method",
@@ -30897,7 +31498,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor._build_scoring_tasks",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:128",
       "symbol_kind": "method",
@@ -30916,7 +31517,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor._log_error_assessments",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:200",
       "symbol_kind": "method",
@@ -30935,7 +31536,7 @@
       "module": "mlflow.genai.scorers.online.trace_processor",
       "native_owner_crate": "worker",
       "qualname": "OnlineTraceScoringProcessor._execute_scoring",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:776",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:789",
       "scope": "mlflow/genai",
       "source": "mlflow/genai/scorers/online/trace_processor.py:237",
       "symbol_kind": "method",
@@ -40116,9 +40717,9 @@
         "/ajax-api/3.0/mlflow/assistant/message"
       ],
       "qualname": "assistant_message",
-      "reachability_evidence": "mlflow/server/assistant/api.py:122",
+      "reachability_evidence": "mlflow/server/assistant/api.py:188",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:122",
+      "source": "mlflow/server/assistant/api.py:188",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40139,9 +40740,9 @@
         "/ajax-api/3.0/mlflow/assistant/sessions/{id}/stream"
       ],
       "qualname": "assistant_stream",
-      "reachability_evidence": "mlflow/server/assistant/api.py:158",
+      "reachability_evidence": "mlflow/server/assistant/api.py:225",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:158",
+      "source": "mlflow/server/assistant/api.py:225",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40162,9 +40763,9 @@
         "/ajax-api/3.0/mlflow/assistant/sessions/{id}"
       ],
       "qualname": "assistant_cancel",
-      "reachability_evidence": "mlflow/server/assistant/api.py:239",
+      "reachability_evidence": "mlflow/server/assistant/api.py:306",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:239",
+      "source": "mlflow/server/assistant/api.py:306",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40185,9 +40786,9 @@
         "/ajax-api/3.0/mlflow/assistant/sessions/{id}/permission"
       ],
       "qualname": "assistant_permission",
-      "reachability_evidence": "mlflow/server/assistant/api.py:272",
+      "reachability_evidence": "mlflow/server/assistant/api.py:340",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:272",
+      "source": "mlflow/server/assistant/api.py:340",
       "symbol_kind": "http_route",
       "task": "T20.3",
       "tier": "B"
@@ -40208,9 +40809,9 @@
         "/ajax-api/3.0/mlflow/assistant/providers/{provider}/health"
       ],
       "qualname": "assistant_health",
-      "reachability_evidence": "mlflow/server/assistant/api.py:299",
+      "reachability_evidence": "mlflow/server/assistant/api.py:368",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:299",
+      "source": "mlflow/server/assistant/api.py:368",
       "symbol_kind": "http_route",
       "task": "T20.2",
       "tier": "B"
@@ -40231,9 +40832,9 @@
         "/ajax-api/3.0/mlflow/assistant/config"
       ],
       "qualname": "assistant_config_get",
-      "reachability_evidence": "mlflow/server/assistant/api.py:320",
+      "reachability_evidence": "mlflow/server/assistant/api.py:390",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:320",
+      "source": "mlflow/server/assistant/api.py:390",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40254,9 +40855,9 @@
         "/ajax-api/3.0/mlflow/assistant/config"
       ],
       "qualname": "assistant_config_put",
-      "reachability_evidence": "mlflow/server/assistant/api.py:335",
+      "reachability_evidence": "mlflow/server/assistant/api.py:416",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:335",
+      "source": "mlflow/server/assistant/api.py:416",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40277,9 +40878,9 @@
         "/ajax-api/3.0/mlflow/assistant/skills/install"
       ],
       "qualname": "assistant_skills_install",
-      "reachability_evidence": "mlflow/server/assistant/api.py:406",
+      "reachability_evidence": "mlflow/server/assistant/api.py:493",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:406",
+      "source": "mlflow/server/assistant/api.py:493",
       "symbol_kind": "http_route",
       "task": "T20.1",
       "tier": "B"
@@ -40300,9 +40901,9 @@
         "/ajax-api/3.0/mlflow/assistant/providers/{provider}/models"
       ],
       "qualname": "assistant_models",
-      "reachability_evidence": "mlflow/server/assistant/api.py:467",
+      "reachability_evidence": "mlflow/server/assistant/api.py:555",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/assistant/api.py:467",
+      "source": "mlflow/server/assistant/api.py:555",
       "symbol_kind": "http_route",
       "task": "T20.2",
       "tier": "B"
@@ -40386,9 +40987,9 @@
       "native_owner_crate": "worker",
       "paths": [],
       "qualname": "online_scoring_scheduler",
-      "reachability_evidence": "mlflow/server/jobs/utils.py:774",
+      "reachability_evidence": "mlflow/server/jobs/utils.py:787",
       "scope": "part_ii_surface",
-      "source": "mlflow/server/jobs/utils.py:774",
+      "source": "mlflow/server/jobs/utils.py:787",
       "symbol_kind": "runtime_component",
       "task": "T17.3",
       "tier": "C"
@@ -40470,9 +41071,9 @@
       "native_owner_crate": "mlflow-server",
       "paths": [],
       "qualname": "assistant_cli_providers",
-      "reachability_evidence": "mlflow/assistant/providers/claude_code.py:251",
+      "reachability_evidence": "mlflow/assistant/providers/claude_code.py:330",
       "scope": "part_ii_surface",
-      "source": "mlflow/assistant/providers/claude_code.py:251",
+      "source": "mlflow/assistant/providers/claude_code.py:330",
       "symbol_kind": "runtime_component",
       "task": "T20.2",
       "tier": "B"
@@ -40533,9 +41134,9 @@
       "native_owner_crate": "mlflow-store",
       "paths": [],
       "qualname": "archival_store",
-      "reachability_evidence": "mlflow/store/tracking/sqlalchemy_store.py:5854",
+      "reachability_evidence": "mlflow/store/tracking/sqlalchemy_store.py:5948",
       "scope": "part_ii_surface",
-      "source": "mlflow/store/tracking/sqlalchemy_store.py:5854",
+      "source": "mlflow/store/tracking/sqlalchemy_store.py:5948",
       "symbol_kind": "runtime_component",
       "task": "T21.2",
       "tier": "B"
@@ -40672,7 +41273,7 @@
   "schema_version": 1,
   "summary": {
     "classification_counts": {
-      "client_only": 346,
+      "client_only": 375,
       "dead": 0,
       "server_reachable": 1546
     },
@@ -40718,8 +41319,8 @@
       "T21.4": 1
     },
     "test_classification_counts": {
-      "client_only": 183,
-      "python_internal": 3344,
+      "client_only": 184,
+      "python_internal": 3433,
       "server_reachable": 35
     },
     "tier_counts": {
@@ -40742,7 +41343,7 @@
             "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which.",
             "AST exclusion: private Python attribute access ClaudeCodeProvider._build_usage_event."
           ],
-          "tests": 13
+          "tests": 14
         }
       ],
       "path": "tests/assistant/providers/test_claude_code_provider.py"
@@ -40755,7 +41356,7 @@
             "AST exclusion: patches MLflow implementation mlflow.assistant.config.CONFIG_PATH.",
             "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
           ],
-          "tests": 18
+          "tests": 19
         }
       ],
       "path": "tests/assistant/providers/test_codex_provider.py"
@@ -40848,6 +41449,18 @@
         }
       ],
       "path": "tests/assistant/test_tool_executor.py"
+    },
+    {
+      "classifications": [
+        {
+          "classification": "python_internal",
+          "reasons": [
+            "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
+          ],
+          "tests": 1
+        }
+      ],
+      "path": "tests/assistant/test_types.py"
     },
     {
       "classifications": [
@@ -41454,7 +42067,7 @@
             "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig.",
             "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
           ],
-          "tests": 40
+          "tests": 41
         }
       ],
       "path": "tests/gateway/test_tracing_utils.py"
@@ -42444,7 +43057,7 @@
           "reasons": [
             "Explicit SDK-only family: optional Guardrails client integration."
           ],
-          "tests": 10
+          "tests": 11
         }
       ],
       "path": "tests/genai/scorers/guardrails/test_guardrails.py"
@@ -42575,7 +43188,7 @@
             "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model.",
             "AST exclusion: private Python attribute access scorer._evaluator."
           ],
-          "tests": 10
+          "tests": 11
         }
       ],
       "path": "tests/genai/scorers/phoenix/test_phoenix.py"
@@ -42879,7 +43492,7 @@
             "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider.",
             "AST exclusion: private Python attribute access scorer._provider."
           ],
-          "tests": 14
+          "tests": 15
         }
       ],
       "path": "tests/genai/scorers/trulens/test_trulens.py"
@@ -42989,6 +43602,18 @@
         }
       ],
       "path": "tests/genai/test_git_versioning.py"
+    },
+    {
+      "classifications": [
+        {
+          "classification": "python_internal",
+          "reasons": [
+            "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+          ],
+          "tests": 62
+        }
+      ],
+      "path": "tests/genai/test_mcp_servers.py"
     },
     {
       "classifications": [
@@ -43127,16 +43752,21 @@
         {
           "classification": "python_internal",
           "reasons": [
-            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._AssistantAPIRoute.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._enforce_remote_access.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._provider_allows_remote_access.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router.",
             "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.SessionManager.",
             "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.save_process_pid.",
             "AST exclusion: direct Python implementation import mlflow.server.assistant.api.",
             "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.Path.exists.",
             "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.Path.expanduser.",
+            "AST exclusion: patches MLflow implementation mlflow.server.assistant.api._get_selected_provider.",
             "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.install_skills.",
             "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
           ],
-          "tests": 36
+          "tests": 51
         }
       ],
       "path": "tests/server/assistant/test_api.py"
@@ -43213,10 +43843,11 @@
             "AST exclusion: direct Python implementation dependency mlflow.server.jobs.cancel_job.",
             "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job.",
             "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job.",
+            "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR.",
             "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_SERVER_JOB_FUNCTION_FULLNAME_ENV_VAR.",
             "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
           ],
-          "tests": 30
+          "tests": 35
         }
       ],
       "path": "tests/server/jobs/test_jobs.py"
@@ -43279,12 +43910,13 @@
         {
           "classification": "python_internal",
           "reasons": [
+            "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR.",
             "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.register_periodic_tasks.",
             "AST exclusion: direct Python implementation dependency mlflow.store.tracking.sqlalchemy_store.SqlAlchemyStore.",
             "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary.",
             "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
           ],
-          "tests": 13
+          "tests": 14
         }
       ],
       "path": "tests/server/jobs/test_trace_archival_jobs.py"
@@ -43533,8 +44165,16 @@
     },
     {
       "classification": "python_internal",
-      "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_passes_session_id_for_resume",
+      "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
       "line": 323,
+      "path": "tests/assistant/providers/test_claude_code_provider.py",
+      "qualname": "test_astream_surfaces_non_empty_error_for_empty_exception",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_passes_session_id_for_resume",
+      "line": 346,
       "path": "tests/assistant/providers/test_claude_code_provider.py",
       "qualname": "test_astream_passes_session_id_for_resume",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which."
@@ -43542,7 +44182,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_handles_non_json_output",
-      "line": 355,
+      "line": 378,
       "path": "tests/assistant/providers/test_claude_code_provider.py",
       "qualname": "test_astream_handles_non_json_output",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which."
@@ -43550,7 +44190,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_handles_error_message_type",
-      "line": 386,
+      "line": 409,
       "path": "tests/assistant/providers/test_claude_code_provider.py",
       "qualname": "test_astream_handles_error_message_type",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which."
@@ -43558,7 +44198,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_claude_code_provider.py::test_astream_skips_rate_limit_event",
-      "line": 416,
+      "line": 439,
       "path": "tests/assistant/providers/test_claude_code_provider.py",
       "qualname": "test_astream_skips_rate_limit_event",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.claude_code.shutil.which."
@@ -43629,8 +44269,16 @@
     },
     {
       "classification": "python_internal",
-      "id": "tests/assistant/providers/test_codex_provider.py::test_astream_yields_interrupted_on_sigkill",
+      "id": "tests/assistant/providers/test_codex_provider.py::test_astream_surfaces_non_empty_error_for_empty_exception",
       "line": 206,
+      "path": "tests/assistant/providers/test_codex_provider.py",
+      "qualname": "test_astream_surfaces_non_empty_error_for_empty_exception",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/assistant/providers/test_codex_provider.py::test_astream_yields_interrupted_on_sigkill",
+      "line": 226,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_yields_interrupted_on_sigkill",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43638,7 +44286,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_builds_correct_command",
-      "line": 224,
+      "line": 244,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_builds_correct_command",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43646,7 +44294,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_includes_model_flag_when_configured",
-      "line": 250,
+      "line": 270,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_includes_model_flag_when_configured",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.config.CONFIG_PATH."
@@ -43654,7 +44302,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_skips_model_flag_when_default",
-      "line": 274,
+      "line": 294,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_skips_model_flag_when_default",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.config.CONFIG_PATH."
@@ -43662,7 +44310,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_sends_prompt_via_stdin",
-      "line": 297,
+      "line": 317,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_sends_prompt_via_stdin",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43670,7 +44318,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_omits_system_instructions_on_resume",
-      "line": 318,
+      "line": 338,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_omits_system_instructions_on_resume",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43678,7 +44326,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_captures_session_id_from_thread_started",
-      "line": 342,
+      "line": 362,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_captures_session_id_from_thread_started",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43686,7 +44334,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_resumes_session_when_session_id_provided",
-      "line": 365,
+      "line": 385,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_resumes_session_when_session_id_provided",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43694,7 +44342,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_saves_and_clears_process_pid",
-      "line": 391,
+      "line": 411,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_saves_and_clears_process_pid",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -43702,7 +44350,7 @@
     {
       "classification": "python_internal",
       "id": "tests/assistant/providers/test_codex_provider.py::test_astream_ignores_invalid_json_lines",
-      "line": 417,
+      "line": 437,
       "path": "tests/assistant/providers/test_codex_provider.py",
       "qualname": "test_astream_ignores_invalid_json_lines",
       "reason": "AST exclusion: patches MLflow implementation mlflow.assistant.providers.codex.shutil.which."
@@ -44233,6 +44881,14 @@
       "line": 92,
       "path": "tests/assistant/test_tool_executor.py",
       "qualname": "test_full_access_bypasses_permission_checks",
+      "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/assistant/test_types.py::test_from_exception_never_yields_empty_error",
+      "line": 15,
+      "path": "tests/assistant/test_types.py",
+      "qualname": "test_from_exception_never_yields_empty_error",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
     },
     {
@@ -49621,8 +50277,16 @@
     },
     {
       "classification": "python_internal",
-      "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_with_payload_kwarg",
+      "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_excludes_none_fields_from_pydantic_payload",
       "line": 339,
+      "path": "tests/gateway/test_tracing_utils.py",
+      "qualname": "test_maybe_traced_gateway_call_excludes_none_fields_from_pydantic_payload",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_with_payload_kwarg",
+      "line": 363,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_with_payload_kwarg",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49630,7 +50294,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_get_model_span_info_reads_child_span",
-      "line": 367,
+      "line": 391,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_get_model_span_info_reads_child_span",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49638,7 +50302,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_with_traceparent",
-      "line": 400,
+      "line": 424,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_with_traceparent",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49646,7 +50310,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_streaming_with_traceparent",
-      "line": 487,
+      "line": 511,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_streaming_with_traceparent",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49654,7 +50318,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_with_traceparent_multiple_providers",
-      "line": 578,
+      "line": 602,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_with_traceparent_multiple_providers",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49662,7 +50326,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_empty",
-      "line": 719,
+      "line": 743,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_empty",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49670,7 +50334,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_no_parseable_events",
-      "line": 723,
+      "line": 747,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_no_parseable_events",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49678,7 +50342,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_text",
-      "line": 728,
+      "line": 752,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_text",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49686,7 +50350,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_tool_use",
-      "line": 750,
+      "line": 774,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_tool_use",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49694,7 +50358,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_mixed_content",
-      "line": 771,
+      "line": 795,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_mixed_content",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49702,7 +50366,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_multiple_chunks_per_sse",
-      "line": 794,
+      "line": 818,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_multiple_chunks_per_sse",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49710,7 +50374,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_tool_input_edge_cases",
-      "line": 817,
+      "line": 841,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_tool_input_edge_cases",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49718,7 +50382,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_split_sse_lines",
-      "line": 830,
+      "line": 854,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_split_sse_lines",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49726,7 +50390,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_anthropic_messages_stream_chunks_cache_tokens",
-      "line": 846,
+      "line": 870,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_anthropic_messages_stream_chunks_cache_tokens",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49734,7 +50398,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_openai_responses_stream_chunks_empty",
-      "line": 898,
+      "line": 922,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_openai_responses_stream_chunks_empty",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49742,7 +50406,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_openai_responses_stream_chunks_no_completed_event",
-      "line": 902,
+      "line": 926,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_openai_responses_stream_chunks_no_completed_event",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49750,7 +50414,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_openai_responses_stream_chunks_basic",
-      "line": 907,
+      "line": 931,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_openai_responses_stream_chunks_basic",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49758,7 +50422,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_openai_responses_stream_chunks_split_sse_lines",
-      "line": 925,
+      "line": 949,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_openai_responses_stream_chunks_split_sse_lines",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49766,7 +50430,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_openai_responses_stream_chunks_returns_completed_response",
-      "line": 940,
+      "line": 964,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_openai_responses_stream_chunks_returns_completed_response",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49774,7 +50438,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_empty",
-      "line": 966,
+      "line": 990,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_empty",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49782,7 +50446,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_no_parseable_events",
-      "line": 970,
+      "line": 994,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_no_parseable_events",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49790,7 +50454,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_text",
-      "line": 975,
+      "line": 999,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_text",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49798,7 +50462,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_tool_call",
-      "line": 1001,
+      "line": 1025,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_tool_call",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49806,7 +50470,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_split_sse_lines",
-      "line": 1034,
+      "line": 1058,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_split_sse_lines",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49814,7 +50478,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_aggregate_gemini_stream_chunks_finish_reason",
-      "line": 1051,
+      "line": 1075,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_aggregate_gemini_stream_chunks_finish_reason",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49822,7 +50486,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_extract_caller",
-      "line": 1079,
+      "line": 1103,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_extract_caller",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -49830,7 +50494,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_records_caller",
-      "line": 1083,
+      "line": 1107,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_records_caller",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -49838,7 +50502,7 @@
     {
       "classification": "python_internal",
       "id": "tests/gateway/test_tracing_utils.py::test_maybe_traced_gateway_call_no_caller_when_no_headers",
-      "line": 1100,
+      "line": 1124,
       "path": "tests/gateway/test_tracing_utils.py",
       "qualname": "test_maybe_traced_gateway_call_no_caller_when_no_headers",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.gateway.entities.GatewayEndpointConfig."
@@ -60510,7 +61174,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_pass",
-      "line": 50,
+      "line": 51,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_pass",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60518,7 +61182,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_fail",
-      "line": 79,
+      "line": 80,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_fail",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60526,7 +61190,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_get_scorer",
-      "line": 98,
+      "line": 99,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_get_scorer",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60534,7 +61198,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_custom_kwargs",
-      "line": 117,
+      "line": 118,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_with_custom_kwargs",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60542,7 +61206,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_input_priority",
-      "line": 145,
+      "line": 146,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_input_priority",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60550,7 +61214,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_error_handling",
-      "line": 156,
+      "line": 157,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_error_handling",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60558,7 +61222,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_source_id",
-      "line": 180,
+      "line": 181,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_source_id",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60566,7 +61230,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_guard_is_real_instance",
-      "line": 195,
+      "line": 196,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_guard_is_real_instance",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60574,7 +61238,7 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_trace",
-      "line": 215,
+      "line": 216,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_with_trace",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
@@ -60582,9 +61246,17 @@
     {
       "classification": "client_only",
       "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_with_trace_failure",
-      "line": 238,
+      "line": 239,
       "path": "tests/genai/scorers/guardrails/test_guardrails.py",
       "qualname": "test_guardrails_scorer_with_trace_failure",
+      "reason": "Explicit SDK-only family: optional Guardrails client integration."
+    },
+    {
+      "classification": "client_only",
+      "id": "tests/genai/scorers/guardrails/test_guardrails.py::test_guardrails_scorer_tracking_class_name",
+      "line": 269,
+      "path": "tests/genai/scorers/guardrails/test_guardrails.py",
+      "qualname": "test_guardrails_scorer_tracking_class_name",
       "reason": "Explicit SDK-only family: optional Guardrails client integration."
     },
     {
@@ -61294,7 +61966,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer",
-      "line": 32,
+      "line": 33,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61302,7 +61974,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_negative_label",
-      "line": 53,
+      "line": 54,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_negative_label",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61310,7 +61982,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_none_explanation",
-      "line": 73,
+      "line": 74,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_none_explanation",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61318,7 +61990,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_get_scorer",
-      "line": 89,
+      "line": 90,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_get_scorer",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61326,7 +61998,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_evaluator_is_real_instance",
-      "line": 106,
+      "line": 107,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_evaluator_is_real_instance",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61334,7 +62006,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_error_handling",
-      "line": 115,
+      "line": 116,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_error_handling",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61342,7 +62014,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_high_level_scorer_call_chain",
-      "line": 133,
+      "line": 134,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_high_level_scorer_call_chain",
       "reason": "AST exclusion: private Python attribute access scorer._evaluator."
@@ -61350,7 +62022,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_kind_is_third_party",
-      "line": 162,
+      "line": 163,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_kind_is_third_party",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61358,7 +62030,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_serialization_round_trip",
-      "line": 167,
+      "line": 168,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_serialization_round_trip",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
@@ -61366,9 +62038,17 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_register_blocked_on_databricks",
-      "line": 181,
+      "line": 182,
       "path": "tests/genai/scorers/phoenix/test_phoenix.py",
       "qualname": "test_phoenix_scorer_register_blocked_on_databricks",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/scorers/phoenix/test_phoenix.py::test_phoenix_scorer_tracking_class_name",
+      "line": 200,
+      "path": "tests/genai/scorers/phoenix/test_phoenix.py",
+      "qualname": "test_phoenix_scorer_tracking_class_name",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.phoenix.create_phoenix_model."
     },
     {
@@ -64558,7 +65238,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer",
-      "line": 34,
+      "line": 40,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64566,7 +65246,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_custom_threshold",
-      "line": 63,
+      "line": 69,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_custom_threshold",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64574,7 +65254,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_none_reasons",
-      "line": 80,
+      "line": 86,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_none_reasons",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64582,7 +65262,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_get_scorer",
-      "line": 96,
+      "line": 102,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_get_scorer",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64590,7 +65270,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_provider_is_real_instance",
-      "line": 113,
+      "line": 119,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_provider_is_real_instance",
       "reason": "AST exclusion: private Python attribute access scorer._provider."
@@ -64598,7 +65278,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_error_handling",
-      "line": 123,
+      "line": 129,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_error_handling",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64606,7 +65286,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_gateway_provider_create_chat_completion",
-      "line": 147,
+      "line": 153,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_gateway_provider_create_chat_completion",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.llm_backend._get_provider_instance."
@@ -64614,7 +65294,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_gateway_provider_handles_messages",
-      "line": 166,
+      "line": 172,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_gateway_provider_handles_messages",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.llm_backend._get_provider_instance."
@@ -64622,7 +65302,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_create_trulens_provider_uses_gateway_for_supported",
-      "line": 196,
+      "line": 202,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_create_trulens_provider_uses_gateway_for_supported",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -64630,7 +65310,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_create_trulens_provider_uses_databricks_for_bare_uri",
-      "line": 207,
+      "line": 213,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_create_trulens_provider_uses_databricks_for_bare_uri",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -64638,7 +65318,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_high_level_scorer_call_chain",
-      "line": 216,
+      "line": 222,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_high_level_scorer_call_chain",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64646,7 +65326,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_kind_is_third_party",
-      "line": 242,
+      "line": 248,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_kind_is_third_party",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64654,7 +65334,7 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_serialization_round_trip",
-      "line": 247,
+      "line": 253,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_serialization_round_trip",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
@@ -64662,9 +65342,17 @@
     {
       "classification": "python_internal",
       "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_register_blocked_on_databricks",
-      "line": 263,
+      "line": 269,
       "path": "tests/genai/scorers/trulens/test_trulens.py",
       "qualname": "test_trulens_scorer_register_blocked_on_databricks",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/scorers/trulens/test_trulens.py::test_trulens_scorer_tracking_class_name",
+      "line": 286,
+      "path": "tests/genai/scorers/trulens/test_trulens.py",
+      "qualname": "test_trulens_scorer_tracking_class_name",
       "reason": "AST exclusion: patches MLflow implementation mlflow.genai.scorers.trulens.create_trulens_provider."
     },
     {
@@ -66180,6 +66868,502 @@
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
     },
     {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_returns_version",
+      "line": 81,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_returns_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_auto_creates_parent_server",
+      "line": 90,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_auto_creates_parent_server",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_with_status_active",
+      "line": 98,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_with_status_active",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_creates_endpoints_from_remotes",
+      "line": 104,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_creates_endpoints_from_remotes",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_no_endpoints_when_flag_false",
+      "line": 122,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_no_endpoints_when_flag_false",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_auto_endpoints_for_inactive_initial_status",
+      "line": 137,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_auto_endpoints_for_inactive_initial_status",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_creates_endpoints_for_active_status",
+      "line": 157,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_creates_endpoints_for_active_status",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_non_initial_statuses",
+      "line": 172,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_non_initial_statuses",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_skips_remotes_without_url",
+      "line": 181,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_skips_remotes_without_url",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_accepts_null_remotes",
+      "line": 194,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_accepts_null_remotes",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_remote_with_non_string_url",
+      "line": 205,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_remote_with_non_string_url",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_remote_with_blank_url",
+      "line": 217,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_remote_with_blank_url",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_defaults_null_remote_type_to_streamable_http",
+      "line": 229,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_defaults_null_remote_type_to_streamable_http",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_non_list_remotes",
+      "line": 244,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_non_list_remotes",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_non_object_remote_entries",
+      "line": 255,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_non_object_remote_entries",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_rejects_unknown_transport",
+      "line": 266,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_rejects_unknown_transport",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_validates_all_remotes_before_creating",
+      "line": 281,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_validates_all_remotes_before_creating",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url",
+      "line": 304,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sets_source_from_url",
+      "line": 316,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_sets_source_from_url",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file",
+      "line": 328,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_local_file",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_file_uri",
+      "line": 339,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_file_uri",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sanitizes_source",
+      "line": 351,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_sanitizes_source",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_sanitizes_ipv6_source",
+      "line": 363,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_sanitizes_ipv6_source",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_explicit_source_preserved",
+      "line": 375,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_explicit_source_preserved",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file_not_found",
+      "line": 387,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_local_file_not_found",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_local_file_invalid_json",
+      "line": 393,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_local_file_invalid_json",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_register_mcp_server_from_url_invalid_scheme",
+      "line": 400,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_register_mcp_server_from_url_invalid_scheme",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_get_mcp_server",
+      "line": 410,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_get_mcp_server",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_search_mcp_servers_returns_all",
+      "line": 417,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_search_mcp_servers_returns_all",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_search_mcp_servers_filter_by_status",
+      "line": 426,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_search_mcp_servers_filter_by_status",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_update_mcp_server",
+      "line": 436,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_update_mcp_server",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_delete_mcp_server",
+      "line": 444,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_delete_mcp_server",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_delete_mcp_server_rejects_active_version",
+      "line": 451,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_delete_mcp_server_rejects_active_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_client_create_mcp_server_version",
+      "line": 466,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_client_create_mcp_server_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_client_create_mcp_server_version_does_not_create_endpoints",
+      "line": 474,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_client_create_mcp_server_version_does_not_create_endpoints",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_get_mcp_server_version",
+      "line": 486,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_get_mcp_server_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_get_latest_mcp_server_version",
+      "line": 493,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_get_latest_mcp_server_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_get_mcp_server_version_by_alias",
+      "line": 502,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_get_mcp_server_version_by_alias",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_get_mcp_server_version_by_alias_latest",
+      "line": 510,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_get_mcp_server_version_by_alias_latest",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_search_mcp_server_versions",
+      "line": 517,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_search_mcp_server_versions",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_update_mcp_server_version_status",
+      "line": 526,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_update_mcp_server_version_status",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_update_mcp_server_version_tools",
+      "line": 535,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_update_mcp_server_version_tools",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_delete_mcp_server_version",
+      "line": 546,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_delete_mcp_server_version",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_delete_mcp_server_version_cascades_to_endpoints",
+      "line": 554,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_delete_mcp_server_version_cascades_to_endpoints",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_create_and_get_mcp_access_endpoint",
+      "line": 583,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_create_and_get_mcp_access_endpoint",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_create_mcp_access_endpoint_via_alias",
+      "line": 599,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_create_mcp_access_endpoint_via_alias",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_search_mcp_access_endpoints",
+      "line": 612,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_search_mcp_access_endpoints",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_update_mcp_access_endpoint",
+      "line": 629,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_update_mcp_access_endpoint",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_delete_mcp_access_endpoint",
+      "line": 645,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_delete_mcp_access_endpoint",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_set_and_delete_mcp_server_tag",
+      "line": 663,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_set_and_delete_mcp_server_tag",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_set_and_delete_mcp_server_version_tag",
+      "line": 674,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_set_and_delete_mcp_server_version_tag",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_set_and_delete_mcp_server_alias",
+      "line": 693,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_set_and_delete_mcp_server_alias",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_set_latest_alias_raises",
+      "line": 707,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_set_latest_alias_raises",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_and_get_server",
+      "line": 721,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_and_get_server",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_server_rejects_risky_icons",
+      "line": 730,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_server_rejects_risky_icons",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_server_rejects_too_many_icons",
+      "line": 739,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_server_rejects_too_many_icons",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_version_lifecycle",
+      "line": 748,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_version_lifecycle",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_risky_server_json_icons",
+      "line": 772,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_version_rejects_risky_server_json_icons",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_non_initial_statuses",
+      "line": 785,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_version_rejects_non_initial_statuses",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_create_version_rejects_too_many_tools",
+      "line": 797,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_create_version_rejects_too_many_tools",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_mlflow_client_update_version_rejects_risky_tool_icons",
+      "line": 806,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_mlflow_client_update_version_rejects_risky_tool_icons",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/genai/test_mcp_servers.py::test_function_exported",
+      "line": 851,
+      "path": "tests/genai/test_mcp_servers.py",
+      "qualname": "test_function_exported",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.tracking._tracking_service.utils._get_store."
+    },
+    {
       "classification": "server_reachable",
       "id": "tests/genai/test_rust_http_conformance.py::test_evaluation_dataset_sdk_round_trip",
       "line": 36,
@@ -67225,7 +68409,7 @@
       "line": 124,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_message",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67233,7 +68417,7 @@
       "line": 149,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_not_found_for_invalid_session",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67241,7 +68425,7 @@
       "line": 155,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_bad_request_when_no_pending_message",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67249,7 +68433,7 @@
       "line": 168,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_returns_sse_events",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67257,7 +68441,7 @@
       "line": 183,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_health_check_returns_ok_when_healthy",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67265,7 +68449,7 @@
       "line": 189,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_health_check_returns_404_for_unknown_provider",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
@@ -67273,100 +68457,212 @@
       "line": 195,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_health_check_returns_412_when_cli_not_installed",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_health_check_returns_401_when_not_authenticated",
-      "line": 216,
+      "line": 214,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_health_check_returns_401_when_not_authenticated",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_get_config_returns_empty_config",
-      "line": 237,
+      "line": 233,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_get_config_returns_empty_config",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_get_config_returns_existing_config",
-      "line": 245,
+      "line": 241,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_get_config_returns_existing_config",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_get_config_redacts_project_location_for_remote_clients",
+      "line": 260,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_get_config_redacts_project_location_for_remote_clients",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_get_config_always_redacts_api_key",
+      "line": 278,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_get_config_always_redacts_api_key",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_get_config_loads_config_once",
+      "line": 294,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_get_config_loads_config_once",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_get_config_remote_access_allowed",
+      "line": 310,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_get_config_remote_access_allowed",
+      "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api._get_selected_provider."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_message_blocked_for_remote_client_when_remote_access_off",
+      "line": 322,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_message_blocked_for_remote_client_when_remote_access_off",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_assistant_route_without_policy_raises_at_startup",
+      "line": 343,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_assistant_route_without_policy_raises_at_startup",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._AssistantAPIRoute."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_deny_policy_route_with_provider_path_param_blocks_remote",
+      "line": 353,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_deny_policy_route_with_provider_path_param_blocks_remote",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._AssistantAPIRoute."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_message_allowed_for_remote_client_when_provider_allows_remote_access",
+      "line": 371,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_message_allowed_for_remote_client_when_provider_allows_remote_access",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_update_config_sets_provider",
-      "line": 264,
+      "line": 396,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_update_config_sets_provider",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_update_config_sets_project",
-      "line": 274,
+      "line": 406,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_update_config_sets_project",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_update_config_expand_user_home",
-      "line": 287,
+      "line": 419,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_update_config_expand_user_home",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.Path.expanduser."
     },
     {
       "classification": "python_internal",
-      "id": "tests/server/assistant/test_api.py::test_localhost_allows_ipv4",
-      "line": 307,
+      "id": "tests/server/assistant/test_api.py::test_is_localhost_allows_ipv4",
+      "line": 438,
       "path": "tests/server/assistant/test_api.py",
-      "qualname": "test_localhost_allows_ipv4",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "qualname": "test_is_localhost_allows_ipv4",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost."
     },
     {
       "classification": "python_internal",
-      "id": "tests/server/assistant/test_api.py::test_localhost_allows_ipv6",
-      "line": 314,
+      "id": "tests/server/assistant/test_api.py::test_is_localhost_allows_ipv6",
+      "line": 444,
       "path": "tests/server/assistant/test_api.py",
-      "qualname": "test_localhost_allows_ipv6",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "qualname": "test_is_localhost_allows_ipv6",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost."
     },
     {
       "classification": "python_internal",
-      "id": "tests/server/assistant/test_api.py::test_localhost_blocks_external_ip",
-      "line": 321,
+      "id": "tests/server/assistant/test_api.py::test_is_localhost_blocks_external_ip",
+      "line": 450,
       "path": "tests/server/assistant/test_api.py",
-      "qualname": "test_localhost_blocks_external_ip",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "qualname": "test_is_localhost_blocks_external_ip",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost."
     },
     {
       "classification": "python_internal",
-      "id": "tests/server/assistant/test_api.py::test_localhost_blocks_external_hostname",
-      "line": 330,
+      "id": "tests/server/assistant/test_api.py::test_is_localhost_blocks_external_hostname",
+      "line": 456,
       "path": "tests/server/assistant/test_api.py",
-      "qualname": "test_localhost_blocks_external_hostname",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "qualname": "test_is_localhost_blocks_external_hostname",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost."
     },
     {
       "classification": "python_internal",
-      "id": "tests/server/assistant/test_api.py::test_localhost_blocks_when_no_client",
-      "line": 339,
+      "id": "tests/server/assistant/test_api.py::test_is_localhost_blocks_when_no_client",
+      "line": 462,
       "path": "tests/server/assistant/test_api.py",
-      "qualname": "test_localhost_blocks_when_no_client",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "qualname": "test_is_localhost_blocks_when_no_client",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._is_localhost."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_provider_allows_remote_access",
+      "line": 477,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_provider_allows_remote_access",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._provider_allows_remote_access."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_provider_allows_remote_access_no_provider_selected",
+      "line": 484,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_provider_allows_remote_access_no_provider_selected",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._provider_allows_remote_access."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_remote_request_blocked_without_loading_provider_when_disabled",
+      "line": 489,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_remote_request_blocked_without_loading_provider_when_disabled",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_invalid_remote_access_value_raises",
+      "line": 507,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_invalid_remote_access_value_raises",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._provider_allows_remote_access."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_enforce_remote_access_allows_localhost_regardless_of_mode",
+      "line": 515,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_enforce_remote_access_allows_localhost_regardless_of_mode",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._enforce_remote_access."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_enforce_remote_access_blocks_remote_when_disabled",
+      "line": 522,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_enforce_remote_access_blocks_remote_when_disabled",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._enforce_remote_access."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_validate_session_id_accepts_valid_uuid",
-      "line": 347,
+      "line": 530,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_validate_session_id_accepts_valid_uuid",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.SessionManager."
@@ -67374,7 +68670,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_validate_session_id_rejects_invalid_format",
-      "line": 352,
+      "line": 535,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_validate_session_id_rejects_invalid_format",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.SessionManager."
@@ -67382,7 +68678,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_validate_session_id_rejects_path_traversal",
-      "line": 357,
+      "line": 540,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_validate_session_id_rejects_path_traversal",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.SessionManager."
@@ -67390,7 +68686,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_patch_session_cancel_with_process",
-      "line": 370,
+      "line": 553,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_patch_session_cancel_with_process",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.session.save_process_pid."
@@ -67398,7 +68694,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_stream_pauses_then_resumes",
-      "line": 430,
+      "line": 613,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_pauses_then_resumes",
       "reason": "AST exclusion: direct Python implementation import mlflow.server.assistant.api."
@@ -67406,7 +68702,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_stream_prefers_new_message_over_stale_tool_decision",
-      "line": 485,
+      "line": 668,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_prefers_new_message_over_stale_tool_decision",
       "reason": "AST exclusion: direct Python implementation import mlflow.server.assistant.api."
@@ -67414,7 +68710,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_stream_forwards_tool_decision_when_no_pending_message",
-      "line": 512,
+      "line": 695,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_stream_forwards_tool_decision_when_no_pending_message",
       "reason": "AST exclusion: direct Python implementation import mlflow.server.assistant.api."
@@ -67422,23 +68718,23 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_resolve_permission_rejects_invalid_session",
-      "line": 535,
+      "line": 718,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_resolve_permission_rejects_invalid_session",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_resolve_permission_returns_404_for_unknown_session",
-      "line": 543,
+      "line": 726,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_resolve_permission_returns_404_for_unknown_session",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_install_skills_success",
-      "line": 552,
+      "line": 735,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_install_skills_success",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.install_skills."
@@ -67446,23 +68742,31 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_install_skills_skips_when_already_installed",
-      "line": 569,
+      "line": 752,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_install_skills_skips_when_already_installed",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.Path.exists."
     },
     {
       "classification": "python_internal",
+      "id": "tests/server/assistant/test_api.py::test_install_skills_blocked_for_remote_client",
+      "line": 773,
+      "path": "tests/server/assistant/test_api.py",
+      "qualname": "test_install_skills_blocked_for_remote_client",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
+    },
+    {
+      "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_update_config_partial_update_preserves_selected_provider",
-      "line": 590,
+      "line": 789,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_update_config_partial_update_preserves_selected_provider",
-      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api._require_localhost."
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.assistant.api.assistant_router."
     },
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_ollama_models_returns_model_list",
-      "line": 616,
+      "line": 815,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_ollama_models_returns_model_list",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67470,7 +68774,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_models_reads_api_key_from_header_not_query",
-      "line": 631,
+      "line": 830,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_models_reads_api_key_from_header_not_query",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67478,7 +68782,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_models_ignores_api_key_query_param",
-      "line": 651,
+      "line": 850,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_models_ignores_api_key_query_param",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67486,7 +68790,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_ollama_models_returns_412_when_not_installed",
-      "line": 669,
+      "line": 868,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_ollama_models_returns_412_when_not_installed",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67494,7 +68798,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_ollama_models_returns_503_on_connection_failure",
-      "line": 684,
+      "line": 883,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_ollama_models_returns_503_on_connection_failure",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67502,7 +68806,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/assistant/test_api.py::test_list_provider_models_returns_404_for_unsupported_provider",
-      "line": 699,
+      "line": 898,
       "path": "tests/server/assistant/test_api.py",
       "qualname": "test_list_provider_models_returns_404_for_unsupported_provider",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.assistant.api.list_providers."
@@ -67998,7 +69302,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_basic_job",
-      "line": 72,
+      "line": 76,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_basic_job",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68006,7 +69310,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_json_input_output",
-      "line": 99,
+      "line": 103,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_json_input_output",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68014,7 +69318,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_error_job",
-      "line": 123,
+      "line": 127,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_error_job",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68022,7 +69326,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_resume_on_job_runner_restart",
-      "line": 149,
+      "line": 153,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_resume_on_job_runner_restart",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68030,7 +69334,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_resume_on_new_job_runner",
-      "line": 178,
+      "line": 182,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_resume_on_new_job_runner",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68038,7 +69342,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_queue_parallelism",
-      "line": 237,
+      "line": 241,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_queue_parallelism",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.handlers._get_job_store."
@@ -68046,7 +69350,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_retry_on_transient_error",
-      "line": 337,
+      "line": 341,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_retry_on_transient_error",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.handlers._get_job_store."
@@ -68054,7 +69358,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_submit_jobs_from_multi_processes",
-      "line": 394,
+      "line": 398,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_submit_jobs_from_multi_processes",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68062,7 +69366,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_timeout",
-      "line": 429,
+      "line": 433,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_timeout",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.handlers._get_job_store."
@@ -68070,7 +69374,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_list_job_pagination",
-      "line": 464,
+      "line": 468,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_list_job_pagination",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.handlers._get_job_store."
@@ -68078,7 +69382,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_function_without_decorator",
-      "line": 482,
+      "line": 486,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_function_without_decorator",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68086,7 +69390,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_use_process",
-      "line": 501,
+      "line": 505,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_use_process",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68094,7 +69398,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_submit_job_bad_call",
-      "line": 518,
+      "line": 522,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_submit_job_bad_call",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.submit_job."
@@ -68102,7 +69406,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_job_with_python_env",
-      "line": 557,
+      "line": 561,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_job_with_python_env",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68110,7 +69414,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_start_job_is_atomic",
-      "line": 572,
+      "line": 576,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_start_job_is_atomic",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68118,7 +69422,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_exec_job_fails_job_on_unexpected_error",
-      "line": 602,
+      "line": 606,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_exec_job_fails_job_on_unexpected_error",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68126,7 +69430,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_cancel_job",
-      "line": 624,
+      "line": 628,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_cancel_job",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.cancel_job."
@@ -68134,7 +69438,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_delete_jobs_only_deletes_finalized",
-      "line": 647,
+      "line": 651,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_delete_jobs_only_deletes_finalized",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68142,7 +69446,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_delete_jobs_with_job_ids_filter",
-      "line": 706,
+      "line": 710,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_delete_jobs_with_job_ids_filter",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68150,7 +69454,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_delete_jobs_skips_non_finalized_even_with_job_ids",
-      "line": 736,
+      "line": 740,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_delete_jobs_skips_non_finalized_even_with_job_ids",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68158,7 +69462,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_exclusive_job_skips_duplicate",
-      "line": 777,
+      "line": 781,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_exclusive_job_skips_duplicate",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68166,7 +69470,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_exclusive_job_allows_different_params",
-      "line": 804,
+      "line": 808,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_exclusive_job_allows_different_params",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68174,7 +69478,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_submit_job_with_extra_envs",
-      "line": 831,
+      "line": 835,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_submit_job_with_extra_envs",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68182,7 +69486,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_submit_job_without_extra_envs",
-      "line": 852,
+      "line": 856,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_submit_job_without_extra_envs",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68190,7 +69494,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_submit_job_workspace_propagation",
-      "line": 875,
+      "line": 879,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_submit_job_workspace_propagation",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.get_job."
@@ -68198,7 +69502,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_reenqueued_jobs_respect_workspace_disabled",
-      "line": 892,
+      "line": 896,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_reenqueued_jobs_respect_workspace_disabled",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68206,7 +69510,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_update_status_details",
-      "line": 919,
+      "line": 923,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_update_status_details",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68214,7 +69518,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_update_status_details_merges_with_existing",
-      "line": 935,
+      "line": 939,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_update_status_details_merges_with_existing",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
@@ -68222,15 +69526,55 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_update_status_details_on_nonexistent_job",
-      "line": 954,
+      "line": 958,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_update_status_details_on_nonexistent_job",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.jobs.sqlalchemy_store.SqlAlchemyJobStore."
     },
     {
       "classification": "python_internal",
+      "id": "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_exits_when_parent_pid_changes",
+      "line": 966,
+      "path": "tests/server/jobs/test_jobs.py",
+      "qualname": "test_exit_when_orphaned_exits_when_parent_pid_changes",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_exits_when_already_orphaned",
+      "line": 983,
+      "path": "tests/server/jobs/test_jobs.py",
+      "qualname": "test_exit_when_orphaned_exits_when_already_orphaned",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/jobs/test_jobs.py::test_exit_when_orphaned_ignores_invalid_parent_pid_env",
+      "line": 999,
+      "path": "tests/server/jobs/test_jobs.py",
+      "qualname": "test_exit_when_orphaned_ignores_invalid_parent_pid_env",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/jobs/test_jobs.py::test_start_huey_consumer_proc_passes_original_parent_pid",
+      "line": 1016,
+      "path": "tests/server/jobs/test_jobs.py",
+      "qualname": "test_start_huey_consumer_proc_passes_original_parent_pid",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/jobs/test_jobs.py::test_exec_job_in_subproc_passes_original_parent_pid",
+      "line": 1027,
+      "path": "tests/server/jobs/test_jobs.py",
+      "qualname": "test_exec_job_in_subproc_passes_original_parent_pid",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
+    },
+    {
+      "classification": "python_internal",
       "id": "tests/server/jobs/test_jobs.py::test_subproc_entry_telemetry",
-      "line": 962,
+      "line": 1062,
       "path": "tests/server/jobs/test_jobs.py",
       "qualname": "test_subproc_entry_telemetry",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_SERVER_JOB_FUNCTION_FULLNAME_ENV_VAR."
@@ -68462,7 +69806,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_runs_per_workspace",
-      "line": 150,
+      "line": 154,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_runs_per_workspace",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68470,7 +69814,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_skips_unsupported_workspace_and_continues",
-      "line": 198,
+      "line": 202,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_skips_unsupported_workspace_and_continues",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68478,7 +69822,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_respects_interval",
-      "line": 250,
+      "line": 254,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_respects_interval",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68486,7 +69830,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_returns_zero_when_disabled",
-      "line": 280,
+      "line": 284,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_returns_zero_when_disabled",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68494,7 +69838,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_passes_max_traces_per_pass",
-      "line": 295,
+      "line": 299,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_passes_max_traces_per_pass",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68502,7 +69846,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_shares_pass_budget_across_workspaces",
-      "line": 321,
+      "line": 325,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_shares_pass_budget_across_workspaces",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68510,7 +69854,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_archives_real_store_traces",
-      "line": 365,
+      "line": 369,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_archives_real_store_traces",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.sqlalchemy_store.SqlAlchemyStore."
@@ -68518,7 +69862,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_honors_workspace_archive_location",
-      "line": 456,
+      "line": 460,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_honors_workspace_archive_location",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.store.tracking.sqlalchemy_store.SqlAlchemyStore."
@@ -68526,7 +69870,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_processes_archive_now_with_real_store",
-      "line": 530,
+      "line": 534,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_processes_archive_now_with_real_store",
       "reason": "AST exclusion: patches MLflow implementation mlflow.server.handlers._get_tracking_store."
@@ -68534,7 +69878,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_unconfigured",
-      "line": 630,
+      "line": 634,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_register_periodic_tasks_includes_trace_archival_when_unconfigured",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.register_periodic_tasks."
@@ -68542,7 +69886,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_config_invalid",
-      "line": 641,
+      "line": 645,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_register_periodic_tasks_includes_trace_archival_when_config_invalid",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.register_periodic_tasks."
@@ -68550,7 +69894,7 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_trace_archival_scheduler_logs_warning_when_config_invalid",
-      "line": 654,
+      "line": 658,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_trace_archival_scheduler_logs_warning_when_config_invalid",
       "reason": "AST exclusion: no db_uri/tracking-URI fixture dependency reaches the Rust HTTP boundary."
@@ -68558,10 +69902,18 @@
     {
       "classification": "python_internal",
       "id": "tests/server/jobs/test_trace_archival_jobs.py::test_register_periodic_tasks_includes_trace_archival_when_configured",
-      "line": 670,
+      "line": 674,
       "path": "tests/server/jobs/test_trace_archival_jobs.py",
       "qualname": "test_register_periodic_tasks_includes_trace_archival_when_configured",
       "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.register_periodic_tasks."
+    },
+    {
+      "classification": "python_internal",
+      "id": "tests/server/jobs/test_trace_archival_jobs.py::test_periodic_tasks_consumer_enables_flush_locks",
+      "line": 685,
+      "path": "tests/server/jobs/test_trace_archival_jobs.py",
+      "qualname": "test_periodic_tasks_consumer_enables_flush_locks",
+      "reason": "AST exclusion: direct Python implementation dependency mlflow.server.jobs.utils.MLFLOW_ORIGINAL_PARENT_PID_ENV_VAR."
     },
     {
       "classification": "python_internal",
