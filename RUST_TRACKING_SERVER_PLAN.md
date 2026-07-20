@@ -50,8 +50,10 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   + T23.2 CRUD matrix done (56/56 cells zero-error, equivalence PASS,
   Rust faster everywhere; see T23.2 DONE note). T23.3 jobs matrix done
   (12/12 pairs green, leak checks flat; 3 Rust-slower large-payload
-  cells noted for the report). Next: T23.4 (streaming SSE + archival),
-  then T23.5 — strictly serial — then
+  cells noted for the report). T23.4 streaming+archival done (20/20
+  pairs green; Rust-slower only on 64-stream TTFE; S3-not-wired archival
+  limitation documented). Next: T23.5 (mixed soak + final
+  `rust/bench/genai_eval.md` report) — then
   Phase 22 (compliance & cutover; Phase 23 must finish before T22.4
   removes the Python container).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
@@ -3996,6 +3998,7 @@ zero live provider calls anywhere in this phase.
       the T23.5 report. Artifacts: `rust/bench/genai/results/t23_3/` (24
       raw JSONs + `t23_3_summary.md`), driver `rust/bench/genai/t23_3.py`.
       Gates: ruff 0, harness tests 12 passed, route parity 372, replay 0.
+- [x] **T23.4 Streaming + interactive matrix (SSE) + archival**: gateway
       runtime (12.9) chat completions streaming AND non-streaming,
       embeddings, passthrough with guardrails + budget tracking enabled;
       assistant (12.10) sessions + streamed turns via the scripted CLI /
@@ -4009,6 +4012,28 @@ zero live provider calls anywhere in this phase.
       while under measurement; archival pass covers ≥1k traces per side;
       side-by-side tables incl. TTFE.
       **VER:** harness streaming module + raw metrics as in T23.2.
+      **DONE 2026-07-20** (codex agent, merged 5eb1214d0): 20 cell pairs
+      (gateway 6, assistant 4, promptlab 4, archival 6), all equivalence
+      PASS, 0 errors, ~19 min run. Gateway streaming (Py/Rust): small-c16
+      TTFE p95 227.8→61.2 ms, gap p95 16.1→0.0 ms, 986→1,810 frames/s;
+      large-c16 5,615→9,795 frames/s; mixed non-stream p95 329.6→29.4 ms,
+      92→399 RPS. Assistant CLI c64 TTFE p95 355.6→116.8 ms, 870→2,030
+      frames/s. Promptlab small-c64 p95 1,590→68 ms, 67.5→1,407.8 RPS.
+      Archival: 10k-small 127.8→282.6 traces/s (finalize p95 13.7→6.1 ms);
+      archived getTrace c1 p95 60.0→1.4 ms, artifact c64 228.9→19.4 ms.
+      Peak process-tree RSS Py 4.3–5.4 GiB vs Rust 34–114 MiB (assistant
+      CLI c64 997 MiB from concurrent stub processes). SSE equivalence:
+      16 seeded streams/cell, ordered frame sequences compared with
+      timing/ids/ports/prefixes normalized out; archive passes compare
+      real traces.pb (base64+SHA-256). Rust-slower only: TTFE p95 in
+      gateway small-c64 and passthrough-large-c64 (socket-read frame
+      batching under 64 streams) — for T23.5 report. Documented
+      limitations: Rust artifact factory does not yet wire S3, so archival
+      + promptlab used fresh local file:// repos (Python used MinIO);
+      post-LLM guardrails loaded-not-executed on streams per contract,
+      budget accounting ran. Artifacts: `rust/bench/genai/results/t23_4/`
+      (40 raw JSONs + `t23_4_summary.md`), driver `rust/bench/genai/t23_4.py`.
+      Gates: ruff 0, harness tests 14 passed, route parity 372, replay 0.
 - [ ] **T23.5 Mixed soak + final report**: one realistic mixed genai
       workload combining all of the above (dataset upserts + evaluation/
       scorer jobs + gateway chat traffic incl. streams + assistant sessions
