@@ -24,6 +24,7 @@ from rust.bench.genai.t23_3 import (
     _ordered_direct_specs,
 )
 from rust.bench.genai.t23_3 import cell_matrix as job_cell_matrix
+from rust.bench.genai.t23_4 import cell_matrix as streaming_cell_matrix
 
 
 def test_mock_provider_is_byte_stable_for_every_protocol_route() -> None:
@@ -282,3 +283,48 @@ def test_mock_provider_generates_nested_json_schema_instances() -> None:
         ).json()
     content = json.loads(response["choices"][0]["message"]["content"])
     assert content["groups"][0]["indices"] == [0]
+
+
+def test_t23_4_fractional_matrix_covers_families_stream_concurrency_and_archival() -> None:
+    cells = streaming_cell_matrix()
+    assert {cell.family for cell in cells} == {
+        "archival",
+        "assistant",
+        "gateway",
+        "promptlab",
+    }
+    assert all(
+        4 <= sum(cell.family == family for cell in cells) <= 6
+        for family in {
+            "archival",
+            "assistant",
+            "gateway",
+            "promptlab",
+        }
+    )
+    streaming = [cell for cell in cells if cell.kind.startswith(("stream", "assistant"))]
+    assert {cell.concurrency for cell in streaming} >= {1, 16, 64}
+    assert {cell.stream_variant for cell in cells if cell.family == "gateway"} >= {
+        "small",
+        "large",
+    }
+    assert sum(cell.count for cell in cells if cell.kind == "archive-pass") >= 1_000
+
+
+def test_t23_4_mock_provider_has_seeded_small_and_large_frame_variants() -> None:
+    counts = {}
+    with provider_server(2340) as server:
+        base = f"http://127.0.0.1:{server.server_port}"
+        for variant, max_tokens in (("small", 32), ("large", 512)):
+            body = {
+                "max_tokens": max_tokens,
+                "messages": [{"content": f"{variant} stream", "role": "user"}],
+                "model": "fixture",
+                "stream": True,
+            }
+            first = requests.post(base + "/v1/chat/completions", json=body, timeout=5).text
+            second = requests.post(base + "/v1/chat/completions", json=body, timeout=5).text
+            assert first == second
+            counts[variant] = first.count("data: {")
+    assert 9 <= counts["small"] <= 11
+    assert 112 <= counts["large"] <= 128

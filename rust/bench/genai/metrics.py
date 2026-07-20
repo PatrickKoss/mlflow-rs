@@ -81,6 +81,7 @@ class MetricsCollector:
             gaps = [
                 gap for record in records if record.sse for gap in record.sse.inter_frame_gap_ms
             ]
+            frames = sum(record.sse.frame_count for record in records if record.sse)
             endpoints[name] = {
                 "requests": len(records),
                 "errors": errors,
@@ -95,6 +96,20 @@ class MetricsCollector:
                 "statuses": dict(sorted(statuses.items())),
                 "sse": {
                     "streams": sum(record.sse is not None for record in records),
+                    "frames": frames,
+                    "frames_per_second": frames / duration,
+                    "completion_errors": sum(
+                        record.sse is not None and record.error is not None for record in records
+                    ),
+                    "completion_error_rate": (
+                        sum(
+                            record.sse is not None and record.error is not None
+                            for record in records
+                        )
+                        / sum(record.sse is not None for record in records)
+                        if any(record.sse is not None for record in records)
+                        else 0.0
+                    ),
                     "time_to_first_event_ms": {
                         "p50": percentile(ttfe, 50),
                         "p95": percentile(ttfe, 95),

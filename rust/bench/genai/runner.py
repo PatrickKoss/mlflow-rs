@@ -854,6 +854,12 @@ def parser() -> argparse.ArgumentParser:
 
     jobs_parser = subparsers.add_parser("t23-3", help="run the jobs/native-engine matrix")
     add_t23_3_arguments(jobs_parser)
+    from rust.bench.genai.t23_4 import add_arguments as add_t23_4_arguments
+
+    streaming_parser = subparsers.add_parser(
+        "t23-4", help="run the streaming, interactive, promptlab, and archival matrix"
+    )
+    add_t23_4_arguments(streaming_parser)
     return value
 
 

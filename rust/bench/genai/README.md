@@ -225,3 +225,57 @@ uv run --frozen --extra db --with litellm python -m rust.bench.genai.runner t23-
   --cells evaluation-high-fanout --fanout-jobs 2 --large-rows 2 \
   --targets rust --output-dir /tmp/t23-3-check
 ```
+
+## T23.4 streaming + interactive + archival matrix
+
+Run the complete matrix with MLflow's locked PostgreSQL and S3 dependencies:
+
+```bash
+uv run --frozen --extra db --extra extras --with litellm \
+  python -m rust.bench.genai.runner t23-4
+```
+
+The bounded fractional matrix has six gateway cells, four assistant cells,
+four promptlab cells, and six archival cells. Gateway streams cover 1, 16,
+and 64 concurrent clients plus deterministic small (9-11 provider frames) and
+large (112-128 provider frames) payloads. The provider frame count derives
+only from the run seed and canonical request hash; the provider emits frames
+with a fixed 1 ms gap. Gateway non-streaming mixes chat, embeddings, and
+OpenAI passthrough. An AFTER Guidelines guardrail backed by a separate endpoint
+on the deterministic mock provider is attached to the usage-tracked endpoint,
+and a high-limit global ALERT budget is active.
+Gateway's specified behavior skips post-LLM guardrail execution on streams,
+but guardrail loading and budget checks remain in the measured path.
+
+Assistant cells cover the staged fake Claude CLI at 1/16/64 concurrency and
+the in-server OpenAI-compatible MLflow Gateway provider at concurrency 16.
+Promptlab uses small and 4 KiB prompt templates at 1/16/64 concurrency. Archive
+passes use 10,000 small traces and 1,000 traces with 64 KiB outputs, followed
+by archived `getTrace`, `get-trace-artifact`, and mixed reads. Each target has
+one fresh database, a distinct MinIO prefix for normal artifacts, and a fresh
+local `file://` ARCHIVE_REPO. Trace archival uses the local repository because
+the Rust artifact factory currently rejects S3 even when object_store's AWS
+feature is compiled; using MinIO would produce no Rust archival sample. Targets
+never overlap. Promptlab uses `mlflow-artifacts://localhost/` so Python proxies to its
+fresh MinIO prefix and Rust uses its fresh local proxy destination, the only
+artifact repository currently supported by the Rust artifact factory.
+
+Schema `1.3.0` adds aggregate SSE frames/s and completion errors plus archival
+pass fields. Full ordered SSE sequences from 16 deterministic streams per cell
+are normalized for IDs/timing and compared. One `traces.pb` per archive pass is
+stored byte-for-byte as base64 plus SHA-256 in each result before equivalence
+can pass. Archived `getTrace` proof compares the complete ordered span payload;
+known target-specific TraceInfo preview and artifact-location decoration is not
+part of the read proof. Archive finalize latency is an explicitly labeled operational proxy:
+50 ms polling of consecutive `ARCHIVE_REPO` commit visibility; because the pass
+is sequential, each gap also includes the following trace upload.
+
+For a reduced end-to-end calibration (the archive pass must be selected before
+an archived-read cell):
+
+```bash
+uv run --frozen --extra db --extra extras --with litellm \
+  python -m rust.bench.genai.runner t23-4 --requests 2 \
+  --small-traces 2 --large-traces 2 --cells chat-small-c1 cli-c1 \
+  small-c1 pass-small get-trace-c1 --skip-build --output-dir /tmp/t23-4-check
+```

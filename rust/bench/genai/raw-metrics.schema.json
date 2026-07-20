@@ -16,7 +16,7 @@
     "equivalence"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0.0", "1.1.0", "1.2.0"]},
+    "schema_version": {"enum": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"]},
     "run": {
       "type": "object",
       "additionalProperties": false,
@@ -55,7 +55,11 @@
         "concurrent_terminal_polling": {"type": "boolean"},
         "steady_drip_interleaved": {"type": "boolean"},
         "trimmed": {"type": "boolean"},
-        "trim_note": {"type": ["string", "null"]}
+        "trim_note": {"type": ["string", "null"]},
+        "stream_variant": {"enum": ["small", "large", "none"]},
+        "provider_mode": {"type": "string"},
+        "canonical_traces": {"type": "integer", "minimum": 1},
+        "measured_traces": {"type": "integer", "minimum": 1}
       }
     },
     "summary": {
@@ -90,7 +94,8 @@
                 "mean_rss_mib": {"type": "number", "minimum": 0},
                 "peak_rss_mib": {"type": "number", "minimum": 0}
               }
-            }
+            },
+            "archival": {"type": "object"}
           }
         }
       }
@@ -205,6 +210,10 @@
           "required": ["streams", "time_to_first_event_ms", "inter_frame_gap_ms"],
           "properties": {
             "streams": {"type": "integer", "minimum": 0},
+            "frames": {"type": "integer", "minimum": 0},
+            "frames_per_second": {"type": "number", "minimum": 0},
+            "completion_errors": {"type": "integer", "minimum": 0},
+            "completion_error_rate": {"type": "number", "minimum": 0, "maximum": 1},
             "time_to_first_event_ms": {"$ref": "#/$defs/percentiles"},
             "inter_frame_gap_ms": {"$ref": "#/$defs/percentiles"}
           }
