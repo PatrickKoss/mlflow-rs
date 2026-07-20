@@ -1,0 +1,71 @@
+# Published-image variant of the all-Rust reference deployment.
+# Run from this directory with:
+#   docker compose -f docker-compose.release.yml up -d --wait
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Alembic remains the schema owner. This Python container is a one-shot init
+  # job only; it exits before the Python-free Rust serving plane starts.
+  migrate:
+    image: ghcr.io/mlflow/mlflow@sha256:73365f742d67ef9e59e50118010bf14ff825a157c8244051baea887b8587e772
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../mlflow/store/db_migrations/versions:/cutover-migrations:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        migration_dir="$$(python -c 'import mlflow.store.db_migrations, os; print(os.path.join(os.path.dirname(mlflow.store.db_migrations.__file__), "versions"))')";
+        cp /cutover-migrations/*.py "$$migration_dir/";
+        exec mlflow db upgrade postgresql://mlflow:mlflow@postgres:5432/mlflow
+    restart: "no"
+
+  rust:
+    image: ghcr.io/patrickkoss/mlflow-rust:${MLFLOW_RUST_VERSION:-latest}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      RUST_LOG: info
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql://mlflow:mlflow@postgres:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination
+      - /mlartifacts
+      - --default-artifact-root
+      - /mlartifacts
+    volumes:
+      - artifacts:/mlartifacts
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  nginx:
+    image: ghcr.io/patrickkoss/mlflow-rust-ui:${MLFLOW_RUST_VERSION:-latest}
+    depends_on:
+      rust:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
+volumes:
+  artifacts:

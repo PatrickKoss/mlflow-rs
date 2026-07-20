@@ -1,0 +1,235 @@
+name: Rust Release
+
+on:
+  push:
+    tags:
+      - "rust-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing rust-vMAJOR.MINOR.PATCH tag to release"
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+permissions: {}
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Resolve release version and Rust toolchain
+        id: release
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected rust-vMAJOR.MINOR.PATCH, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "version=${RELEASE_TAG#rust-v}" >> "$GITHUB_OUTPUT"
+          echo "toolchain=$(awk -F '"' '/^channel/ { print $2 }' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: ${{ steps.release.outputs.toolchain }}
+
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: rust
+
+      - name: Build release binaries
+        run: cargo build --release -p mlflow-server -p mlflow-genai-worker
+
+      - name: Package release archive
+        id: package
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          archive="mlflow-rust-${VERSION}-linux-x86_64.tar.gz"
+          sums="mlflow-rust-${VERSION}-linux-x86_64.sha256sums"
+          package_dir="dist/mlflow-rust-${VERSION}-linux-x86_64"
+          mkdir -p "$package_dir"
+          install -m 0755 target/release/mlflow-server "$package_dir/mlflow-server"
+          install -m 0755 target/release/mlflow-genai-worker "$package_dir/mlflow-genai-worker"
+          install -m 0644 ../LICENSE.txt "$package_dir/LICENSE.txt"
+          cat > "$package_dir/README.md" <<EOF
+          # MLflow Rust server ${VERSION}
+
+          Keep mlflow-server and mlflow-genai-worker in the same directory so
+          native GenAI jobs can resolve the worker. The database must be migrated to
+          the MLflow Alembic head before starting the server. See:
+          https://github.com/PatrickKoss/mlflow/tree/${RELEASE_TAG}/rust
+          EOF
+          tar -czf "dist/$archive" -C dist "$(basename "$package_dir")"
+          (cd dist && sha256sum "$archive" > "$sums")
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "sums=$sums" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          notes=dist/release-notes.md
+          {
+            echo "# MLflow Rust server ${VERSION}"
+            echo
+            echo "This release publishes the Python-free Rust serving image, the matching MLflow UI image, and Linux x86-64 server/worker binaries."
+          } > "$notes"
+
+          if [[ -f sync/state.json ]]; then
+            upstream_commit=$(jq -r '
+              .upstream.commit //
+              .upstream.sha //
+              .upstream_commit //
+              .upstream_sha //
+              .last_synced_upstream_commit //
+              .last_synced_upstream.commit //
+              .last_sync.upstream_commit //
+              empty
+            ' sync/state.json)
+            upstream_version=$(jq -r '
+              .upstream.version //
+              .upstream_version //
+              .last_synced_upstream_version //
+              .last_synced_upstream.version //
+              .last_sync.upstream_version //
+              empty
+            ' sync/state.json)
+            if [[ -z "$upstream_version" && -f ../mlflow/version.py ]]; then
+              upstream_version=$(sed -n 's/^VERSION = "\([^"]*\)"/\1/p' ../mlflow/version.py)
+            fi
+            if [[ "$upstream_commit" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+              {
+                echo
+                if [[ -n "$upstream_version" ]]; then
+                  echo "Synced upstream MLflow version: ${upstream_version}"
+                fi
+                echo "Synced upstream MLflow commit: [\`${upstream_commit}\`](https://github.com/mlflow/mlflow/commit/${upstream_commit})"
+              } >> "$notes"
+            fi
+          fi
+
+      - name: Create GitHub release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          SUMS: ${{ steps.package.outputs.sums }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "MLflow Rust ${VERSION}" --notes-file dist/release-notes.md
+            gh release upload "$RELEASE_TAG" "dist/$ARCHIVE" "dist/$SUMS" --clobber
+          else
+            gh release create "$RELEASE_TAG" --verify-tag \
+              --title "MLflow Rust ${VERSION}" \
+              --notes-file dist/release-notes.md \
+              "dist/$ARCHIVE" "dist/$SUMS"
+          fi
+
+  server-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Resolve release version
+        id: release
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected rust-vMAJOR.MINOR.PATCH, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "version=${RELEASE_TAG#rust-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push Rust server image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: .
+          file: rust/deploy/Dockerfile.rust
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/patrickkoss/mlflow-rust:${{ steps.release.outputs.version }}
+            ghcr.io/patrickkoss/mlflow-rust:latest
+
+  ui-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Resolve release version
+        id: release
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^rust-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected rust-vMAJOR.MINOR.PATCH, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "version=${RELEASE_TAG#rust-v}" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-node
+
+      - name: Build MLflow UI
+        working-directory: mlflow/server/js
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: .
+          file: rust/deploy/Dockerfile.ui
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/patrickkoss/mlflow-rust-ui:${{ steps.release.outputs.version }}
+            ghcr.io/patrickkoss/mlflow-rust-ui:latest

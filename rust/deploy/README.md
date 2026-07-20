@@ -13,13 +13,41 @@ repository's migration revisions are mounted read-only into that ephemeral
 container so it reaches the branch's expected head. It never receives traffic
 and is not a fallback server.
 
-## Quick start
+## Published images quickstart
+
+From a checkout of this repository, run the release stack without compiling
+the server or UI locally:
+
+```bash
+cd rust/deploy
+docker compose -f docker-compose.release.yml up -d --wait
+
+bash smoke.sh
+bash smoke_frontend.sh
+
+docker compose -f docker-compose.release.yml down -v
+```
+
+This uses `ghcr.io/patrickkoss/mlflow-rust:latest` and
+`ghcr.io/patrickkoss/mlflow-rust-ui:latest`. Pin both images to a release by
+setting the shared version before the command, for example:
+
+```bash
+MLFLOW_RUST_VERSION=0.1.0 docker compose -f docker-compose.release.yml up -d --wait
+```
+
+The release stack still uses the digest-pinned stock MLflow image for its
+one-shot `mlflow db upgrade`. It mounts the migration revisions from this
+checkout, exits before serving starts, and requires no local image build. The
+request-serving Rust and nginx containers contain no Python runtime.
+
+## Build-from-source quickstart
 
 ```bash
 cd rust
 
 # Use the real UI build, or the hermetic placeholder for deployment smoke.
-yarn --cwd ../mlflow/server/js install --frozen-lockfile
+yarn --cwd ../mlflow/server/js install --immutable
 yarn --cwd ../mlflow/server/js build
 # Alternative: bash deploy/build_placeholder_ui.sh
 
@@ -60,13 +88,21 @@ nginx bind-mounts `mlflow/server/js/build/` read-only at
 `/usr/share/mlflow-ui`. Create a production build with:
 
 ```bash
-yarn --cwd mlflow/server/js install --frozen-lockfile
+yarn --cwd mlflow/server/js install --immutable
 yarn --cwd mlflow/server/js build
 ```
 
 For an offline smoke, `rust/deploy/build_placeholder_ui.sh` writes a minimal
 shell plus one hashed JavaScript asset. Missing builds no longer fall back to a
 serving container: `/` returns 503 and missing assets return 404.
+
+Release builds bake the same directory and `nginx.conf` into
+`ghcr.io/patrickkoss/mlflow-rust-ui`. `Dockerfile.ui` uses the repository root
+as its build context:
+
+```bash
+docker build -f rust/deploy/Dockerfile.ui -t mlflow-rust-ui:local .
+```
 
 ## Routing and attribution
 
