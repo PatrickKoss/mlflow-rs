@@ -60,6 +60,28 @@ cases:
     normalize:
       drop_paths: ["$.trace.trace_info.tags", "$.trace_info.tags"]
 
+  - name: trace_otlp_rollup_parent_token_usage
+    method: POST
+    path: /v1/traces
+    headers:
+      content-type: application/json
+      x-mlflow-experiment-id: "${traces_exp}"
+    raw_body: >-
+      {"resourceSpans":[{"scopeSpans":[{"spans":[
+      {"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","spanId":"0101010101010101","name":"agent","startTimeUnixNano":"1000000000","endTimeUnixNano":"2000000000","status":{"code":"STATUS_CODE_OK"},"attributes":[{"key":"mlflow.chat.tokenUsage","value":{"stringValue":"{\"input_tokens\":120,\"output_tokens\":15,\"total_tokens\":135}"}}]},
+      {"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","spanId":"1010101010101010","parentSpanId":"0101010101010101","name":"llm-1","startTimeUnixNano":"1100000000","endTimeUnixNano":"1200000000","status":{"code":"STATUS_CODE_OK"},"attributes":[{"key":"mlflow.chat.tokenUsage","value":{"stringValue":"{\"input_tokens\":40,\"output_tokens\":5,\"total_tokens\":45}"}}]},
+      {"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","spanId":"1111111111111111","parentSpanId":"0101010101010101","name":"llm-2","startTimeUnixNano":"1300000000","endTimeUnixNano":"1400000000","status":{"code":"STATUS_CODE_OK"},"attributes":[{"key":"mlflow.chat.tokenUsage","value":{"stringValue":"{\"input_tokens\":40,\"output_tokens\":5,\"total_tokens\":45}"}}]},
+      {"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","spanId":"1212121212121212","parentSpanId":"0101010101010101","name":"llm-3","startTimeUnixNano":"1500000000","endTimeUnixNano":"1600000000","status":{"code":"STATUS_CODE_OK"},"attributes":[{"key":"mlflow.chat.tokenUsage","value":{"stringValue":"{\"input_tokens\":40,\"output_tokens\":5,\"total_tokens\":45}"}}]}
+      ]}]}]}
+    expect_status: 200
+    compare_body: false
+
+  - name: trace_get_otlp_rollup_parent_token_usage
+    method: GET
+    path: /api/3.0/mlflow/traces/tr-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    normalize:
+      drop_paths: ["$.trace.trace_info.tags", "$.trace_info.tags"]
+
   - name: trace_set_tag_v3
     method: POST
     path: /api/3.0/mlflow/traces/tr-compliance-1/tags

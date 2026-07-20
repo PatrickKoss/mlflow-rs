@@ -45,7 +45,8 @@
 //! aggregation the T2.11 store layer deferred, is left for a follow-up phase.
 //! Spans translated by this module still persist correctly and are queryable;
 //! they just won't have vendor-inferred `mlflow.span*`/model/cost attributes
-//! auto-filled in when the client used a non-MLflow OTEL convention.
+//! auto-filled in when the client used a non-MLflow OTEL convention. Explicit
+//! `mlflow.chat.tokenUsage` attributes are aggregated by the store.
 
 use std::collections::BTreeMap;
 

@@ -1,12 +1,12 @@
 # Differential Request Replay - Last Run
 
-- Cases run: **12**  |  Non-allowlisted diffs: **0**  |  Allowlisted: **3**  |  Status mismatches: **0**  |  Errors: **0**
+- Cases run: **14**  |  Non-allowlisted diffs: **0**  |  Allowlisted: **3**  |  Status mismatches: **0**  |  Errors: **0**
 
 ## Per-section
 
 | Section | Cases | Status mismatch | Diffs | Allowlisted | Errors |
 |---|---|---|---|---|---|
-| traces | 12 | 0 | 0 | 3 | 0 |
+| traces | 14 | 0 | 0 | 3 | 0 |
 
 ## Allowlisted diffs (known, tolerated)
 

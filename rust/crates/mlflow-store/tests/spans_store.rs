@@ -72,6 +72,50 @@ fn span(
     }
 }
 
+fn usage_span(
+    trace_id: &str,
+    span_id: &str,
+    parent_span_id: Option<&str>,
+    usage: Option<(i64, i64, i64)>,
+) -> SpanInput {
+    let mut attributes = serde_json::Map::new();
+    if let Some((input_tokens, output_tokens, total_tokens)) = usage {
+        attributes.insert(
+            "mlflow.chat.tokenUsage".to_string(),
+            serde_json::Value::String(
+                serde_json::json!({
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                })
+                .to_string(),
+            ),
+        );
+    }
+    SpanInput {
+        trace_id: trace_id.to_string(),
+        span_id: span_id.to_string(),
+        parent_span_id: parent_span_id.map(str::to_string),
+        name: Some(format!("span-{span_id}")),
+        span_type: Some("LLM".to_string()),
+        status: "OK".to_string(),
+        start_time_unix_nano: 1_000_000_000,
+        end_time_unix_nano: Some(2_000_000_000),
+        content: serde_json::json!({"attributes": attributes}).to_string(),
+        dimension_attributes: None,
+    }
+}
+
+fn usage_range(trace_id: &str) -> TraceTimeRange {
+    range_from(trace_id, 1_000_000_000, Some(2_000_000_000), "OK")
+}
+
+fn trace_token_usage(trace: &mlflow_store::TraceInfo) -> Option<serde_json::Value> {
+    trace
+        .metadata("mlflow.trace.tokenUsage")
+        .map(|value| serde_json::from_str(value).unwrap())
+}
+
 /// A time-range aggregate derived from a single span (ns→ms floor division).
 fn range_from(trace_id: &str, start_ns: i64, end_ns: Option<i64>, status: &str) -> TraceTimeRange {
     TraceTimeRange {
@@ -294,6 +338,117 @@ async fn log_spans_extracts_replaces_and_deletes_attributes() {
         .await
         .unwrap();
     assert!(extracted_attributes(&s, "tr").await.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// tree-aware trace token-usage aggregation
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn log_spans_deduplicates_rollup_parent_token_usage_in_one_batch() {
+    let tmp = TempDb::new("usage_rollup_batch").await;
+    let s = store(&tmp).await;
+    let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+    let spans = vec![
+        usage_span("tr", "1", None, Some((120, 15, 135))),
+        usage_span("tr", "10", Some("1"), Some((40, 5, 45))),
+        usage_span("tr", "11", Some("1"), Some((40, 5, 45))),
+        usage_span("tr", "12", Some("1"), Some((40, 5, 45))),
+    ];
+
+    s.log_spans(WS, &exp, &spans, &[], &[usage_range("tr")])
+        .await
+        .unwrap();
+
+    let trace = s.get_trace_info(WS, "tr").await.unwrap();
+    assert_eq!(
+        trace_token_usage(&trace),
+        Some(serde_json::json!({
+            "input_tokens": 120,
+            "output_tokens": 15,
+            "total_tokens": 135,
+        }))
+    );
+}
+
+#[tokio::test]
+async fn log_spans_deduplicates_rollup_parent_token_usage_across_batches() {
+    for parent_first in [true, false] {
+        let tmp = TempDb::new(if parent_first {
+            "usage_rollup_parent_first"
+        } else {
+            "usage_rollup_children_first"
+        })
+        .await;
+        let s = store(&tmp).await;
+        let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+        let parent = vec![usage_span("tr", "1", None, Some((120, 15, 135)))];
+        let children = vec![
+            usage_span("tr", "10", Some("1"), Some((40, 5, 45))),
+            usage_span("tr", "11", Some("1"), Some((40, 5, 45))),
+            usage_span("tr", "12", Some("1"), Some((40, 5, 45))),
+        ];
+        let batches = if parent_first {
+            [&parent, &children]
+        } else {
+            [&children, &parent]
+        };
+
+        for batch in batches {
+            s.log_spans(WS, &exp, batch, &[], &[usage_range("tr")])
+                .await
+                .unwrap();
+        }
+
+        let trace = s.get_trace_info(WS, "tr").await.unwrap();
+        assert_eq!(
+            trace_token_usage(&trace),
+            Some(serde_json::json!({
+                "input_tokens": 120,
+                "output_tokens": 15,
+                "total_tokens": 135,
+            })),
+            "parent_first={parent_first}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn spans_without_usage_do_not_block_descendant_aggregation() {
+    let tmp = TempDb::new("usage_missing_nodes").await;
+    let s = store(&tmp).await;
+    let exp = s.create_experiment(WS, "e", None, &[]).await.unwrap();
+    let spans = vec![
+        usage_span("tr", "1", None, None),
+        usage_span("tr", "2", Some("1"), None),
+        usage_span("tr", "3", Some("2"), Some((10, 5, 15))),
+        usage_span("tr", "4", Some("2"), Some((20, 7, 27))),
+    ];
+    s.log_spans(WS, &exp, &spans, &[], &[usage_range("tr")])
+        .await
+        .unwrap();
+
+    let trace = s.get_trace_info(WS, "tr").await.unwrap();
+    assert_eq!(
+        trace_token_usage(&trace),
+        Some(serde_json::json!({
+            "input_tokens": 30,
+            "output_tokens": 12,
+            "total_tokens": 42,
+        }))
+    );
+
+    s.log_spans(
+        WS,
+        &exp,
+        &[usage_span("tr-without-usage", "1", None, None)],
+        &[],
+        &[usage_range("tr-without-usage")],
+    )
+    .await
+    .unwrap();
+    let trace = s.get_trace_info(WS, "tr-without-usage").await.unwrap();
+    assert_eq!(trace_token_usage(&trace), None);
 }
 
 // ---------------------------------------------------------------------------

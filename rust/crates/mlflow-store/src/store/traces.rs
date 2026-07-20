@@ -1327,7 +1327,7 @@ async fn upsert_trace_info(
 }
 
 /// Upsert a `(request_id, key, value)` row into a trace KV child table.
-async fn upsert_trace_child(
+pub(crate) async fn upsert_trace_child(
     tx: &mut Tx<'_>,
     dialect: Dialect,
     table: &str,
@@ -1357,7 +1357,7 @@ async fn upsert_trace_child(
 }
 
 /// Upsert a `trace_metrics` row.
-async fn upsert_trace_metric(
+pub(crate) async fn upsert_trace_metric(
     tx: &mut Tx<'_>,
     dialect: Dialect,
     trace_id: &str,

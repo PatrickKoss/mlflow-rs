@@ -1,6 +1,6 @@
 {
   "summary": {
-    "cases_run": 12,
+    "cases_run": 14,
     "non_allowlisted_diffs": 0,
     "allowlisted_diffs": 3,
     "status_mismatches": 0,
@@ -9,7 +9,7 @@
   },
   "per_section": {
     "traces": {
-      "cases": 12,
+      "cases": 14,
       "status_mismatch": 0,
       "diffs": 0,
       "allowlisted": 3,
@@ -82,6 +82,32 @@
       "section": "traces",
       "method": "GET",
       "path": "/api/3.0/mlflow/traces/tr-compliance-assessment",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_otlp_rollup_parent_token_usage",
+      "section": "traces",
+      "method": "POST",
+      "path": "/v1/traces",
+      "py_status": 200,
+      "rust_status": 200,
+      "status_match": true,
+      "diffs": [],
+      "allowlisted": [],
+      "error": null,
+      "note": null
+    },
+    {
+      "name": "trace_get_otlp_rollup_parent_token_usage",
+      "section": "traces",
+      "method": "GET",
+      "path": "/api/3.0/mlflow/traces/tr-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "py_status": 200,
       "rust_status": 200,
       "status_match": true,

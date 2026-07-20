@@ -136,6 +136,7 @@ class DualServers:
         python_extra_env: dict[str, str] | None = None,
         rust_extra_env: dict[str, str] | None = None,
         python_app: str = "mlflow.server:app",
+        python_asgi: bool = False,
     ) -> None:
         self.workdir = workdir
         self.seed_db = seed_db
@@ -148,6 +149,7 @@ class DualServers:
         # endpoints exist only there), mirroring
         # `tests/server/auth/test_auth.py`'s `app="mlflow.server.auth:create_app"`.
         self.python_app = python_app
+        self.python_asgi = python_asgi
         self.python: ServerHandle | None = None
         self.rust: ServerHandle | None = None
 
@@ -193,18 +195,30 @@ class DualServers:
         rust_art.mkdir(parents=True, exist_ok=True)
 
         py_port = _free_port()
-        py_cmd = [
-            sys.executable,
-            "-m",
-            "flask",
-            "--app",
-            self.python_app,
-            "run",
-            "--host",
-            LOCALHOST,
-            "--port",
-            str(py_port),
-        ]
+        if self.python_asgi:
+            py_cmd = [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                self.python_app,
+                "--host",
+                LOCALHOST,
+                "--port",
+                str(py_port),
+            ]
+        else:
+            py_cmd = [
+                sys.executable,
+                "-m",
+                "flask",
+                "--app",
+                self.python_app,
+                "run",
+                "--host",
+                LOCALHOST,
+                "--port",
+                str(py_port),
+            ]
         self.python = self._boot("python", py_cmd, f"sqlite:///{py_db}", py_art)
 
         rust_port = _free_port()
@@ -668,6 +682,9 @@ def _run_sqlite_sections(
     sections: dict[str, list[Case]],
     allow: list[AllowEntry],
     workroot: Path,
+    *,
+    python_app: str = "mlflow.server:app",
+    python_asgi: bool = False,
 ) -> list[CaseResult]:
     """Run all non-auth/non-workspace sections against one Python+Rust pair."""
     seed_db = workroot / "seed.db"
@@ -719,6 +736,8 @@ def _run_sqlite_sections(
         extra_env=extra_env,
         python_extra_env=python_extra_env,
         rust_extra_env=rust_extra_env,
+        python_app=python_app,
+        python_asgi=python_asgi,
     ) as servers:
         py_bindings: dict[str, Any] = {}
         rust_bindings: dict[str, Any] = {}
@@ -887,6 +906,7 @@ def main() -> int:
     auth_cases = sections.pop("auth", [])
     workspace_cases = sections.pop("workspaces", [])
     invoke_cases = sections.pop("invoke", [])
+    traces_cases = sections.pop("traces", [])
     gateway_proxy_validation_cases = sections.pop("gateway_proxy_validation", [])
 
     all_results: list[CaseResult] = []
@@ -896,6 +916,17 @@ def main() -> int:
     if invoke_cases:
         with tempfile.TemporaryDirectory(prefix="t124-invoke-") as td:
             all_results.extend(_run_sqlite_sections({"invoke": invoke_cases}, allow, Path(td)))
+    if traces_cases:
+        with tempfile.TemporaryDirectory(prefix="t124-traces-") as td:
+            all_results.extend(
+                _run_sqlite_sections(
+                    {"traces": traces_cases},
+                    allow,
+                    Path(td),
+                    python_app="mlflow.server.fastapi_app:app",
+                    python_asgi=True,
+                )
+            )
     if gateway_proxy_validation_cases:
         with tempfile.TemporaryDirectory(prefix="t182-proxy-validation-") as td:
             all_results.extend(

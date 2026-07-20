@@ -7,17 +7,18 @@
 //! ## Store-layer contract (deviation from Python, documented)
 //!
 //! Python's `log_spans` receives fully-hydrated `Span` entities and performs
-//! OTLP-specific work — `translate_span_when_storing`, token-usage/cost
-//! aggregation, session/user-id extraction, resource-attribute → tag mapping,
+//! OTLP-specific work — `translate_span_when_storing`, cost aggregation,
+//! session/user-id extraction, resource-attribute → tag mapping,
 //! and preview backfill — all of which is *serialization*, not SQL. In the Rust
 //! split that translation belongs to the HTTP/OTLP layer (Phase 3). This module
 //! takes already-prepared [`SpanInput`] rows plus a precomputed
 //! [`TraceTimeRange`] per trace and performs the identical **database**
 //! semantics: bulk span/metric upsert, atomic min-start / max-end trace time
 //! update (skipped when `start_trace` finalized the trace), span-derived trace
-//! status, and the `SPANS_LOCATION = TRACKING_STORE` tag. Token-usage/cost trace
-//! metadata & metrics are written by the caller through the same sorted-key
-//! upsert path as `start_trace`.
+//! status, and the `SPANS_LOCATION = TRACKING_STORE` tag. Trace-level token
+//! usage is recomputed here from the complete stored span tree so rollup parent
+//! spans do not double-count their children, including across calls. Cost trace
+//! metadata remains caller-provided.
 //!
 //! ## Lazy content reads (commit `d5dce6e8f`)
 //!
@@ -27,21 +28,29 @@
 //! and it skips rows whose `content == ""` (cleared payload), exactly like
 //! `_load_tracking_store_span_snapshots`.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use mlflow_error::MlflowError;
 
 use super::dbutil::{Tx, Val};
 use super::entities::{
-    StoredSpan, TraceState, SPANS_LOCATION_TRACKING_STORE, TRACE_TAG_SPANS_LOCATION,
+    StoredSpan, TraceState, SPANS_LOCATION_TRACKING_STORE, TRACE_METADATA_INFO_FINALIZED,
+    TRACE_TAG_SPANS_LOCATION,
 };
 use super::experiments::{internal, parse_experiment_id};
 use super::TrackingStore;
 use crate::dialect::Dialect;
-use crate::schema::traces::{SPANS, SPAN_ATTRIBUTES, SPAN_METRICS, TRACE_INFO, TRACE_TAGS};
+use crate::schema::traces::{
+    SPANS, SPAN_ATTRIBUTES, SPAN_METRICS, TRACE_INFO, TRACE_REQUEST_METADATA, TRACE_TAGS,
+};
 
 const MAX_SPAN_ATTRIBUTE_KEY_CHARS: usize = 250;
 const MAX_SPAN_ATTRIBUTE_VALUE_CHARS: usize = 500;
+const SPAN_CHAT_USAGE: &str = "mlflow.chat.tokenUsage";
+const TRACE_TOKEN_USAGE: &str = "mlflow.trace.tokenUsage";
+const TOKEN_USAGE_KEYS: &[&str] = &["input_tokens", "output_tokens", "total_tokens"];
+const OPTIONAL_TOKEN_USAGE_KEYS: &[&str] =
+    &["cache_read_input_tokens", "cache_creation_input_tokens"];
 
 /// A prepared span row to upsert (the store-level shape; the OTLP→row
 /// translation is a Phase-3 concern). `duration_ns` is never set — it is a
@@ -127,6 +136,11 @@ impl TrackingStore {
             .iter()
             .map(|r| (r.trace_id.as_str(), r))
             .collect();
+        let traces_with_usage = spans
+            .iter()
+            .filter(|span| span_usage(&span.content).is_some())
+            .map(|span| span.trace_id.as_str())
+            .collect::<BTreeSet<_>>();
 
         // Verify the experiment is in the workspace (mirrors get_experiment in
         // Python's Phase 2). A missing/foreign experiment errors like Python.
@@ -179,6 +193,13 @@ impl TrackingStore {
             };
             let finalized = existing.get(trace_id).map(|s| s.finalized).unwrap_or(false);
             apply_trace_time_range(&mut tx, dialect, trace_id, range, finalized).await?;
+
+            let has_authoritative_usage = existing
+                .get(trace_id)
+                .is_some_and(|status| status.finalized && status.has_token_usage);
+            if traces_with_usage.contains(trace_id.as_str()) && !has_authoritative_usage {
+                recompute_trace_token_usage(&mut tx, dialect, trace_id).await?;
+            }
 
             // Mark span payloads as stored in the tracking store.
             upsert_spans_location_tag(&mut tx, dialect, trace_id).await?;
@@ -235,6 +256,7 @@ async fn advance_db_payload_generations(
 /// whether `start_trace` has finalized its authoritative values).
 struct TraceStatusRow {
     finalized: bool,
+    has_token_usage: bool,
 }
 
 /// Batch-read which of `trace_ids` already exist and whether each carries the
@@ -248,39 +270,238 @@ async fn fetch_existing_trace_status(
         return Ok(HashMap::new());
     }
     let ids: Vec<&String> = trace_ids.iter().collect();
-    let mut binds: Vec<Val> = Vec::with_capacity(ids.len() + 1);
-    // The finalized-flag placeholder appears first in the SQL text (in the
-    // correlated subquery), so it must be bound first — positional placeholders
-    // (`?`) bind in SQL-text order on SQLite/MySQL.
-    binds.push(Val::Text(
-        super::entities::TRACE_METADATA_INFO_FINALIZED.to_string(),
-    ));
+    let mut binds: Vec<Val> = Vec::with_capacity(ids.len() + 2);
+    // The metadata-key placeholders appear first in the SQL text (in the
+    // correlated subqueries), so they must be bound first — positional
+    // placeholders (`?`) bind in SQL-text order on SQLite/MySQL.
+    binds.push(Val::Text(TRACE_METADATA_INFO_FINALIZED.to_string()));
     let flag_ph = dialect.placeholder(1);
+    binds.push(Val::Text(TRACE_TOKEN_USAGE.to_string()));
+    let usage_ph = dialect.placeholder(2);
     let phs: Vec<String> = ids
         .iter()
         .enumerate()
         .map(|(i, id)| {
             binds.push(Val::Text((*id).clone()));
-            dialect.placeholder(i + 2)
+            dialect.placeholder(i + 3)
         })
         .collect();
     let sql = format!(
         "SELECT ti.request_id, \
          (SELECT COUNT(*) FROM trace_request_metadata m \
-          WHERE m.request_id = ti.request_id AND m.\"key\" = {flag_ph}) AS finalized \
+          WHERE m.request_id = ti.request_id AND m.\"key\" = {flag_ph}) AS finalized, \
+         (SELECT COUNT(*) FROM trace_request_metadata m \
+          WHERE m.request_id = ti.request_id AND m.\"key\" = {usage_ph}) AS has_token_usage \
          FROM {TRACE_INFO} ti WHERE ti.request_id IN ({})",
         phs.join(", ")
     );
     let rows = tx
         .fetch_all(&sql, &binds, |r| {
-            Ok((r.get_string("request_id")?, r.get_i64("finalized")? > 0))
+            Ok((
+                r.get_string("request_id")?,
+                r.get_i64("finalized")? > 0,
+                r.get_i64("has_token_usage")? > 0,
+            ))
         })
         .await
         .map_err(internal)?;
     Ok(rows
         .into_iter()
-        .map(|(id, finalized)| (id, TraceStatusRow { finalized }))
+        .map(|(id, finalized, has_token_usage)| {
+            (
+                id,
+                TraceStatusRow {
+                    finalized,
+                    has_token_usage,
+                },
+            )
+        })
         .collect())
+}
+
+#[derive(Debug)]
+struct UsageNode {
+    span_id: String,
+    parent_span_id: Option<String>,
+    usage: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct TokenUsage {
+    input_tokens: i64,
+    output_tokens: i64,
+    total_tokens: i64,
+    cache_read_input_tokens: Option<i64>,
+    cache_creation_input_tokens: Option<i64>,
+}
+
+impl TokenUsage {
+    fn add(&mut self, usage: &serde_json::Map<String, serde_json::Value>) {
+        self.input_tokens += usage_i64(usage, TOKEN_USAGE_KEYS[0]);
+        self.output_tokens += usage_i64(usage, TOKEN_USAGE_KEYS[1]);
+        self.total_tokens += usage_i64(usage, TOKEN_USAGE_KEYS[2]);
+        add_optional_usage(
+            &mut self.cache_read_input_tokens,
+            usage,
+            OPTIONAL_TOKEN_USAGE_KEYS[0],
+        );
+        add_optional_usage(
+            &mut self.cache_creation_input_tokens,
+            usage,
+            OPTIONAL_TOKEN_USAGE_KEYS[1],
+        );
+    }
+
+    fn metadata_json(&self) -> String {
+        let mut fields = vec![
+            format!("\"input_tokens\": {}", self.input_tokens),
+            format!("\"output_tokens\": {}", self.output_tokens),
+            format!("\"total_tokens\": {}", self.total_tokens),
+        ];
+        if let Some(value) = self.cache_read_input_tokens {
+            fields.push(format!("\"cache_read_input_tokens\": {value}"));
+        }
+        if let Some(value) = self.cache_creation_input_tokens {
+            fields.push(format!("\"cache_creation_input_tokens\": {value}"));
+        }
+        format!("{{{}}}", fields.join(", "))
+    }
+
+    fn metrics(&self) -> [(&'static str, Option<i64>); 5] {
+        [
+            (TOKEN_USAGE_KEYS[0], Some(self.input_tokens)),
+            (TOKEN_USAGE_KEYS[1], Some(self.output_tokens)),
+            (TOKEN_USAGE_KEYS[2], Some(self.total_tokens)),
+            (OPTIONAL_TOKEN_USAGE_KEYS[0], self.cache_read_input_tokens),
+            (
+                OPTIONAL_TOKEN_USAGE_KEYS[1],
+                self.cache_creation_input_tokens,
+            ),
+        ]
+    }
+}
+
+fn usage_i64(usage: &serde_json::Map<String, serde_json::Value>, key: &str) -> i64 {
+    usage
+        .get(key)
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0)
+}
+
+fn add_optional_usage(
+    total: &mut Option<i64>,
+    usage: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) {
+    if let Some(value) = usage.get(key).and_then(serde_json::Value::as_i64) {
+        *total = Some(total.unwrap_or(0) + value);
+    }
+}
+
+fn span_usage(content: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let value = serde_json::from_str::<serde_json::Value>(content)
+        .ok()?
+        .get("attributes")?
+        .get(SPAN_CHAT_USAGE)?
+        .clone();
+    match value {
+        serde_json::Value::Object(usage) => Some(usage),
+        serde_json::Value::String(encoded) => serde_json::from_str(&encoded)
+            .ok()
+            .and_then(|value: serde_json::Value| value.as_object().cloned()),
+        _ => None,
+    }
+}
+
+fn aggregate_token_usage(nodes: &[UsageNode]) -> Option<TokenUsage> {
+    let node_ids = nodes
+        .iter()
+        .map(|node| node.span_id.as_str())
+        .collect::<HashSet<_>>();
+    let mut children = HashMap::<&str, Vec<usize>>::new();
+    let mut roots = Vec::new();
+    for (index, node) in nodes.iter().enumerate() {
+        if let Some(parent) = node
+            .parent_span_id
+            .as_deref()
+            .filter(|parent| node_ids.contains(parent))
+        {
+            children.entry(parent).or_default().push(index);
+        } else {
+            roots.push(index);
+        }
+    }
+
+    let mut totals = TokenUsage::default();
+    let mut has_usage = false;
+    let mut stack = roots
+        .into_iter()
+        .map(|index| (index, false))
+        .collect::<Vec<_>>();
+    while let Some((index, ancestor_has_usage)) = stack.pop() {
+        let node = &nodes[index];
+        let node_has_usage = node.usage.is_some();
+        if !ancestor_has_usage {
+            if let Some(usage) = &node.usage {
+                totals.add(usage);
+                has_usage = true;
+            }
+        }
+        let descendants_have_usage = ancestor_has_usage || node_has_usage;
+        stack.extend(
+            children
+                .get(node.span_id.as_str())
+                .into_iter()
+                .flatten()
+                .map(|child| (*child, descendants_have_usage)),
+        );
+    }
+    has_usage.then_some(totals)
+}
+
+async fn recompute_trace_token_usage(
+    tx: &mut Tx<'_>,
+    dialect: Dialect,
+    trace_id: &str,
+) -> Result<(), MlflowError> {
+    let rows = tx
+        .fetch_all(
+            &format!(
+                "SELECT span_id, parent_span_id, content FROM {SPANS} \
+                 WHERE trace_id = {} AND content <> ''",
+                dialect.placeholder(1)
+            ),
+            &[Val::Text(trace_id.to_string())],
+            |row| {
+                let content = row.get_string("content")?;
+                Ok(UsageNode {
+                    span_id: row.get_string("span_id")?,
+                    parent_span_id: row.get_opt_string("parent_span_id")?,
+                    usage: span_usage(&content),
+                })
+            },
+        )
+        .await
+        .map_err(internal)?;
+    let Some(usage) = aggregate_token_usage(&rows) else {
+        return Ok(());
+    };
+
+    super::traces::upsert_trace_child(
+        tx,
+        dialect,
+        TRACE_REQUEST_METADATA,
+        trace_id,
+        TRACE_TOKEN_USAGE,
+        Val::Text(usage.metadata_json()),
+    )
+    .await?;
+    for (key, value) in usage.metrics() {
+        if let Some(value) = value {
+            super::traces::upsert_trace_metric(tx, dialect, trace_id, key, value as f64).await?;
+        }
+    }
+    Ok(())
 }
 
 /// Create a `trace_info` row for a trace observed only via its spans (Python's
