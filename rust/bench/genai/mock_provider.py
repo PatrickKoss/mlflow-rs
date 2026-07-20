@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import json
 import random
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -91,11 +92,35 @@ class ProviderObservation:
 class ProviderState:
     seed: int
     route_latency_ms: dict[str, float] = field(default_factory=dict)
+    frame_gap_ms: float = 0.0
     observations: list[ProviderObservation] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def digest(self, route: str, request: bytes) -> str:
-        material = f"{self.seed}:{route}:".encode() + canonical_request(request)
+        canonical = canonical_request(request)
+        try:
+            body = json.loads(canonical)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            body = None
+        assistant_turn = (
+            re.search(r"assistant seed \d+ turn \d+", json.dumps(body, sort_keys=True))
+            if isinstance(body, dict)
+            else None
+        )
+        # OpenAI passthrough clients add different transport-only fields. The
+        # benchmark's explicit ``user`` token identifies the logical request,
+        # so response bytes remain stable while observations still hash the
+        # full upstream request independently.
+        if assistant_turn:
+            canonical = assistant_turn.group(0).encode()
+        elif isinstance(body, dict) and body.get("user"):
+            canonical = _json_bytes({
+                "max_tokens": body.get("max_tokens"),
+                "route": route,
+                "stream": body.get("stream", False),
+                "user": body["user"],
+            })
+        material = f"{self.seed}:{route}:".encode() + canonical
         return hashlib.sha256(material).hexdigest()
 
     def observe(self, route: str, request: bytes, response: bytes) -> None:
@@ -118,8 +143,9 @@ class DeterministicProvider(ThreadingHTTPServer):
         address: tuple[str, int],
         seed: int,
         route_latency_ms: dict[str, float] | None = None,
+        frame_gap_ms: float = 0.0,
     ) -> None:
-        self.state = ProviderState(seed, route_latency_ms or {})
+        self.state = ProviderState(seed, route_latency_ms or {}, frame_gap_ms)
         super().__init__(address, ProviderHandler)
 
 
@@ -163,9 +189,10 @@ class ProviderHandler(BaseHTTPRequestHandler):
         else:
             response = self._openai_response(body, digest)
         self.provider.state.observe(route, request, response)
-        self._send_bytes(
-            200, response, "text/event-stream" if body.get("stream") else "application/json"
-        )
+        if body.get("stream"):
+            self._send_stream(response)
+        else:
+            self._send_bytes(200, response, "application/json")
 
     def _route(self) -> str | None:
         path = self.path.split("?", 1)[0]
@@ -194,7 +221,14 @@ class ProviderHandler(BaseHTTPRequestHandler):
             "total_tokens": prompt_tokens + completion_tokens,
         }
         if body.get("stream"):
-            pieces = [text[:10], text[10:20], text[20:]]
+            frame_count = self._openai_frame_count(body, digest)
+            if frame_count is None:
+                pieces = [text[:10], text[10:20], text[20:]]
+            else:
+                pieces = [
+                    f"bench-{index:04d}-{digest[index % len(digest)]}"
+                    for index in range(frame_count)
+                ]
             frames = []
             for index, piece in enumerate(pieces):
                 chunk: dict[str, Any] = {
@@ -232,6 +266,21 @@ class ProviderHandler(BaseHTTPRequestHandler):
             "object": "chat.completion",
             "usage": usage,
         })
+
+    @staticmethod
+    def _openai_frame_count(body: dict[str, Any], digest: str) -> int | None:
+        """Return T23.4's deterministic small/large stream cardinality.
+
+        Ordinary harness requests retain the original three-frame fixture. The
+        benchmark selects a valid OpenAI ``max_tokens`` value, and cardinality
+        then varies only with the seeded request digest.
+        """
+        max_tokens = body.get("max_tokens")
+        if max_tokens == 32:
+            return 9 + int(digest[24:26], 16) % 3
+        if max_tokens == 512:
+            return 112 + int(digest[24:26], 16) % 17
+        return None
 
     def _embedding_response(self, body: dict[str, Any], digest: str) -> bytes:
         inputs = body.get("input", [])
@@ -313,13 +362,29 @@ class ProviderHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         self.wfile.flush()
 
+    def _send_stream(self, body: bytes) -> None:
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.send_header("connection", "close")
+        self.end_headers()
+        frames = body.split(b"\n\n")
+        for index, frame in enumerate(frames):
+            if not frame:
+                continue
+            self.wfile.write(frame + b"\n\n")
+            self.wfile.flush()
+            if self.provider.state.frame_gap_ms > 0 and index + 1 < len(frames):
+                time.sleep(self.provider.state.frame_gap_ms / 1000)
+        self.close_connection = True
+
 
 @contextlib.contextmanager
 def provider_server(
     seed: int,
     route_latency_ms: dict[str, float] | None = None,
+    frame_gap_ms: float = 0.0,
 ) -> Iterator[DeterministicProvider]:
-    server = DeterministicProvider(("127.0.0.1", 0), seed, route_latency_ms)
+    server = DeterministicProvider(("127.0.0.1", 0), seed, route_latency_ms, frame_gap_ms)
     thread = threading.Thread(target=server.serve_forever, name="genai-mock-provider", daemon=True)
     thread.start()
     try:

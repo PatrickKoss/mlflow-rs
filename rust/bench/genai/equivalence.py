@@ -14,10 +14,12 @@ UUID_RE = re.compile(
 )
 TRACE_RE = re.compile(r"\btr-[0-9a-fA-F]{16,}\b")
 PREFIXED_ID_RE = re.compile(r"\b[a-zA-Z]{1,5}-[0-9a-fA-F]{16,64}\b")
+BARE_HEX_ID_RE = re.compile(r"\b[0-9a-fA-F]{32,64}\b")
 STUB_SESSION_RE = re.compile(r"mlflow-dev-stub-[A-Za-z0-9-]+")
 CONCURRENT_GATEWAY_MODEL_RE = re.compile(r"\bobvious-fake-model-\d+\b")
 LOOPBACK_PORT_RE = re.compile(r"http://127\.0\.0\.1:\d+")
 PROMPT_VERSION_RE = re.compile(r"(prompts:/[^/\s]+/)\d+")
+T23_TARGET_PREFIX_RE = re.compile(r"s3://mlflow-genai-bench/t23-4/(?:python|rust)-[^/\s]+")
 ID_KEYS = {
     "assessment_id",
     "digest",
@@ -28,6 +30,7 @@ ID_KEYS = {
     "session_id",
     "trace_id",
 }
+VOLATILE_KEYS = {"created"}
 VOLATILE_FRAGMENTS = (
     "timestamp",
     "created_at",
@@ -38,6 +41,7 @@ VOLATILE_FRAGMENTS = (
     "latency",
     "elapsed",
     "created_time",
+    "time_created",
     "last_updated",
     "queue_wait",
     "execution_seconds",
@@ -49,6 +53,7 @@ def _normalize_string(value: str) -> str:
     value = UUID_RE.sub("<uuid>", value)
     value = TRACE_RE.sub("<trace-id>", value)
     value = PREFIXED_ID_RE.sub("<id>", value)
+    value = BARE_HEX_ID_RE.sub("<id>", value)
     value = STUB_SESSION_RE.sub("<provider-session-id>", value)
     # Endpoint create/update responses embed the current write-side model.
     # Under concurrent model updates that joined state can legitimately come
@@ -56,6 +61,7 @@ def _normalize_string(value: str) -> str:
     value = CONCURRENT_GATEWAY_MODEL_RE.sub("<concurrent-model-state>", value)
     value = LOOPBACK_PORT_RE.sub("http://127.0.0.1:<port>", value)
     value = PROMPT_VERSION_RE.sub(r"\1<version>", value)
+    value = T23_TARGET_PREFIX_RE.sub("s3://mlflow-genai-bench/t23-4/<target-prefix>", value)
     return value.replace("/assistant/stream/<uuid>", "/assistant/sessions/<uuid>/stream")
 
 
@@ -63,6 +69,8 @@ def normalize(value: Any, key: str = "") -> Any:
     lower = key.lower()
     if lower == "polls":
         return "<polls>"
+    if lower in VOLATILE_KEYS:
+        return "<time>" if value is not None else None
     if lower in ID_KEYS or lower.endswith("_id"):
         return "<id>" if value is not None else None
     if lower.endswith("_ids") and isinstance(value, list):
