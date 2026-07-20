@@ -50,10 +50,12 @@ operational docs landed. Next: Part 2 (genai port) per user directive.**
   + T23.2 CRUD matrix done (56/56 cells zero-error, equivalence PASS,
   Rust faster everywhere; see T23.2 DONE note). T23.3 jobs matrix done
   (12/12 pairs green, leak checks flat; 3 Rust-slower large-payload
-  cells noted for the report). T23.4 streaming+archival done (20/20
-  pairs green; Rust-slower only on 64-stream TTFE; S3-not-wired archival
-  limitation documented). Next: T23.5 (mixed soak + final
-  `rust/bench/genai_eval.md` report) — then
+  cells noted for the report). **PHASE 23 COMPLETE** 2026-07-20: all of
+  T23.1–T23.5 done; soak passed the no-leak RSS check both sides; final
+  report `rust/bench/genai_eval.md` written (Rust faster across families,
+  117.8× less RSS in soak, all regressions disclosed). Per user directive
+  (2026-07-20) work STOPS here; Phase 22 (compliance & cutover) is left
+  for a separate session and must NOT be auto-started. When resumed,
   Phase 22 (compliance & cutover; Phase 23 must finish before T22.4
   removes the Python container).
 - **D23 Phoenix license blocker** — RESOLVED: user approved the rejection
@@ -4034,7 +4036,7 @@ zero live provider calls anywhere in this phase.
       budget accounting ran. Artifacts: `rust/bench/genai/results/t23_4/`
       (40 raw JSONs + `t23_4_summary.md`), driver `rust/bench/genai/t23_4.py`.
       Gates: ruff 0, harness tests 14 passed, route parity 372, replay 0.
-- [ ] **T23.5 Mixed soak + final report**: one realistic mixed genai
+- [x] **T23.5 Mixed soak + final report**: one realistic mixed genai
       workload combining all of the above (dataset upserts + evaluation/
       scorer jobs + gateway chat traffic incl. streams + assistant sessions
       + review-queue/labeling reads + a background archival pass), ≥10,000
@@ -4048,6 +4050,27 @@ zero live provider calls anywhere in this phase.
       error rate < 0.01% both; report covers EVERY §12 family with at least
       one measured cell; results reproducible from the documented command.
       **VER:** `rust/bench/genai_eval.md` + raw metrics + repro script.
+      **DONE 2026-07-20** (codex agent, merged a0937ad29): PHASE 23 COMPLETE.
+      Soak: 10,000 primary requests + 1,000 jobs + 1,000-trace background
+      archive pass per target, 0 errors (0.00000%), equivalence PASS (archive
+      SHA-256 identical both sides). Mix: datasets 2,000, gateway non-stream
+      2,500, gateway streams 500, assistant 500, label reads 1,750, review
+      reads 1,750, evaluation jobs 500, scorer jobs 500. RSS-growth verdict
+      (the critical AC): Python -3299.19 MiB/h non-monotonic PASS, Rust
+      +10.23 MiB/h non-monotonic (+3.10% final) PASS — no leak either side.
+      Rust used 117.8× less mean RSS, 119.7× less peak RSS, 9.9× less CPU
+      during the soak. Final report `rust/bench/genai_eval.md` (Phase 14
+      style): exec summary, method w/ shared-method anchor, all 12 §12
+      families covered with representative cells, RSS/CPU over-time tables,
+      key ratios, and every Rust-slower cell disclosed honestly (T23.3 few-
+      large-job worker-startup cells; T23.4 five TTFE-tail + four stream-p99
+      cells from socket-read frame batching; soak's positive-but-passing Rust
+      RSS slope), limitations documented (S3-not-wired archival, guardrails
+      loaded-not-executed on streams, host lacks cgroup pids.current). Folds
+      in 122 raw JSONs across T23.2–T23.5. One-command repro included.
+      Artifacts: `rust/bench/genai/results/t23_5/` (soak raw + summary),
+      driver `rust/bench/genai/t23_5.py`, report `rust/bench/genai_eval.md`.
+      Gates: ruff 0, harness tests 16 passed, route parity 372, replay 0.
 
 ---
 
