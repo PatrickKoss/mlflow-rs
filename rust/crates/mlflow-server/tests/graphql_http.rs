@@ -49,6 +49,7 @@ fn fixture_path() -> PathBuf {
 
 struct TempDb {
     path: PathBuf,
+    artifact_dir: PathBuf,
 }
 
 impl TempDb {
@@ -61,19 +62,34 @@ impl TempDb {
             std::process::id(),
             n
         ));
+        let artifact_dir = std::env::temp_dir().join(format!(
+            "mlflow_rust_server_graphql_artifacts_{}_{}_{}",
+            tag,
+            std::process::id(),
+            n
+        ));
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&artifact_dir);
         std::fs::copy(fixture_path(), &path).expect("copy fixture");
-        TempDb { path }
+        TempDb { path, artifact_dir }
     }
 
     fn uri(&self) -> String {
         format!("sqlite:///{}", self.path.display())
+    }
+
+    fn artifact_uri(&self) -> String {
+        format!(
+            "file://{}/{FIXTURE_RUN_ID}/artifacts",
+            self.artifact_dir.display()
+        )
     }
 }
 
 impl Drop for TempDb {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir_all(&self.artifact_dir);
     }
 }
 
@@ -92,6 +108,15 @@ impl TestServer {
         let db = Db::connect(&db_file.uri(), PoolConfig::default())
             .await
             .expect("connect temp fixture");
+        let Db::Sqlite(pool) = &db else {
+            unreachable!("GraphQL fixture is SQLite")
+        };
+        sqlx::query("UPDATE runs SET artifact_uri = ? WHERE run_uuid = ?")
+            .bind(db_file.artifact_uri())
+            .bind(FIXTURE_RUN_ID)
+            .execute(pool)
+            .await
+            .expect("replace fixture artifact URI");
         let tracking = TrackingStore::new(db.clone(), "file:///unused".to_string());
         let registry = RegistryStore::new(db);
 
