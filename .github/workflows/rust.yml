@@ -192,6 +192,13 @@ jobs:
         with:
           workspaces: rust
       - uses: ./.github/actions/setup-python
+      - name: Allow trigger creation in MySQL service
+        if: matrix.dialect == 'mysql'
+        working-directory: .
+        run: |
+          mysql_container_id="$(docker ps --filter ancestor=mysql:8 --format '{{.ID}}')"
+          docker exec "$mysql_container_id" mysql -uroot -proot \
+            -e "SET GLOBAL log_bin_trust_function_creators = 1"
       - name: Provision schema (mlflow db upgrade)
         working-directory: .
         env:
