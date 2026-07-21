@@ -25,6 +25,7 @@ PROMPT_PARAMETERS = [Param("thing", "books")]
 MODEL_PARAMETERS = [Param("temperature", "0.1"), Param("max_tokens", "10")]
 MODEL_OUTPUT_PARAMETERS = [Param("latency", "100")]
 MODEL_ROUTE = "openai-endpoint"
+PINNED_PYTHON_VERSION = "3.10.18"
 
 
 def parse_args():
@@ -40,22 +41,26 @@ def python_twin(root: Path):
         artifact_uri=(root / "artifacts").as_uri(),
     )
     experiment_id = store.create_experiment("promptlab-python-twin")
-    run = _create_promptlab_run_impl(
-        store,
-        experiment_id=experiment_id,
-        run_name="promptlab-cross-language",
-        tags=[],
-        prompt_template=PROMPT_TEMPLATE,
-        prompt_parameters=PROMPT_PARAMETERS,
-        model_route=MODEL_ROUTE,
-        model_parameters=MODEL_PARAMETERS,
-        model_input="Write about books.",
-        model_output_parameters=MODEL_OUTPUT_PARAMETERS,
-        model_output="gateway:Write about books.",
-        mlflow_version="ignored-by-python-writer",
-        user_id="cross-language",
-        start_time=123456,
-    )
+    with (
+        mock.patch("mlflow.pyfunc.PYTHON_VERSION", PINNED_PYTHON_VERSION),
+        mock.patch("mlflow.utils.environment.PYTHON_VERSION", PINNED_PYTHON_VERSION),
+    ):
+        run = _create_promptlab_run_impl(
+            store,
+            experiment_id=experiment_id,
+            run_name="promptlab-cross-language",
+            tags=[],
+            prompt_template=PROMPT_TEMPLATE,
+            prompt_parameters=PROMPT_PARAMETERS,
+            model_route=MODEL_ROUTE,
+            model_parameters=MODEL_PARAMETERS,
+            model_input="Write about books.",
+            model_output_parameters=MODEL_OUTPUT_PARAMETERS,
+            model_output="gateway:Write about books.",
+            mlflow_version="ignored-by-python-writer",
+            user_id="cross-language",
+            start_time=123456,
+        )
     return Path(run.info.artifact_uri.removeprefix("file://")) / "model", run
 
 
