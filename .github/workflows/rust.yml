@@ -124,6 +124,10 @@ jobs:
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
+      - uses: ./.github/actions/setup-python
+      - name: Install Python oracle dependencies
+        working-directory: .
+        run: uv sync --frozen
       - name: Run tests
         run: cargo test --workspace
 
@@ -207,14 +211,18 @@ jobs:
       - name: Run store/registry suites against live dialect
         env:
           MLFLOW_RUST_TEST_DIALECT: ${{ matrix.dialect }}
-          MLFLOW_RUST_TEST_PG_URI: postgresql://mlflow:mlflow@localhost:5432/mlflow
-          MLFLOW_RUST_TEST_MYSQL_URI: mysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4
         # TempDb truncates the whole shared schema per test (see
         # mlflow-test-support), so the live-dialect runs must be serial;
         # unaffected suites (e.g. differential corpus tests, which keep their
         # own private SQLite fixture) run fine interleaved at --test-threads=1
         # too, just without the parallelism they'd get by default.
-        run: cargo test -p mlflow-store -p mlflow-registry -- --test-threads=1
+        run: |
+          if [[ "$MLFLOW_RUST_TEST_DIALECT" == "postgres" ]]; then
+            export MLFLOW_RUST_TEST_PG_URI="postgresql://mlflow:mlflow@localhost:5432/mlflow"
+          else
+            export MLFLOW_RUST_TEST_MYSQL_URI="mysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4"
+          fi
+          cargo test -p mlflow-store -p mlflow-registry -- --test-threads=1
 
   # T12.5/T22.1 compliance CI: runs the differential request replay harness
   # plus the manifest-generated GenAI semantic corpus. replay.py dual-boots
