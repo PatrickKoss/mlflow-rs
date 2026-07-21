@@ -26,8 +26,8 @@ async fn extracted_attributes(
     store: &TrackingStore,
     trace_id: &str,
 ) -> Vec<(String, String, bool)> {
-    let sql = "SELECT key, value, value_truncated FROM span_attributes \
-               WHERE trace_id = ? ORDER BY key";
+    let sql = "SELECT \"key\", \"value\", value_truncated FROM span_attributes \
+               WHERE trace_id = ? ORDER BY \"key\"";
     match store.db() {
         Db::Sqlite(pool) => sqlx::query_as(sql)
             .bind(trace_id)
@@ -35,8 +35,8 @@ async fn extracted_attributes(
             .await
             .unwrap(),
         Db::Postgres(pool) => sqlx::query_as(
-            "SELECT key, value, value_truncated FROM span_attributes \
-             WHERE trace_id = $1 ORDER BY key",
+            "SELECT \"key\", \"value\", value_truncated FROM span_attributes \
+             WHERE trace_id = $1 ORDER BY \"key\"",
         )
         .bind(trace_id)
         .fetch_all(pool)

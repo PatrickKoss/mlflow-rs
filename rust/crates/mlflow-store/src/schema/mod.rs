@@ -59,6 +59,9 @@ pub const TRACKING_TABLES: &[&str] = &[
     scorers::SCORER_VERSIONS,
     scorers::ONLINE_SCORING_CONFIGS,
     jobs::JOBS,
+    "evaluation_datasets",
+    "evaluation_dataset_tags",
+    "evaluation_dataset_records",
     traces::TRACE_INFO,
     traces::TRACE_TAGS,
     traces::TRACE_REQUEST_METADATA,
@@ -82,7 +85,7 @@ mod tests {
 
     #[test]
     fn tracking_table_count() {
-        assert_eq!(TRACKING_TABLES.len(), 39);
+        assert_eq!(TRACKING_TABLES.len(), 42);
     }
 
     #[test]

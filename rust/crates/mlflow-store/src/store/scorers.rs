@@ -237,7 +237,7 @@ impl TrackingStore {
                     ph(1)
                 ),
                 &[Val::Text(scorer_id.clone())],
-                |row| row.get_opt_i64("max_version"),
+                |row| row.get_opt_int("max_version"),
             )
             .await?
             .into_iter()

@@ -135,7 +135,7 @@ async fn seed_endpoint(db: &Db, endpoint_id: &str, name: &str) {
         }
         Db::Postgres(pool) => {
             sqlx::query(
-                "INSERT INTO endpoints (endpoint_id, name, created_by, created_at, last_updated_by, last_updated_at, routing_strategy, fallback_config_json, experiment_id, usage_tracking, workspace) VALUES ($1, $2, NULL, 1, NULL, 1, NULL, NULL, NULL, 1, $3)",
+                "INSERT INTO endpoints (endpoint_id, name, created_by, created_at, last_updated_by, last_updated_at, routing_strategy, fallback_config_json, experiment_id, usage_tracking, workspace) VALUES ($1, $2, NULL, 1, NULL, 1, NULL, NULL, NULL, TRUE, $3)",
             )
                 .bind(endpoint_id)
                 .bind(name)

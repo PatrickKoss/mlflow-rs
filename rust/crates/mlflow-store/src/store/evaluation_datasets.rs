@@ -178,10 +178,11 @@ fn json_select(dialect: Dialect, column: &str) -> String {
     }
 }
 
-fn integer_as_text(dialect: Dialect, column: &str) -> String {
+fn text_as_integer(dialect: Dialect, column: &str) -> String {
     match dialect {
-        Dialect::Postgres => format!("CAST({column} AS TEXT)"),
-        Dialect::Sqlite | Dialect::MySql => format!("CAST({column} AS CHAR)"),
+        Dialect::Postgres => format!("CAST({column} AS BIGINT)"),
+        Dialect::Sqlite => format!("CAST({column} AS INTEGER)"),
+        Dialect::MySql => format!("CAST({column} AS SIGNED)"),
     }
 }
 
@@ -209,7 +210,7 @@ impl TrackingStore {
         let ph = |index| dialect.placeholder(index);
         tx.exec(
             &format!(
-                "INSERT INTO evaluation_datasets (dataset_id, workspace, name, schema, profile, \
+                "INSERT INTO evaluation_datasets (dataset_id, workspace, name, \"schema\", profile, \
                  digest, created_time, last_update_time, created_by, last_updated_by) VALUES \
                  ({}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
                 ph(1),
@@ -245,7 +246,7 @@ impl TrackingStore {
             };
             tx.exec(
                 &format!(
-                    "INSERT INTO evaluation_dataset_tags (dataset_id, key, value) VALUES ({}, {}, {})",
+                    "INSERT INTO evaluation_dataset_tags (dataset_id, \"key\", \"value\") VALUES ({}, {}, {})",
                     ph(1), ph(2), ph(3)
                 ),
                 &[
@@ -287,7 +288,7 @@ impl TrackingStore {
             .db()
             .fetch_optional(
                 &format!(
-                    "SELECT dataset_id, name, schema, profile, digest, created_time, \
+                    "SELECT dataset_id, name, \"schema\", profile, digest, created_time, \
                      last_update_time, created_by, last_updated_by FROM evaluation_datasets \
                      WHERE dataset_id = {} AND workspace = {}",
                     dialect.placeholder(1),
@@ -415,7 +416,7 @@ impl TrackingStore {
         let dialect = self.db().dialect();
         let mut vals = vec![Val::Text(workspace.to_string())];
         let mut sql = format!(
-            "SELECT ed.dataset_id, ed.name, ed.schema, ed.profile, ed.digest, ed.created_time, \
+            "SELECT ed.dataset_id, ed.name, ed.\"schema\", ed.profile, ed.digest, ed.created_time, \
              ed.last_update_time, ed.created_by, ed.last_updated_by FROM evaluation_datasets ed \
              WHERE ed.workspace = {}",
             dialect.placeholder(1)
@@ -432,11 +433,11 @@ impl TrackingStore {
                 .collect();
             sql.push_str(&format!(
                 " AND EXISTS (SELECT 1 FROM entity_associations ea JOIN experiments e ON \
-                 {} = ea.destination_id WHERE \
+                 e.experiment_id = {} WHERE \
                  ea.source_type = 'evaluation_dataset' AND ea.source_id = ed.dataset_id AND \
                  ea.destination_type = 'experiment' AND e.workspace = {experiment_workspace} AND \
                  ea.destination_id IN ({}))",
-                integer_as_text(dialect, "e.experiment_id"),
+                text_as_integer(dialect, "ea.destination_id"),
                 placeholders.join(", ")
             ));
         }
@@ -496,7 +497,7 @@ impl TrackingStore {
             .db()
             .fetch_all(
                 &format!(
-                    "SELECT key, value FROM evaluation_dataset_tags WHERE dataset_id = {}",
+                    "SELECT \"key\", \"value\" FROM evaluation_dataset_tags WHERE dataset_id = {}",
                     dialect.placeholder(1)
                 ),
                 &[Val::Text(dataset.dataset_id.clone())],
@@ -592,7 +593,7 @@ impl TrackingStore {
         self.db()
             .exec(
                 &format!(
-                    "DELETE FROM evaluation_dataset_tags WHERE dataset_id = {} AND key = {} AND \
+                    "DELETE FROM evaluation_dataset_tags WHERE dataset_id = {} AND \"key\" = {} AND \
                      EXISTS (SELECT 1 FROM evaluation_datasets ed WHERE ed.dataset_id = \
                      evaluation_dataset_tags.dataset_id AND ed.workspace = {})",
                     dialect.placeholder(1),
@@ -681,7 +682,7 @@ impl TrackingStore {
         let digest = dataset_digest(&dataset_name, now);
         tx.exec(
             &format!(
-                "UPDATE evaluation_datasets SET schema = {}, profile = {}, digest = {}, \
+                "UPDATE evaluation_datasets SET \"schema\" = {}, profile = {}, digest = {}, \
                  last_update_time = {}, last_updated_by = {} WHERE dataset_id = {} AND workspace = {}",
                 dialect.placeholder(1), dialect.placeholder(2), dialect.placeholder(3),
                 dialect.placeholder(4), dialect.placeholder(5), dialect.placeholder(6),
@@ -846,11 +847,11 @@ impl TrackingStore {
                 &format!(
                     "SELECT ea.destination_id FROM entity_associations ea \
                      JOIN evaluation_datasets ed ON ed.dataset_id = ea.source_id \
-                     JOIN experiments e ON {} = ea.destination_id \
+                     JOIN experiments e ON e.experiment_id = {} \
                      WHERE ea.source_type = 'evaluation_dataset' AND \
                      ea.destination_type = 'experiment' AND ea.source_id = {} AND \
                      ed.workspace = {} AND e.workspace = {}",
-                    integer_as_text(dialect, "e.experiment_id"),
+                    text_as_integer(dialect, "ea.destination_id"),
                     dialect.placeholder(1),
                     dialect.placeholder(2),
                     dialect.placeholder(3)
@@ -1088,7 +1089,7 @@ fn append_filter(
         let key_ph = dialect.placeholder(vals.len());
         sql.push_str(&format!(
             " AND EXISTS (SELECT 1 FROM evaluation_dataset_tags edt WHERE edt.dataset_id = \
-             ed.dataset_id AND {predicate} AND edt.key = {key_ph})",
+             ed.dataset_id AND {predicate} AND edt.\"key\" = {key_ph})",
         ));
     }
     Ok(())
