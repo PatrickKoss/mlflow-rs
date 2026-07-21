@@ -70,24 +70,86 @@ def build_corpus(out_dir: Path) -> int:
     # metric value None -> metric absent; float("nan") -> NaN metric.
     Row = tuple
     specs: list[Row] = [
-        (exp_a, "r00", 100, {"acc": 0.90, "loss": 0.5}, {"model": "lr"}, {"phase": "train"}, ("d1", "abc", "train")),
-        (exp_a, "r01", 100, {"acc": 0.95, "loss": 0.4}, {"model": "rf"}, {"phase": "train"}, ("d1", "abc", "train")),
-        (exp_a, "r02", 100, {"acc": 0.95, "loss": 0.3}, {"model": "rf"}, {"phase": "eval"}, ("d2", "def", "eval")),
+        (
+            exp_a,
+            "r00",
+            100,
+            {"acc": 0.90, "loss": 0.5},
+            {"model": "lr"},
+            {"phase": "train"},
+            ("d1", "abc", "train"),
+        ),
+        (
+            exp_a,
+            "r01",
+            100,
+            {"acc": 0.95, "loss": 0.4},
+            {"model": "rf"},
+            {"phase": "train"},
+            ("d1", "abc", "train"),
+        ),
+        (
+            exp_a,
+            "r02",
+            100,
+            {"acc": 0.95, "loss": 0.3},
+            {"model": "rf"},
+            {"phase": "eval"},
+            ("d2", "def", "eval"),
+        ),
         (exp_a, "r03", 200, {"acc": None, "loss": 0.6}, {"model": "lr"}, {}, None),
-        (exp_a, "r04", 200, {"acc": float("nan"), "loss": 0.2}, {"model": "xgb"}, {"phase": "eval"}, ("d2", "def", "eval")),
+        (
+            exp_a,
+            "r04",
+            200,
+            {"acc": float("nan"), "loss": 0.2},
+            {"model": "xgb"},
+            {"phase": "eval"},
+            ("d2", "def", "eval"),
+        ),
         (exp_a, "r05", 300, {"acc": 0.80}, {}, {"phase": "train"}, ("d3", "ghi", "train")),
         (exp_a, "r06", 300, {"acc": 0.85, "loss": 0.7}, {"model": "lr"}, {"phase": "prod"}, None),
         (exp_a, "r07", 300, {"loss": 0.9}, {"model": "rf"}, {}, None),
-        (exp_b, "r08", 150, {"acc": 0.70, "loss": 0.1}, {"model": "lr"}, {"phase": "train"}, ("d1", "abc", "train")),
-        (exp_b, "r09", 150, {"acc": 0.99}, {"model": "rf"}, {"phase": "prod"}, ("d4", "jkl", "prod")),
+        (
+            exp_b,
+            "r08",
+            150,
+            {"acc": 0.70, "loss": 0.1},
+            {"model": "lr"},
+            {"phase": "train"},
+            ("d1", "abc", "train"),
+        ),
+        (
+            exp_b,
+            "r09",
+            150,
+            {"acc": 0.99},
+            {"model": "rf"},
+            {"phase": "prod"},
+            ("d4", "jkl", "prod"),
+        ),
         (exp_b, "r10", 400, {"acc": 0.60, "loss": 0.8}, {}, {"phase": "eval"}, None),
-        (exp_b, "r11", 400, {"acc": None}, {"model": "xgb"}, {"phase": "eval"}, ("d2", "def", "eval")),
+        (
+            exp_b,
+            "r11",
+            400,
+            {"acc": None},
+            {"model": "xgb"},
+            {"phase": "eval"},
+            ("d2", "def", "eval"),
+        ),
     ]
 
     # name -> run_id (also used to delete some to exercise view_type).
     name_to_id: dict[str, str] = {}
     for exp, name, start_time, metrics, params, tags, dataset in specs:
-        run = store.create_run(exp, user_id="u", start_time=start_time, tags=[RunTag("mlflow.runName", name)], run_name=name)
+        run = store.create_run(
+            exp,
+            user_id="u",
+            start_time=start_time,
+            tags=[RunTag("mlflow.runName", name)],
+            run_name=name,
+        )
         rid = run.info.run_id
         name_to_id[name] = rid
         ms = []
@@ -129,17 +191,45 @@ def build_corpus(out_dir: Path) -> int:
         ("order_param_model", exp_all, "", ["params.model ASC"], "ACTIVE_ONLY", 3),
         ("order_tag_phase", exp_all, "", ["tags.phase DESC"], "ACTIVE_ONLY", 3),
         ("order_name_asc", exp_all, "", ["attribute.run_name ASC"], "ACTIVE_ONLY", 4),
-        ("order_multi_metric_then_start", exp_all, "", ["metrics.acc DESC", "attribute.start_time ASC"], "ACTIVE_ONLY", 2),
+        (
+            "order_multi_metric_then_start",
+            exp_all,
+            "",
+            ["metrics.acc DESC", "attribute.start_time ASC"],
+            "ACTIVE_ONLY",
+            2,
+        ),
         ("filter_metric_acc_ge", exp_all, "metrics.acc >= 0.85", [], "ACTIVE_ONLY", 3),
-        ("filter_metric_acc_ge_order", exp_all, "metrics.acc >= 0.85", ["metrics.acc DESC"], "ACTIVE_ONLY", 2),
+        (
+            "filter_metric_acc_ge_order",
+            exp_all,
+            "metrics.acc >= 0.85",
+            ["metrics.acc DESC"],
+            "ACTIVE_ONLY",
+            2,
+        ),
         ("filter_param_model_eq", exp_all, "params.model = 'lr'", [], "ACTIVE_ONLY", 2),
         ("filter_param_model_like", exp_all, "params.model LIKE 'r%'", [], "ACTIVE_ONLY", 3),
         ("filter_tag_phase_eq", exp_all, "tags.phase = 'train'", [], "ACTIVE_ONLY", 3),
         ("filter_tag_is_null", exp_all, "tags.phase IS NULL", [], "ACTIVE_ONLY", 3),
         ("filter_param_is_not_null", exp_all, "params.model IS NOT NULL", [], "ACTIVE_ONLY", 4),
-        ("filter_attr_run_name_like", exp_all, "attribute.run_name LIKE 'r0%'", [], "ACTIVE_ONLY", 3),
+        (
+            "filter_attr_run_name_like",
+            exp_all,
+            "attribute.run_name LIKE 'r0%'",
+            [],
+            "ACTIVE_ONLY",
+            3,
+        ),
         ("filter_attr_start_time_gt", exp_all, "attribute.start_time > 150", [], "ACTIVE_ONLY", 3),
-        ("filter_multi_and", exp_all, "metrics.loss < 0.7 and params.model = 'lr'", [], "ACTIVE_ONLY", 2),
+        (
+            "filter_multi_and",
+            exp_all,
+            "metrics.loss < 0.7 and params.model = 'lr'",
+            [],
+            "ACTIVE_ONLY",
+            2,
+        ),
         ("filter_dataset_name", exp_all, "dataset.name = 'd1'", [], "ACTIVE_ONLY", 3),
         ("filter_dataset_digest", exp_all, "dataset.digest = 'def'", [], "ACTIVE_ONLY", 3),
         ("filter_dataset_context", exp_all, "dataset.context = 'train'", [], "ACTIVE_ONLY", 3),
@@ -149,7 +239,14 @@ def build_corpus(out_dir: Path) -> int:
         ("single_exp_a", [exp_a], "", ["metrics.acc ASC"], "ACTIVE_ONLY", 3),
         # IS NOT NULL is tags/params-only in Python; a wide comparison keeps the
         # intent (only runs that HAVE a loss metric) via the filter's semi-join.
-        ("filter_metric_and_order_tie", exp_all, "metrics.loss < 999999", ["metrics.acc DESC"], "ACTIVE_ONLY", 3),
+        (
+            "filter_metric_and_order_tie",
+            exp_all,
+            "metrics.loss < 999999",
+            ["metrics.acc DESC"],
+            "ACTIVE_ONLY",
+            3,
+        ),
         ("empty_result", exp_all, "metrics.acc > 100", [], "ACTIVE_ONLY", 5),
         ("order_end_time_desc", exp_all, "", ["attribute.end_time DESC"], "ALL", 4),
     ]
@@ -176,18 +273,16 @@ def build_corpus(out_dir: Path) -> int:
             all_ids.extend(page_ids)
             if not token:
                 break
-        cases.append(
-            {
-                "label": label,
-                "experiment_ids": [str(e) for e in exp_ids],
-                "filter": filt,
-                "order_by": order_by,
-                "view_type": view,
-                "max_results": page_size,
-                "pages": pages,
-                "ordered_run_ids": all_ids,
-            }
-        )
+        cases.append({
+            "label": label,
+            "experiment_ids": [str(e) for e in exp_ids],
+            "filter": filt,
+            "order_by": order_by,
+            "view_type": view,
+            "max_results": page_size,
+            "pages": pages,
+            "ordered_run_ids": all_ids,
+        })
 
     (out_dir / "cases.json").write_text(json.dumps({"cases": cases}, indent=2) + "\n")
 

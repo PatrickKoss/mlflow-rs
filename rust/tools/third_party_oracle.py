@@ -61,7 +61,7 @@ def main():
     families = {}
     for metric in corpus["manifest"]:
         families[metric["family"]] = families.get(metric["family"], 0) + 1
-    print(  # noqa: T201 - command-line oracle reports its result
+    print(
         json.dumps(
             {
                 "manifest_coverage": len(corpus["manifest"]),

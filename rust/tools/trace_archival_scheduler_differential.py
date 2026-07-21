@@ -67,7 +67,7 @@ def main() -> None:
     parser.add_argument("--content", required=True)
     args = parser.parse_args()
     content = json.loads(args.content)
-    print(  # noqa: T201
+    print(
         json.dumps(
             {
                 "gate_traces": [_gate_trace(polls) for polls in content["gate_cases"]],

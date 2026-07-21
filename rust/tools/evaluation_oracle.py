@@ -4,8 +4,6 @@ No provider is contacted. Python produces the rate-limit, scorer-result, and
 aggregate-metric oracle; the Rust example consumes the identical seeded corpus.
 """
 
-# ruff: noqa: T201
-
 import json
 import random
 import subprocess

@@ -212,8 +212,8 @@ COMMON_FILTERS = [
     "params.'acc = LR",
     "params.acc = 'LR",
     "params.acc = LR'",
-    'params.acc = "LR\'',
-    'tags.acc = "LR\'',
+    "params.acc = \"LR'",
+    "tags.acc = \"LR'",
     "tags.acc = = 'LR'",
     "attribute.status IS 'RUNNING'",
     "params.acc LR !=",
@@ -243,7 +243,7 @@ COMMON_FILTERS = [
     "attribute.status RLIKE 'x'",
     # --- Additional breadth: quoting variants ---
     "params.`key with spaces` = 'v'",
-    'params."double.quoted.key" = \'v\'',
+    "params.\"double.quoted.key\" = 'v'",
     "tags.`mlflow.prompt.is_prompt` = 'true'",
     "tags.`mlflow.prompt.is_prompt` != 'true'",
     "tags.`mlflow.prompt.is_prompt` = 'false'",
@@ -556,7 +556,7 @@ def main():
             json.dump(data, fh, indent=2, ensure_ascii=False, sort_keys=True)
             fh.write("\n")
         counts = {k: len(v) for k, v in data.items()} if isinstance(data, dict) else len(data)
-        print(f"wrote {path.name}: {counts}")  # noqa: T201
+        print(f"wrote {path.name}: {counts}")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ mode or advance `rust/sync/state.json` before phase 4 passes.
 
    Use nine-character `shortfrom` and `shortto` values. The analyzer writes
    `drift-report.md`; read the entire report and inspect every `server-api` commit.
+
 3. If the mode is `analyze`, report the counts and stop without changing git history or
    sync state.
 

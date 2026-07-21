@@ -41,7 +41,12 @@ base64 = { workspace = true }
 # drive the low-level hyper client over a `TcpStream` we connect to a validated
 # IP ourselves (see `http_send.rs`).
 hyper = { workspace = true, features = ["client", "http1"] }
-hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
+hyper-util = { version = "0.1", features = [
+  "client",
+  "client-legacy",
+  "http1",
+  "tokio",
+] }
 http-body-util = "0.1"
 # uuid4 delivery ids (`str(uuid.uuid4())`, `delivery.py:175`).
 uuid = { workspace = true }

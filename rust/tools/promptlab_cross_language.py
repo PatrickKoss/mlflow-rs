@@ -169,15 +169,11 @@ def main():
         rust_loaded = mlflow.pyfunc.load_model(args.rust_model)
         python_loaded = mlflow.pyfunc.load_model(python_model)
         frame = pd.DataFrame([{"thing": "books"}, {"thing": "coffee"}])
-        rust_prediction = predict_through_rust_gateway(
-            rust_loaded, args.rust_gateway, frame
-        )
-        python_prediction = predict_through_rust_gateway(
-            python_loaded, args.rust_gateway, frame
-        )
+        rust_prediction = predict_through_rust_gateway(rust_loaded, args.rust_gateway, frame)
+        python_prediction = predict_through_rust_gateway(python_loaded, args.rust_gateway, frame)
         expected = ["gateway:Write about books.", "gateway:Write about coffee."]
         assert rust_prediction == python_prediction == expected
-        print(  # noqa: T201 - machine-readable result consumed by the Rust test
+        print(
             json.dumps(
                 {
                     "files": files,

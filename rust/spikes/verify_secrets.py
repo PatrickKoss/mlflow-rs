@@ -97,7 +97,7 @@ def main() -> int:
         else:
             raise AssertionError(f"old KEK unexpectedly decrypted {case['case_id']}")
 
-    print(  # noqa: T201
+    print(
         f"Verified {len(document['cases'])} Rust envelopes and "
         f"{len(document['rotations'])} Rust rotations with Python"
     )

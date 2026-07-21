@@ -93,7 +93,7 @@ def main() -> None:
             )
         deleted = store.delete_traces(experiment_id, trace_ids=[trace_id])
 
-        print(  # noqa: T201
+        print(
             json.dumps(
                 {
                     "archived": archived,

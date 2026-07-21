@@ -417,7 +417,7 @@ fn quoted_spans(
         .get("min_span_words")
         .and_then(Value::as_u64)
         .unwrap_or(3) as usize;
-    let pattern = Regex::new(r#"[\"“”„‟'‘’`´](.*?)[\"“”„‟'‘’`´]"#).expect("static quote regex");
+    let pattern = Regex::new(r#"[\"""„‟'''`´](.*?)[\"""„‟'''`´]"#).expect("static quote regex");
     let spans = pattern
         .captures_iter(response)
         .filter_map(|capture| capture.get(1).map(|value| value.as_str().trim()))

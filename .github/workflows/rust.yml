@@ -35,6 +35,12 @@ defaults:
     shell: bash
     working-directory: rust
 
+env:
+  # Debug info dominates the workspace test artifact size and can exhaust the
+  # hosted runner's disk before `cargo test --workspace` starts executing.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
 permissions: {}
 
 jobs:
@@ -48,9 +54,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
           components: rustfmt
       - name: Check formatting
         run: cargo fmt --check
@@ -65,9 +73,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
           components: clippy
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
@@ -85,9 +95,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -104,9 +116,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -133,8 +147,10 @@ jobs:
         include:
           - dialect: postgres
             uri: postgresql://mlflow:mlflow@localhost:5432/mlflow
+            schema_uri: postgresql://mlflow:mlflow@localhost:5432/mlflow
           - dialect: mysql
             uri: mysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4
+            schema_uri: mysql+pymysql://mlflow:mlflow@localhost:3306/mlflow?charset=utf8mb4
     services:
       postgres:
         image: postgres:16
@@ -167,9 +183,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -177,7 +195,7 @@ jobs:
       - name: Provision schema (mlflow db upgrade)
         working-directory: .
         env:
-          DB_URI: ${{ matrix.uri }}
+          DB_URI: ${{ matrix.schema_uri }}
         run: uv run --extra db mlflow db upgrade "$DB_URI"
       - name: Run store/registry suites against live dialect
         env:
@@ -255,9 +273,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -291,6 +311,7 @@ jobs:
           name: compliance-report
           path: rust/compliance/report/
           if-no-files-found: warn
+          retention-days: 7
 
   # T22.3 required frame/byte-parity gate for gateway and Assistant streaming.
   # Every provider is a loopback mock or credential-free CLI stub; the release
@@ -305,9 +326,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -338,6 +361,7 @@ jobs:
           name: sse-recorders-failure
           path: rust/compliance/report/sse-recorders/
           if-no-files-found: warn
+          retention-days: 7
 
   # T22.2 required Python-suite gate. The ledger validator prevents silent
   # source/test drift, while the dependency-light core exercises public SDK
@@ -368,9 +392,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -393,6 +419,7 @@ jobs:
           path: |
             rust/compliance/report/t22_2_required*
           if-no-files-found: warn
+          retention-days: 7
 
   # The complete repointable test ledger is intentionally outside the PR
   # critical path. It runs against both SQLite and Postgres 16 nightly or on a
@@ -400,7 +427,7 @@ jobs:
   # Python-internal unit tests remain classified and validator-covered, but are
   # not misrepresented as tests that can cross an HTTP process boundary.
   python-conformance-full:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 240
@@ -423,9 +450,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -448,13 +477,14 @@ jobs:
           path: |
             rust/compliance/report/t22_2_full*
           if-no-files-found: warn
+          retention-days: 7
 
   # T22.1 refreshes the dependency-heavy third-party scorer golden nightly or
   # on demand. The same semantic corpus remains required above on every gated
   # run; this job adds exact-pinned-package regeneration without extending PR
   # latency or making network package resolution part of the required gate.
   semantic-oracle-refresh:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 90
@@ -463,9 +493,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust
@@ -483,6 +515,7 @@ jobs:
           name: semantic-oracle-refresh-report
           path: rust/compliance/report/
           if-no-files-found: warn
+          retention-days: 7
 
   # Concurrency/chaos soak (plan T12.6): boots the full axum server in-process
   # against a live Postgres schema and hammers it with 10k mixed ops
@@ -493,7 +526,7 @@ jobs:
   # test skips itself when `MLFLOW_RUST_TEST_PG_URI` is unset, so it never runs
   # in the PR-path `test` job even though it lives in the same crate.
   chaos:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 30
@@ -516,9 +549,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: "1.89.0"
+          cache: false
+          rustflags: ""
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: rust

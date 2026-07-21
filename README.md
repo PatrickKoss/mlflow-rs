@@ -9,12 +9,12 @@
 
 This long-lived fork contains a complete Rust rewrite of the MLflow server: tracking, tracing, model registry, auth/RBAC, workspaces, artifact proxying, and the GenAI gateway, scorers, evaluation, Assistant, and jobs. It is API- and UI-compatible with MLflow and grew from a simple goal: keep MLflow's server footprint and latency manageable as deployments scale.
 
-| Benchmark (Python → Rust) | Result |
-|---|---|
-| [Process-tree memory, idle / loaded](rust/bench/memory.md) | **106.5× / 67.3× less RSS**; about 47 MiB vs 3,145 MiB loaded |
-| [Core tracking reads under one-hour mixed load](rust/bench/soak.md) | **13–40× lower p95 latency** for run search, experiment list/search, and metric history; 0 errors for both servers |
-| [Heavyweight analytical queries on a 2.4 GB SQLite database](rust/bench/RESULTS.md) | **1.7–5.4× lower p95 latency**; the prompt anti-join was at parity |
-| [GenAI evaluation mixed soak](rust/bench/genai_eval.md) | **117.8× less RSS and 9.9× less CPU** at equivalent throughput |
+| Benchmark (Python → Rust)                                                           | Result                                                                                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [Process-tree memory, idle / loaded](rust/bench/memory.md)                          | **106.5× / 67.3× less RSS**; about 47 MiB vs 3,145 MiB loaded                                                      |
+| [Core tracking reads under one-hour mixed load](rust/bench/soak.md)                 | **13–40× lower p95 latency** for run search, experiment list/search, and metric history; 0 errors for both servers |
+| [Heavyweight analytical queries on a 2.4 GB SQLite database](rust/bench/RESULTS.md) | **1.7–5.4× lower p95 latency**; the prompt anti-join was at parity                                                 |
+| [GenAI evaluation mixed soak](rust/bench/genai_eval.md)                             | **117.8× less RSS and 9.9× less CPU** at equivalent throughput                                                     |
 
 All measurements were made on WSL2; each linked report describes its workload, environment, limitations, and reproduction steps. The heavyweight-query gains are intentionally reported separately from the larger hot-endpoint soak gains.
 

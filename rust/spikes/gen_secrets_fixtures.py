@@ -82,19 +82,17 @@ def generate_cases(managers: dict[tuple[str, int], KEKManager]) -> list[dict]:
             secret_id,
             secret_name,
         )
-        cases.append(
-            {
-                "case_id": f"python-{index:02d}",
-                "plaintext": plaintext,
-                "passphrase": passphrase,
-                "kek_version": version,
-                "secret_id": secret_id,
-                "secret_name": secret_name,
-                "aad_b64": b64(_create_aad(secret_id, secret_name)),
-                "encrypted_value_b64": b64(encrypted.encrypted_value),
-                "wrapped_dek_b64": b64(encrypted.wrapped_dek),
-            }
-        )
+        cases.append({
+            "case_id": f"python-{index:02d}",
+            "plaintext": plaintext,
+            "passphrase": passphrase,
+            "kek_version": version,
+            "secret_id": secret_id,
+            "secret_name": secret_name,
+            "aad_b64": b64(_create_aad(secret_id, secret_name)),
+            "encrypted_value_b64": b64(encrypted.encrypted_value),
+            "wrapped_dek_b64": b64(encrypted.wrapped_dek),
+        })
     return cases
 
 
@@ -118,21 +116,19 @@ def generate_rotations(managers: dict[tuple[str, int], KEKManager]) -> list[dict
         )
         assert rotated.encrypted_value == encrypted.encrypted_value
         assert rotated.wrapped_dek != encrypted.wrapped_dek
-        rotations.append(
-            {
-                "case_id": f"python-rotation-{index}",
-                "plaintext": plaintext,
-                "secret_id": secret_id,
-                "secret_name": secret_name,
-                "old_passphrase": old_passphrase,
-                "old_kek_version": old_version,
-                "new_passphrase": new_passphrase,
-                "new_kek_version": new_version,
-                "encrypted_value_b64": b64(encrypted.encrypted_value),
-                "old_wrapped_dek_b64": b64(encrypted.wrapped_dek),
-                "new_wrapped_dek_b64": b64(rotated.wrapped_dek),
-            }
-        )
+        rotations.append({
+            "case_id": f"python-rotation-{index}",
+            "plaintext": plaintext,
+            "secret_id": secret_id,
+            "secret_name": secret_name,
+            "old_passphrase": old_passphrase,
+            "old_kek_version": old_version,
+            "new_passphrase": new_passphrase,
+            "new_kek_version": new_version,
+            "encrypted_value_b64": b64(encrypted.encrypted_value),
+            "old_wrapped_dek_b64": b64(encrypted.wrapped_dek),
+            "new_wrapped_dek_b64": b64(rotated.wrapped_dek),
+        })
     return rotations
 
 
@@ -160,14 +156,13 @@ def main() -> None:
                 {"input": value, "masked": _mask_string_value(value)} for value in MASK_INPUTS
             ],
             "dictionaries": [
-                {"input": value, "masked": _mask_secret_value(value)}
-                for value in MASK_DICTIONARIES
+                {"input": value, "masked": _mask_secret_value(value)} for value in MASK_DICTIONARIES
             ],
         },
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n")
-    print(  # noqa: T201
+    print(
         f"Wrote {len(document['cases'])} envelopes, {len(document['rotations'])} rotations, "
         f"and {len(MASK_INPUTS) + len(MASK_DICTIONARIES)} masking fixtures to {OUTPUT}"
     )

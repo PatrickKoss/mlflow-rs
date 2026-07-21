@@ -25,6 +25,42 @@ export MLFLOW_TRACKING_URI="http://your-mlflow-server:5000"
 </h1>
 <h2 align="center" style="border-bottom: none">The Open Source AI Engineering Platform for Agents, LLMs & Models</h2>
 
+## 🦀 This fork: MLflow with a Rust tracking server
+
+This long-lived fork contains a complete Rust rewrite of the MLflow server: tracking, tracing, model registry, auth/RBAC, workspaces, artifact proxying, and the GenAI gateway, scorers, evaluation, Assistant, and jobs. It is API- and UI-compatible with MLflow and grew from a simple goal: keep MLflow's server footprint and latency manageable as deployments scale.
+
+| Benchmark (Python → Rust)                                                           | Result                                                                                                             |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [Process-tree memory, idle / loaded](rust/bench/memory.md)                          | **106.5× / 67.3× less RSS**; about 47 MiB vs 3,145 MiB loaded                                                      |
+| [Core tracking reads under one-hour mixed load](rust/bench/soak.md)                 | **13–40× lower p95 latency** for run search, experiment list/search, and metric history; 0 errors for both servers |
+| [Heavyweight analytical queries on a 2.4 GB SQLite database](rust/bench/RESULTS.md) | **1.7–5.4× lower p95 latency**; the prompt anti-join was at parity                                                 |
+| [GenAI evaluation mixed soak](rust/bench/genai_eval.md)                             | **117.8× less RSS and 9.9× less CPU** at equivalent throughput                                                     |
+
+All measurements were made on WSL2; each linked report describes its workload, environment, limitations, and reproduction steps. The heavyweight-query gains are intentionally reported separately from the larger hot-endpoint soak gains.
+
+Pull the server image, or run the complete Postgres + migration + Rust server + UI stack with the [Docker Compose quickstart](rust/deploy/README.md):
+
+```bash
+docker pull ghcr.io/patrickkoss/mlflow-rust:latest
+```
+
+Linux x86-64 binaries are attached to [Rust server releases](https://github.com/PatrickKoss/mlflow/releases). To build both binaries from source:
+
+```bash
+cargo build --manifest-path rust/Cargo.toml --release -p mlflow-server -p mlflow-genai-worker
+```
+
+Or install them directly from a release tag:
+
+```bash
+cargo install --git https://github.com/PatrickKoss/mlflow.git --tag rust-v0.1.0 mlflow-server
+cargo install --git https://github.com/PatrickKoss/mlflow.git --tag rust-v0.1.0 mlflow-genai-worker
+```
+
+The fork tracks [`mlflow/mlflow` master](https://github.com/mlflow/mlflow) through [periodic upstream syncs](docs/rust-sync/README.md). The Python client/SDK is unchanged and remains the supported client, so [upstream client documentation](https://mlflow.org/docs/latest/ml/tracking/) continues to apply. Read the [full implementation journey and compatibility record](docs/rust-tracking-server-plan/README.md).
+
+---
+
 MLflow is the largest open source **AI engineering platform for agents, LLMs, and ML models**. MLflow enables teams of all sizes to [debug](https://mlflow.org/llm-tracing),
 [evaluate](https://mlflow.org/llm-evaluation), [monitor](https://mlflow.org/ai-monitoring), and [optimize](https://mlflow.org/prompt-optimization) production-quality AI applications while
 controlling costs and managing access to models and data. With over **60 million monthly downloads**,

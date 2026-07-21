@@ -123,17 +123,15 @@ def build_corpus(out_dir: Path) -> tuple[int, int]:
     rm_out = []
     for label, filt, order_by, max_results in rm_cases:
         pages, tokens, ordered = walk_rm(store, filt, order_by, max_results)
-        rm_out.append(
-            {
-                "label": label,
-                "filter": filt,
-                "order_by": order_by or [],
-                "max_results": max_results,
-                "pages": pages,
-                "page_tokens": tokens,
-                "ordered_names": ordered,
-            }
-        )
+        rm_out.append({
+            "label": label,
+            "filter": filt,
+            "order_by": order_by or [],
+            "max_results": max_results,
+            "pages": pages,
+            "page_tokens": tokens,
+            "ordered_names": ordered,
+        })
 
     # ---- Model-version search cases ------------------------------------------
     mv_cases = [
@@ -165,17 +163,15 @@ def build_corpus(out_dir: Path) -> tuple[int, int]:
     mv_out = []
     for label, filt, order_by, max_results in mv_cases:
         pages, tokens, ordered = walk_mv(store, filt, order_by, max_results)
-        mv_out.append(
-            {
-                "label": label,
-                "filter": filt,
-                "order_by": order_by or [],
-                "max_results": max_results,
-                "pages": pages,
-                "page_tokens": tokens,
-                "ordered_ids": ordered,
-            }
-        )
+        mv_out.append({
+            "label": label,
+            "filter": filt,
+            "order_by": order_by or [],
+            "max_results": max_results,
+            "pages": pages,
+            "page_tokens": tokens,
+            "ordered_ids": ordered,
+        })
 
     (out_dir / "cases.json").write_text(
         json.dumps({"registered_models": rm_out, "model_versions": mv_out}, indent=2) + "\n"

@@ -154,7 +154,7 @@ when a secret is set, headers `X-MLflow-Signature`/`X-MLflow-Timestamp`/`X-MLflo
 HTTP retries on [429,500,502,503,504] with backoff, **SSRF protection** (public-IP
 validation at connect time, no proxy env), TTL cache of webhooks-by-event. Events fired
 from registry mutations (registered model created; model version created; MV tag
-set/deleted; MV alias set/deleted; PROMPT_* mirrors) — trigger sites
+set/deleted; MV alias set/deleted; PROMPT\_\* mirrors) — trigger sites
 `handlers.py:2638-3334`. Secrets stored Fernet-encrypted
 (`MLFLOW_WEBHOOK_SECRET_ENCRYPTION_KEY`). Under auth: all webhook endpoints are
 admin-only (`WEBHOOK_BEFORE_REQUEST_HANDLERS`, `auth/__init__.py:2772`).
@@ -192,11 +192,12 @@ workspace-boundary deny (`auth/__init__.py:556-1022`,
 **Enforcement** (before-request): skip unprotected routes → authenticate (HTTP Basic
 against werkzeug-hashed passwords; pluggable `authorization_function`) → **admin bypass**
 → validator lookup (exact map from `BEFORE_REQUEST_HANDLERS` `auth/__init__.py:2480-2617`
-+ regex matchers for parameterized trace/logged-model/webhook paths + artifact-proxy path
-inspection; unknown `/mlflow/traces/` paths **fail closed**). Permission-per-endpoint
-matrix documented in the validators map (runs inherit experiment perms; model versions
-inherit registered-model perms; createModelVersion additionally requires READ on the
-source run/model).
+
+- regex matchers for parameterized trace/logged-model/webhook paths + artifact-proxy path
+  inspection; unknown `/mlflow/traces/` paths **fail closed**). Permission-per-endpoint
+  matrix documented in the validators map (runs inherit experiment perms; model versions
+  inherit registered-model perms; createModelVersion additionally requires READ on the
+  source run/model).
 
 **After-request hooks** (`auth/__init__.py:3594-3650`): creator gets MANAGE on create;
 **search/list responses are filtered to readable rows and re-fetched to fill
@@ -322,18 +323,18 @@ Semantics to replicate exactly:
 From `mlflow/store/tracking/sqlalchemy_store.py` and
 `mlflow/store/model_registry/sqlalchemy_store.py`:
 
-| # | Problem | Location | Fix in Rust |
-|---|---|---|---|
-| Q1 | OFFSET pagination everywhere (O(offset)/page) | `_search_runs` L2054/2067, `search_traces` L3812, `get_metric_history` L1506, `search_logged_models` L3429, registry searches (offset via page token, `model_registry/sqlalchemy_store.py:518-557`) | keyset/seek pagination behind opaque tokens |
-| Q2 | `SELECT DISTINCT` over full run rows after N filter joins | tracking L2059 | EXISTS semi-joins → no fan-out, no DISTINCT |
-| Q3 | One subquery JOIN per filter clause and per order-by clause | `_get_sqlalchemy_filter_clauses` L9151, `_get_orderby_clauses` L9194 | correlated EXISTS per predicate; single CTE for order-by keys |
-| Q4 | Missing indexes: `runs(experiment_id, lifecycle_stage, start_time)`, `logged_models.experiment_id`, `inputs.source_id`, `model_versions.run_id`, `model_versions.current_stage`; two empty `Index()` decls (tracking models.py L832/L863) | schema | alembic migrations (Python-owned, §5.4) |
-| Q5 | `latest_metrics` read-lock-compare-write holds FOR UPDATE locks | L1366-1483 | atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE excluded.(step,timestamp,value) > current` |
-| Q6 | `log_batch` non-atomic (separate sessions per entity type) + redundant run lookup | L1240/L1322/L1241 | one transaction per log-batch |
-| Q7 | Span attribute search via `content LIKE '%"attr"value%'` (full scan) | L9550 (TODO L9526) | indexed `span_attributes` table or DB JSON operators (Phase 13) |
-| Q8 | Eager loading returns ALL metrics/params/tags per run per page | `_get_eager_run_query_options` L1056 | batched IN-queries + streamed serialization |
-| Q9 | Prompt-exclusion anti-join added to **every** registry search | `model_registry/sqlalchemy_store.py:776` | keep semantics; consider partial index / `NOT EXISTS` form measured per dialect |
-| Q10 | Auth after-request search filtering re-fetches pages in a loop to fill max_results | `auth/__init__.py:1586` (`_role_based_read_predicate` + refetch) | push readable-resource filter into the search query (semi-join against grants) when auth is native to the same process |
+| #   | Problem                                                                                                                                                                                                                                   | Location                                                                                                                                                                                            | Fix in Rust                                                                                                            |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Q1  | OFFSET pagination everywhere (O(offset)/page)                                                                                                                                                                                             | `_search_runs` L2054/2067, `search_traces` L3812, `get_metric_history` L1506, `search_logged_models` L3429, registry searches (offset via page token, `model_registry/sqlalchemy_store.py:518-557`) | keyset/seek pagination behind opaque tokens                                                                            |
+| Q2  | `SELECT DISTINCT` over full run rows after N filter joins                                                                                                                                                                                 | tracking L2059                                                                                                                                                                                      | EXISTS semi-joins → no fan-out, no DISTINCT                                                                            |
+| Q3  | One subquery JOIN per filter clause and per order-by clause                                                                                                                                                                               | `_get_sqlalchemy_filter_clauses` L9151, `_get_orderby_clauses` L9194                                                                                                                                | correlated EXISTS per predicate; single CTE for order-by keys                                                          |
+| Q4  | Missing indexes: `runs(experiment_id, lifecycle_stage, start_time)`, `logged_models.experiment_id`, `inputs.source_id`, `model_versions.run_id`, `model_versions.current_stage`; two empty `Index()` decls (tracking models.py L832/L863) | schema                                                                                                                                                                                              | alembic migrations (Python-owned, §5.4)                                                                                |
+| Q5  | `latest_metrics` read-lock-compare-write holds FOR UPDATE locks                                                                                                                                                                           | L1366-1483                                                                                                                                                                                          | atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE excluded.(step,timestamp,value) > current`                          |
+| Q6  | `log_batch` non-atomic (separate sessions per entity type) + redundant run lookup                                                                                                                                                         | L1240/L1322/L1241                                                                                                                                                                                   | one transaction per log-batch                                                                                          |
+| Q7  | Span attribute search via `content LIKE '%"attr"value%'` (full scan)                                                                                                                                                                      | L9550 (TODO L9526)                                                                                                                                                                                  | indexed `span_attributes` table or DB JSON operators (Phase 13)                                                        |
+| Q8  | Eager loading returns ALL metrics/params/tags per run per page                                                                                                                                                                            | `_get_eager_run_query_options` L1056                                                                                                                                                                | batched IN-queries + streamed serialization                                                                            |
+| Q9  | Prompt-exclusion anti-join added to **every** registry search                                                                                                                                                                             | `model_registry/sqlalchemy_store.py:776`                                                                                                                                                            | keep semantics; consider partial index / `NOT EXISTS` form measured per dialect                                        |
+| Q10 | Auth after-request search filtering re-fetches pages in a loop to fill max_results                                                                                                                                                        | `auth/__init__.py:1586` (`_role_based_read_predicate` + refetch)                                                                                                                                    | push readable-resource filter into the search query (semi-join against grants) when auth is native to the same process |
 
 Rules: **wire-invisible query improvements land with the port** (Q1-Q3, Q5, Q6, Q10);
 **schema changes** (Q4, Q7, Q9-index) go to Phase 13 via alembic.
@@ -341,12 +342,12 @@ Rules: **wire-invisible query improvements land with the port** (Q1-Q3, Q5, Q6, 
 ### 5.3 Auth DB
 
 Separate database (default `sqlite:///basic_auth.db`, `basic_auth.ini`), 4 live tables
-(`mlflow/server/auth/db/models.py`): `users` (id, username unique, password_hash,
+(`mlflow/server/auth/db/models.py`): `users` (id, username unique, password*hash,
 is_admin), `roles` (unique `(workspace, name)`), `role_permissions` (unique
 `(role_id, resource_type, resource_pattern)`), `user_role_assignments` (unique
 `(user_id, role_id)`). Version table **`alembic_version_auth`**, head `f1a2b3c4d5e6`.
 Legacy per-resource permission tables are dead at runtime — Rust ignores them.
-Read-replica routing supported (`read_database_uri`). Synthetic `__user_<id>__` roles
+Read-replica routing supported (`read_database_uri`). Synthetic `\_\_user*<id>\_\_` roles
 carry per-user grants (§3.16).
 
 ### 5.4 Schema/migration ownership
@@ -407,4 +408,3 @@ Everything needed already exists in the repo:
    fixture) against the Rust artifact proxy.
 10. **Differential (golden) testing**: new harness replaying identical requests against
     Python and Rust and diffing normalized responses — catches drift assertions miss.
-

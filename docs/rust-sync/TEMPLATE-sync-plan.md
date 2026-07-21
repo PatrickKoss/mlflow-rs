@@ -2,12 +2,12 @@
 
 Status: **OPEN** · From: `<full-from-commit>` · To: `<full-to-commit>`
 
-| Bucket | Commits |
-|---|---:|
+| Bucket       | Commits |
+| ------------ | ------: |
 | `server-api` | <count> |
-| `ui` | <count> |
+| `ui`         | <count> |
 | `client-sdk` | <count> |
-| `infra` | <count> |
+| `infra`      | <count> |
 
 When in doubt, the merged upstream Python implementation is the behavioral spec.
 
@@ -35,11 +35,11 @@ When in doubt, the merged upstream Python implementation is the behavioral spec.
 ## Completion checklist
 
 - [ ] Unary differential corpus replay is green:
-  `uv run --no-sync python rust/compliance/replay.py`.
+      `uv run --no-sync python rust/compliance/replay.py`.
 - [ ] Required Python-over-HTTP conformance matrix is green:
-  `uv run --no-sync python rust/genai-inventory/run_conformance.py --profile required`.
+      `uv run --no-sync python rust/genai-inventory/run_conformance.py --profile required`.
 - [ ] SSE/streaming recorder differentials are green:
-  `uv run --no-sync pytest -q rust/compliance/recorders/`.
+      `uv run --no-sync pytest -q rust/compliance/recorders/`.
 - [ ] Three-phase Playwright UI smoke is green: `bash rust/e2e/run.sh`.
 - [ ] Production UI was rebuilt if the `ui` bucket was non-empty.
 - [ ] New upstream endpoints have new corpus/conformance cases, not code-only coverage.

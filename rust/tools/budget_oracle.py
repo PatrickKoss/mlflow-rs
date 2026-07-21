@@ -17,7 +17,6 @@ from mlflow.gateway.budget import check_budget_limit, fire_budget_exceeded_webho
 from mlflow.gateway.budget_tracker.in_memory import InMemoryBudgetTracker
 from mlflow.store.tracking.gateway.entities import GatewayEndpointConfig
 
-
 NOW = datetime(2025, 6, 15, 10, 37, tzinfo=timezone.utc)
 
 

@@ -55,7 +55,9 @@ def _resolve_rust_server_bin() -> Path:
     return _RUST_SERVER_BIN
 
 
-def _rust_server_cmd(bin_path: Path, port: int, backend_uri: str, root_artifact_uri: str) -> list:
+def _rust_server_cmd(
+    bin_path: Path, port: int, backend_uri: str, root_artifact_uri: str
+) -> list[str]:
     """Map the Python launch args onto the Rust binary's CLI (rust/.../config.rs Cli).
 
     Unmappable Python server flags fail loudly rather than silently diverging.

@@ -361,7 +361,7 @@
         "embeddings": false,
         "stream": true
       },
-      "chat_transform": "litellm.llms.bedrock_mantle.chat.transformation.BedrockMantleChatConfig",
+      "chat_transform": null,
       "embedding_transform": null,
       "model_entry_count": 9,
       "name": "bedrock_mantle",
@@ -2876,7 +2876,7 @@
   ],
   "reference": {
     "litellm_pin": "litellm==1.91.2",
-    "mlflow_git_sha": "2a36d19898fe7cdd5f596d4992be7494159efd15",
+    "mlflow_git_sha": "c69051f534f4b0d171ed92d07c58a20f8c2a3461",
     "price_snapshot_sha256": "c17510d67f23b28100e6cc332fc0546c249d1ca654f338b46e897e168f826bc9",
     "price_source_policy": "wheel backup snapshot; never fetch LiteLLM main at runtime",
     "source_url": "https://github.com/BerriAI/litellm/tree/v1.91.2"

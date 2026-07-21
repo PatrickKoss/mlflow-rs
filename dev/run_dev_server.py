@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -169,7 +170,7 @@ def smoke_assistant_backend(port: int) -> None:
     """Assert the credential-free Assistant HTTP/SSE surface used by the UI."""
     prefix = f"http://localhost:{port}/ajax-api/3.0/mlflow/assistant"
 
-    def request(path: str, method: str = "GET", body: dict | None = None):
+    def request(path: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
         data = json.dumps(body).encode() if body is not None else None
         headers = {"Content-Type": "application/json"} if data is not None else {}
         return urllib.request.urlopen(

@@ -848,8 +848,7 @@ def reset_mlflow_uri():
     # Resetting these environment variables cause sqlalchemy store tests to run with a sqlite
     # database instead of mysql/postgresql/mssql.
     if "DISABLE_RESET_MLFLOW_URI_FIXTURE" not in os.environ:
-        conformance_uri = os.environ.get("MLFLOW_CONFORMANCE_TRACKING_URI")
-        if conformance_uri:
+        if conformance_uri := os.environ.get("MLFLOW_CONFORMANCE_TRACKING_URI"):
             # T22.2 runs ledger-selected SDK suites against a session-scoped Rust
             # HTTP server. Tests may temporarily replace either URI, so restore the
             # externally managed endpoint after every case instead of falling back

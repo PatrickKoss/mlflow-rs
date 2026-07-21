@@ -43,7 +43,7 @@ def _metric_to_dict(m):
     """
     value = m.value
     # NaN/Inf are not JSON-representable; encode sentinels the Rust side maps back.
-    if value != value:  # noqa: PLR0124  (NaN check)
+    if value != value:
         value = "NaN"
     elif value == float("inf"):
         value = "Infinity"
@@ -172,16 +172,14 @@ def build_corpus(out_dir: Path) -> int:
             start_step=c["start_step"],
             end_step=c["end_step"],
         )
-        cases.append(
-            {
-                "run_ids": run_ids,
-                "metric_key": key,
-                "max_results": c["max_results"],
-                "start_step": c["start_step"],
-                "end_step": c["end_step"],
-                "expected": [_metric_to_dict(m) for m in result],
-            }
-        )
+        cases.append({
+            "run_ids": run_ids,
+            "metric_key": key,
+            "max_results": c["max_results"],
+            "start_step": c["start_step"],
+            "end_step": c["end_step"],
+            "expected": [_metric_to_dict(m) for m in result],
+        })
 
     (out_dir / "cases.json").write_text(json.dumps(cases, indent=2))
 

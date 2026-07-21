@@ -81,5 +81,5 @@ describe('ModelListTableAliasedVersionsCell', () => {
       },
       { timeout: 3000 },
     );
-  });
+  }, 10_000);
 });

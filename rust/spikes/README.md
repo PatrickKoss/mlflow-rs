@@ -176,7 +176,7 @@ uv run --frozen python rust/spikes/verify_secrets.py
   `pbkdf2:sha1` / `pbkdf2:sha512` and, historically, `plain`/salted-hash
   methods. Any real DB using a non-sha256 pbkdf2 variant or a legacy method
   would need extra arms in `parse()`/`derive()`. The parser rejects these
-  loudly (`UnsupportedMethod`) rather than silently mis-verifying.
+  loudly (`UnsupportedMethod`) rather than silently verifying incorrectly.
 - **Default method drift.** werkzeug's default has changed across versions
   (pbkdf2 → scrypt). The Rust generator hardcodes werkzeug 3.1.8 defaults
   (`scrypt:32768:8:1`, `pbkdf2:sha256:1000000`). If the server pins a

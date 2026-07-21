@@ -15,7 +15,6 @@ from mlflow.genai.judges.adapters.gateway_adapter import _build_request
 from mlflow.genai.judges.tools import list_judge_tools
 from mlflow.types.llm import ChatMessage
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -32,9 +31,7 @@ def instructions_request():
             ChatMessage(role="system", content=judge._build_system_message(False)),
             ChatMessage(
                 role="user",
-                content=judge._build_user_message(
-                    {"question": "capital?"}, "Paris", None, None
-                ),
+                content=judge._build_user_message({"question": "capital?"}, "Paris", None, None),
             ),
         ],
         None,
@@ -53,9 +50,7 @@ def main():
     assert instructions_request() == fixture
 
     python_tools = [tool.get_definition().to_dict() for tool in list_judge_tools()]
-    rust_tools = json.loads(
-        (ROOT / "rust/crates/mlflow-genai/src/judge_tools.json").read_text()
-    )
+    rust_tools = json.loads((ROOT / "rust/crates/mlflow-genai/src/judge_tools.json").read_text())
     assert python_tools == rust_tools
 
     subprocess.run(

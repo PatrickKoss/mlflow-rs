@@ -3802,7 +3802,7 @@ def test_search_evaluation_datasets(mlflow_client, store_type):
         f"{mlflow_client.tracking_uri}/api/3.0/mlflow/datasets/search",
         json={"max_results": 0},
     )
-    assert response.status_code == 200
+    assert response.status_code == 400
 
 
 def test_evaluation_dataset_tag_operations(mlflow_client, store_type):

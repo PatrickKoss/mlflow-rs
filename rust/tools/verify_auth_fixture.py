@@ -22,7 +22,9 @@ from pathlib import Path
 from werkzeug.security import check_password_hash
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_JSON = REPO_ROOT / "rust" / "crates" / "mlflow-auth" / "tests" / "fixtures" / "auth_fixture.json"
+DEFAULT_JSON = (
+    REPO_ROOT / "rust" / "crates" / "mlflow-auth" / "tests" / "fixtures" / "auth_fixture.json"
+)
 
 
 def main() -> int:

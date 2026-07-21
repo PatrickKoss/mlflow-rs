@@ -1,7 +1,5 @@
 """Replay the Python-generated Phase 19.4 discovery differential corpus."""
 
-# ruff: noqa: T201
-
 from __future__ import annotations
 
 import json
@@ -12,9 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "rust/crates/mlflow-genai/tests/fixtures/issue_discovery_golden.json"
-GENERATOR = (
-    ROOT / "rust/crates/mlflow-genai/tests/fixtures/generate_issue_discovery_oracles.py"
-)
+GENERATOR = ROOT / "rust/crates/mlflow-genai/tests/fixtures/generate_issue_discovery_oracles.py"
 
 
 def main() -> None:

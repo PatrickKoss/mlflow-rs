@@ -133,7 +133,7 @@ def main():
             "prompt optimization oracle drift:\n"
             + json.dumps({"expected": EXPECTED, "actual": actual}, indent=2, sort_keys=True)
         )
-    print(json.dumps(actual, sort_keys=True))  # noqa: T201
+    print(json.dumps(actual, sort_keys=True))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-# ruff: noqa: T201
 """Route parity check: Python routes vs Rust proto and planned-route accounting.
 
 Two modes:
@@ -346,10 +345,7 @@ def print_section_accounting(proto_routes: dict[str, set[Route]]) -> None:
         info.section == "demo" for info in IMPLEMENTED_GET_ENDPOINT_ROUTES.values()
     )
     demo_planned = sum(info.section == "demo" for info in PLANNED_GET_ENDPOINT_ROUTES.values())
-    print(
-        f"  adjacent demo routes: implemented={demo_implemented}, "
-        f"planned={demo_planned} (T20.4)"
-    )
+    print(f"  adjacent demo routes: implemented={demo_implemented}, planned={demo_planned} (T20.4)")
 
 
 def section_route_counts(proto_routes: dict[str, set[Route]]) -> dict[str, int]:

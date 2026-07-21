@@ -87,7 +87,7 @@ def main():
     lines.append("")
 
     OUT.write_text("\n".join(lines), encoding="utf-8")
-    print(f"wrote {OUT} ({len(merged)} keywords)")  # noqa: T201
+    print(f"wrote {OUT} ({len(merged)} keywords)")
 
 
 if __name__ == "__main__":

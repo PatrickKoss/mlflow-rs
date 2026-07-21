@@ -14,7 +14,6 @@ from mlflow.genai.judges import make_judge
 from mlflow.genai.judges.optimizers.memalign.optimizer import MemoryAugmentedJudge
 from mlflow.genai.scorers.base import Scorer
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 

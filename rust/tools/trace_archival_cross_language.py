@@ -36,7 +36,7 @@ def main():
     assert root._span.resource.attributes == {}
     assert spans_to_traces_data_pb(spans) == rust_bytes
 
-    print(  # noqa: T201 - machine-readable result consumed by the Rust test
+    print(
         json.dumps(
             {
                 "byte_equal_to_python": True,

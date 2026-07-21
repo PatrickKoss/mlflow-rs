@@ -314,6 +314,9 @@ CREATE TABLE mcp_access_endpoints (
 	CONSTRAINT mcp_access_endpoints_server_fkey FOREIGN KEY(workspace, server_name) REFERENCES mcp_servers (workspace, name) ON DELETE CASCADE ON UPDATE CASCADE
 )
 
+CREATE INDEX ix_mcp_access_endpoints_alias ON mcp_access_endpoints (workspace, server_name, server_alias)
+CREATE INDEX ix_mcp_access_endpoints_server_name ON mcp_access_endpoints (workspace, server_name)
+CREATE INDEX ix_mcp_access_endpoints_version ON mcp_access_endpoints (workspace, server_name, server_version)
 
 CREATE TABLE mcp_server_aliases (
 	workspace VARCHAR(63) DEFAULT 'default' NOT NULL,
@@ -356,6 +359,7 @@ CREATE TABLE mcp_server_versions (
 	CONSTRAINT mcp_server_versions_server_fkey FOREIGN KEY(workspace, name) REFERENCES mcp_servers (workspace, name) ON DELETE CASCADE ON UPDATE CASCADE
 )
 
+CREATE INDEX idx_mcp_server_versions_latest ON mcp_server_versions (workspace, name, status, version_major, version_minor, version_patch)
 
 CREATE TABLE model_definitions (
 	model_definition_id VARCHAR(36) NOT NULL,

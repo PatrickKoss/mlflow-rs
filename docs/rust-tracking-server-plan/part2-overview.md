@@ -15,7 +15,7 @@ decision IDs continue Part I's sequences.
   gateway (CRUD + runtime), scorers, evaluation datasets, genai evaluate,
   issues, label schemas, review queues, prompt optimization, the jobs API,
   assistant, promptlab, and trace archival.
-- The Python *server plane* (uvicorn workers) is retired; the genai rows in
+- The Python _server plane_ (uvicorn workers) is retired; the genai rows in
   §2.2's nginx table are deleted one phase at a time (T22.4).
 - The production image contains **no Python interpreter, standard library,
   site-packages, Python shared library, or `.py` payloads**. GenAI jobs execute
@@ -53,11 +53,11 @@ decision IDs continue Part I's sequences.
 
 The genai surface splits cleanly into three tiers:
 
-| Tier | What | Port strategy |
-|---|---|---|
-| **A — CRUD/wire** | eval datasets, scorers CRUD + online configs, issues CRUD, label schemas, review queues, prompt-opt job CRUD, jobs API, gateway CRUD (secrets/endpoints/model-defs/bindings/tags/budgets/guardrail configs) | native Rust, byte parity — same discipline as Part I |
-| **B — network/runtime** | gateway proxying + SSE, budget enforcement, assistant SSE + CLI subprocesses + tool loop, trace archival, periodic schedulers | native Rust (`tokio`); no Python involved |
-| **C — semantic execution** | scorer deserialization/execution, evaluation harness, issue discovery, online scoring, prompt optimization, inline judge guardrails | native `mlflow-genai` engine; async jobs run in the isolated Rust worker from D14 |
+| Tier                       | What                                                                                                                                                                                                        | Port strategy                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **A — CRUD/wire**          | eval datasets, scorers CRUD + online configs, issues CRUD, label schemas, review queues, prompt-opt job CRUD, jobs API, gateway CRUD (secrets/endpoints/model-defs/bindings/tags/budgets/guardrail configs) | native Rust, byte parity — same discipline as Part I                              |
+| **B — network/runtime**    | gateway proxying + SSE, budget enforcement, assistant SSE + CLI subprocesses + tool loop, trace archival, periodic schedulers                                                                               | native Rust (`tokio`); no Python involved                                         |
+| **C — semantic execution** | scorer deserialization/execution, evaluation harness, issue discovery, online scoring, prompt optimization, inline judge guardrails                                                                         | native `mlflow-genai` engine; async jobs run in the isolated Rust worker from D14 |
 
 The Tier C contract is the behavior reachable from the OSS server at the
 pinned MLflow release, not every client-only helper exported by the Python SDK.
@@ -143,13 +143,13 @@ unique `(dataset_id, input_hash)`; recomputes schema/profile/digest
 
 - `POST /ajax-api/3.0/mlflow/genai/evaluate/invoke` (`handlers.py:6852-6855`,
   handler `:5004`): hand-rolled JSON `{experiment_id, trace_ids[],
-  serialized_scorers[]}` (`:5017-5023`); pre-creates an eval run tagged
+serialized_scorers[]}` (`:5017-5023`); pre-creates an eval run tagged
   `mlflow.runType=genai_evaluate` (`:5042-5045`), submits
   `invoke_genai_evaluate_job` to the runner (`:5050`), tags the run
   `mlflow.genaiEvaluate.jobId` (`:5059`), returns `{"job_id", "run_id"}`
   (`:5064`).
 - `GET /ajax-api/3.0/mlflow/jobs/<job_id>` → `{status, result(parsed),
-  status_details}` (`handlers.py:6870`, handler `:5067-5077`);
+status_details}` (`handlers.py:6870`, handler `:5067-5077`);
   `PATCH /ajax-api/3.0/mlflow/jobs/cancel/<job_id>` (`:6865`, handler
   `:5082-5089`).
 - The job (`mlflow/genai/evaluation/job.py:24`) links traces to the run,
@@ -168,13 +168,13 @@ unique `(dataset_id, input_hash)`; recomputes schema/profile/digest
   omitted `version` ⇒ all versions).
 - `POST /ajax-api/3.0/mlflow/scorer/invoke` (`routes.py:83`,
   `handlers.py:6835`, handler `:6663`): `{experiment_id, serialized_scorer,
-  trace_ids[], log_assessments}` → one job per trace batch; response
+trace_ids[], log_assessments}` → one job per trace batch; response
   `{"jobs": [{"job_id", "trace_ids"}]}` (`:6718-6720`).
 - Online scoring config (hand-rolled, on both prefixes,
   `handlers.py:6981-7004`): GET `/3.0/mlflow/scorers/online-configs`
   (`{scorer_ids[]}` → `{"configs":[...]}`), PUT
   `/3.0/mlflow/scorers/online-config` (`{experiment_id, name, sample_rate,
-  filter_string?}`).
+filter_string?}`).
 
 Semantics: `serialized_scorer` is **JSON (pydantic), never pickle**
 (`base.py:300-354`); versioning is append-only `MAX(scorer_version)+1`
@@ -295,7 +295,7 @@ Must-match behaviors:
    (`gateway_api.py:638`).
 5. **Budget**: REJECT policies → HTTP 429 with the exact message
    `Budget limit exceeded. Limit: ${amount:.2f} USD per {value} {unit}.
-   Budget resets at {ISO8601 Z}. Request rejected.` (`budget.py:157-184`);
+Budget resets at {ISO8601 Z}. Request rejected.` (`budget.py:157-184`);
    spend computed from trace span metrics `total_cost`
    (`sqlalchemy_mixin.py:1339`); tracker backends in-memory or Redis
    (`MLFLOW_GATEWAY_BUDGET_REDIS_URL`); ALERT policies fire
@@ -386,20 +386,20 @@ Artifact-writer strategy is D19. Auth: experiment UPDATE
 
 ### 12.13 Auth treatment (verified per area)
 
-| Area | Gate |
-|---|---|
-| Scorers CRUD | validators: register→experiment UPDATE; list→`validate_can_read_scorer_list` + after-request `filter_list_scorers`; get/versions→read scorer; delete→delete scorer (`auth/__init__.py:2527-2532`, `:3566`) |
-| Scorer invoke | `validate_gateway_proxy` (`:2729`) |
-| Online-config routes | **explicitly excluded** from validators (`:2637`) — authenticated-only |
-| Datasets (all 12) | **no validators** — authenticated-only (absent from `BEFORE_REQUEST_VALIDATORS`) |
-| Issues (all 4 + invoke) | **no validators** — authenticated-only (`:2639-2641` only exempts the invoke path) |
-| Label schemas | full validator set (`:2603-2610`) |
-| Review queues | full validator set + admin-bypass integrity hook `enforce_review_queue_name_not_username` (`:2593-2601`, `:2360`) |
-| Prompt optimization | validator set (`:2562-2566`) |
-| Jobs API | FastAPI middleware guards prefix `/ajax-api/3.0/jobs` but the Flask route is `/ajax-api/3.0/mlflow/jobs/...` (`:4479` vs `handlers.py:6862`) — verify which layer actually gates it and port the observed behavior |
-| gateway-proxy | `validate_gateway_proxy` (`:2196,2727`) |
-| Assistant | localhost gate + authenticated-only (`:4482-4483`) |
-| Promptlab | experiment UPDATE (`:2726`) |
+| Area                    | Gate                                                                                                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scorers CRUD            | validators: register→experiment UPDATE; list→`validate_can_read_scorer_list` + after-request `filter_list_scorers`; get/versions→read scorer; delete→delete scorer (`auth/__init__.py:2527-2532`, `:3566`)         |
+| Scorer invoke           | `validate_gateway_proxy` (`:2729`)                                                                                                                                                                                 |
+| Online-config routes    | **explicitly excluded** from validators (`:2637`) — authenticated-only                                                                                                                                             |
+| Datasets (all 12)       | **no validators** — authenticated-only (absent from `BEFORE_REQUEST_VALIDATORS`)                                                                                                                                   |
+| Issues (all 4 + invoke) | **no validators** — authenticated-only (`:2639-2641` only exempts the invoke path)                                                                                                                                 |
+| Label schemas           | full validator set (`:2603-2610`)                                                                                                                                                                                  |
+| Review queues           | full validator set + admin-bypass integrity hook `enforce_review_queue_name_not_username` (`:2593-2601`, `:2360`)                                                                                                  |
+| Prompt optimization     | validator set (`:2562-2566`)                                                                                                                                                                                       |
+| Jobs API                | FastAPI middleware guards prefix `/ajax-api/3.0/jobs` but the Flask route is `/ajax-api/3.0/mlflow/jobs/...` (`:4479` vs `handlers.py:6862`) — verify which layer actually gates it and port the observed behavior |
+| gateway-proxy           | `validate_gateway_proxy` (`:2196,2727`)                                                                                                                                                                            |
+| Assistant               | localhost gate + authenticated-only (`:4482-4483`)                                                                                                                                                                 |
+| Promptlab               | experiment UPDATE (`:2726`)                                                                                                                                                                                        |
 
 The unvalidated areas (datasets, issues, online-configs) are ported
 **faithfully as authenticated-only**, each with a `// AUTH GAP:` marker and a
@@ -465,7 +465,7 @@ runner polls/claims from the table directly; the SqliteHuey queue files
   ordinals; proto mapping folds TIMEOUT→FAILED (`_job_status.py:7-49`);
   finalized jobs immune to mutation (`store/jobs/sqlalchemy_store.py:126`).
 - Retry only on transient errors: `retry_count >= 
-  MLFLOW_SERVER_JOB_TRANSIENT_ERROR_MAX_RETRIES` → FAILED, else PENDING with
+MLFLOW_SERVER_JOB_TRANSIENT_ERROR_MAX_RETRIES` → FAILED, else PENDING with
   incremented count (`:210-238`); exponential backoff via the base/max delay
   env vars.
 - Timeout: poll + kill subprocess + `mark_job_timed_out` (`utils.py:266-271`).
@@ -631,4 +631,3 @@ runner uses.
    executable, stdlib, site-packages, `.py` files, or Python shared library;
    scan the Rust sources/binary invocation trace for attempted Python launches,
    then run every GenAI API/UI/job smoke with that image.
-

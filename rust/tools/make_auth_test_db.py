@@ -67,7 +67,7 @@ def build_db(db_path: Path) -> dict:
 
     # Create the scrypt user through the genuine store (default werkzeug method
     # is scrypt), so its stored hash is exactly what Python writes at runtime.
-    scrypt_user = store.create_user(SCRYPT_USER[0], SCRYPT_USER[1], is_admin=True)
+    store.create_user(SCRYPT_USER[0], SCRYPT_USER[1], is_admin=True)
 
     # For the pbkdf2 user we insert a pbkdf2-format hash directly so the fixture
     # exercises Rust's pbkdf2 verify path too (werkzeug's runtime default is
@@ -121,9 +121,7 @@ def build_db(db_path: Path) -> dict:
     assert check_password_hash(rows[PBKDF2_USER[0]][1], PBKDF2_USER[1])
 
     with sqlite3.connect(db_path) as conn:
-        (head,) = conn.execute(
-            "SELECT version_num FROM alembic_version_auth"
-        ).fetchone()
+        (head,) = conn.execute("SELECT version_num FROM alembic_version_auth").fetchone()
 
     return {
         "alembic_head": head,
@@ -180,8 +178,9 @@ def main() -> None:
 
     fixture = build_db(args.db)
     args.json.write_text(json.dumps(fixture, indent=2) + "\n")
-    print(f"Wrote migrated auth SQLite fixture to {args.db} "
-          f"(alembic head: {fixture['alembic_head']})")
+    print(
+        f"Wrote migrated auth SQLite fixture to {args.db} (alembic head: {fixture['alembic_head']})"
+    )
     print(f"Wrote fixture metadata to {args.json}")
 
 

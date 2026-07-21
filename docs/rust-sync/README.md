@@ -53,12 +53,12 @@ Rules live in the `CLASSIFICATION` structure at the top of
 is the highest match in `server-api > ui > client-sdk > infra`, and `mixed` records all
 matches.
 
-| Bucket | Meaning | Port action |
-|---|---|---|
-| `server-api` | Server handlers/auth/jobs, stores, protos, entities, webhooks, server-side tracing and GenAI, gateway/deployment-server code, Assistant runtime, or a UI file that defines a persisted/ajax contract. | Inspect and normally reimplement the behavior in Rust. Add or update differential coverage. |
-| `ui` | `mlflow/server/js/**`. The Rust deployment serves the same production static build. | Usually free after rebuilding, but verify with UI smoke. Serialized, GraphQL, and ajax contract changes are also `server-api`. |
-| `client-sdk` | Tracking and tracing clients, `pyfunc`, flavors, integrations, and autologging. | Do not port. Merge the Python implementation because Python remains the client. |
-| `infra` | CI, docs, tests, developer tooling, locks, libraries, and otherwise non-runtime maintenance. | Merge normally; port nothing unless manual review finds server behavior hidden by an incomplete rule. |
+| Bucket       | Meaning                                                                                                                                                                                               | Port action                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `server-api` | Server handlers/auth/jobs, stores, protos, entities, webhooks, server-side tracing and GenAI, gateway/deployment-server code, Assistant runtime, or a UI file that defines a persisted/ajax contract. | Inspect and normally reimplement the behavior in Rust. Add or update differential coverage.                                    |
+| `ui`         | `mlflow/server/js/**`. The Rust deployment serves the same production static build.                                                                                                                   | Usually free after rebuilding, but verify with UI smoke. Serialized, GraphQL, and ajax contract changes are also `server-api`. |
+| `client-sdk` | Tracking and tracing clients, `pyfunc`, flavors, integrations, and autologging.                                                                                                                       | Do not port. Merge the Python implementation because Python remains the client.                                                |
+| `infra`      | CI, docs, tests, developer tooling, locks, libraries, and otherwise non-runtime maintenance.                                                                                                          | Merge normally; port nothing unless manual review finds server behavior hidden by an incomplete rule.                          |
 
 Classification is deterministic path triage, not a substitute for reading the report.
 Maintain the rules when upstream moves a server responsibility to a new path.
@@ -89,26 +89,26 @@ Playwright coverage.
 
 `rust/sync/state.json` is the single machine-readable anchor:
 
-| Field | Type | Meaning |
-|---|---|---|
+| Field                         | Type                   | Meaning                                                                              |
+| ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------ |
 | `last_synced_upstream_commit` | full commit SHA string | Inclusive upstream commit whose server behavior is implemented and verified in Rust. |
-| `last_synced_at` | `YYYY-MM-DD` string | Date the last full sync closed. |
-| `note` | string | Human context for the current anchor. |
-| `history` | array | Completed sync records, oldest first. |
+| `last_synced_at`              | `YYYY-MM-DD` string    | Date the last full sync closed.                                                      |
+| `note`                        | string                 | Human context for the current anchor.                                                |
+| `history`                     | array                  | Completed sync records, oldest first.                                                |
 
 Each `history` item has `from`, `to`, `date`, `plan_doc`, `commits_total`, and
 `commits_relevant`. Use full upstream SHAs for `from`/`to`, a repository-relative path
 for `plan_doc`, the analyzer's first-parent total for `commits_total`, and its primary
 `server-api` count for `commits_relevant`.
 
-| History field | Type | Meaning |
-|---|---|---|
-| `from` | full commit SHA string | Previous sync anchor. |
-| `to` | full commit SHA string | Merged and verified upstream head. |
-| `date` | `YYYY-MM-DD` string | Date the sync closed. |
-| `plan_doc` | string | Repository-relative path to the completed `plan.md`. |
-| `commits_total` | integer | First-parent commits analyzed in `from..to`. |
-| `commits_relevant` | integer | Commits whose primary bucket was `server-api`. |
+| History field      | Type                   | Meaning                                              |
+| ------------------ | ---------------------- | ---------------------------------------------------- |
+| `from`             | full commit SHA string | Previous sync anchor.                                |
+| `to`               | full commit SHA string | Merged and verified upstream head.                   |
+| `date`             | `YYYY-MM-DD` string    | Date the sync closed.                                |
+| `plan_doc`         | string                 | Repository-relative path to the completed `plan.md`. |
+| `commits_total`    | integer                | First-parent commits analyzed in `from..to`.         |
+| `commits_relevant` | integer                | Commits whose primary bucket was `server-api`.       |
 
 Advance state only after the merged upstream reference, every plan task, and every
 compliance gate are verified. Append the history item and set

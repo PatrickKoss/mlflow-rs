@@ -406,6 +406,9 @@ ignore = [
 # progress and section listing to stdout.
 "rust/compliance/*" = ["T201"]
 "rust/bench/*" = ["T201"]
+"rust/**/*.py" = ["T201"]
+"rust/tools/gen_search_runs_corpus.py" = ["E501"]
+"rust/tools/verify_auth_fixture.py" = ["E501"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = false
@@ -446,6 +449,10 @@ exclude = [
   "tests/protos",
   "docs/docs/classic-ml/mlflow-3/index.mdx",
   "examples/open_webui/mlflow_filter_pipeline.py",
+  # Rust's Python files are development, corpus-generation, and compliance
+  # utilities. Ruff remains their Python linter; Clint's MLflow-specific rules
+  # are intended for the Python product and its test suite.
+  "rust",
 ]
 typing-extensions-allowlist = [
   # Docs: https://typing-extensions.readthedocs.io/en/latest/
@@ -489,6 +496,10 @@ tpe = "tpe"                        # Tree-structured Parzen Estimator (hyperopt/
 TPE = "TPE"                        # Tree-structured Parzen Estimator (hyperopt/optuna)
 indx = "indx"                      # intentional shorthand for index
 Tru = "Tru"                        # TruLens library name prefix
+archiv = "archiv"                  # intentional prefix used to match archival identifiers
+ba = "ba"                          # fragment in a committed password-hash example
+daa = "daa"                        # fragment in a documented commit SHA
+flate = "flate"                    # flate2 Rust crate name
 
 # https://github.com/crate-ci/typos/blob/master/docs/reference.md
 [tool.typos.files]

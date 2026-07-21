@@ -170,7 +170,7 @@ pub async fn search_evaluation_datasets(
             req.filter_string
                 .as_deref()
                 .filter(|value| !value.is_empty()),
-            req.max_results.filter(|value| *value != 0).unwrap_or(1000),
+            req.max_results.unwrap_or(1000),
             &req.order_by,
             req.page_token.as_deref().filter(|value| !value.is_empty()),
         )

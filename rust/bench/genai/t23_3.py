@@ -1070,9 +1070,7 @@ def run_cell(
             activation_perf = time.perf_counter()
             set_online_rate(handle.url, online_configs, 1.0)
 
-            def discover_poll_and_deactivate() -> tuple[
-                list[SubmittedJob], list[dict[str, Any]]
-            ]:
+            def discover_poll_and_deactivate() -> tuple[list[SubmittedJob], list[dict[str, Any]]]:
                 try:
                     online_submissions = discover_online_jobs(
                         online_configs,
@@ -1108,9 +1106,7 @@ def run_cell(
             online_future.result() if online_future is not None else ([], [])
         )
         submissions.extend(online_submissions)
-        jobs = sorted(
-            direct_jobs + online_jobs, key=lambda job: (job["job_kind"], job["sequence"])
-        )
+        jobs = sorted(direct_jobs + online_jobs, key=lambda job: (job["job_kind"], job["sequence"]))
         if len(submissions) != cell.jobs:
             raise RuntimeError(
                 f"{target} {cell.slug} created {len(submissions)}/{cell.jobs} expected jobs; "
@@ -1489,9 +1485,7 @@ def matrix(args: argparse.Namespace) -> int:
                             online_configs = None
                             online_count = cell.jobs_by_kind.get(ONLINE_TRACE, 0)
                             if online_count:
-                                online_groups = (
-                                    1 if cell.shape == "steady-drip" else online_count
-                                )
+                                online_groups = 1 if cell.shape == "steady-drip" else online_count
                                 print(
                                     f"[{target}] {cell.slug}: preparing {online_groups} online "
                                     f"experiment groups x {cell.rows} rows",
@@ -1571,9 +1565,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--burst-jobs", type=int, default=CANONICAL_BURST_JOBS)
     parser.add_argument("--drip-jobs", type=int, default=CANONICAL_DRIP_JOBS)
     parser.add_argument("--large-rows", type=int, default=CANONICAL_LARGE_ROWS)
-    parser.add_argument(
-        "--issue-large-rows", type=int, default=CANONICAL_LARGE_ROWS
-    )
+    parser.add_argument("--issue-large-rows", type=int, default=CANONICAL_LARGE_ROWS)
     parser.add_argument("--timeout-seconds", type=float, default=JOB_TIMEOUT_SECONDS)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--resume", action="store_true")

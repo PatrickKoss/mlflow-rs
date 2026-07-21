@@ -34,13 +34,7 @@ from pathlib import Path
 from mlflow.protos import model_registry_pb2, service_pb2, webhooks_pb2
 from mlflow.utils.proto_json_utils import message_to_json
 
-GOLDENS_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "crates"
-    / "mlflow-proto"
-    / "tests"
-    / "goldens"
-)
+GOLDENS_DIR = Path(__file__).resolve().parents[1] / "crates" / "mlflow-proto" / "tests" / "goldens"
 
 
 @dataclass
@@ -118,9 +112,7 @@ def _build_goldens() -> list[Golden]:
     run.info.artifact_uri = "s3://bucket/run-abc-123/artifacts"
     run.info.lifecycle_stage = "active"
     run.data.metrics.add(key="rmse", value=0.123, timestamp=1700000001000, step=1)
-    run.data.metrics.add(
-        key="big", value=1e20, timestamp=1700000002000, step=1000000000000
-    )
+    run.data.metrics.add(key="big", value=1e20, timestamp=1700000002000, step=1000000000000)
     run.data.params.add(key="alpha", value="0.5")
     run.data.params.add(key="model_class", value="LogisticRegression")
     run.data.tags.add(key="mlflow.source.name", value="train.py")
@@ -143,9 +135,7 @@ def _build_goldens() -> list[Golden]:
     default_run = service_pb2.Run()
     default_run.info.run_id = "zero"
     default_run.info.start_time = 0  # explicitly set default -> MUST be emitted
-    default_run.info.status = service_pb2.RunStatus.Value(
-        "RUNNING"
-    )  # non-default enum
+    default_run.info.status = service_pb2.RunStatus.Value("RUNNING")  # non-default enum
     goldens.append(Golden("run_explicit_default", "mlflow.Run", default_run))
 
     # --- Unicode + special characters in string fields -----------------------
@@ -199,9 +189,7 @@ def _build_goldens() -> list[Golden]:
     # --- SearchRuns request with empty repeated lists ------------------------
     search_empty = service_pb2.SearchRuns()
     search_empty.max_results = 1000  # explicit default
-    goldens.append(
-        Golden("search_runs_request_empty", "mlflow.SearchRuns", search_empty)
-    )
+    goldens.append(Golden("search_runs_request_empty", "mlflow.SearchRuns", search_empty))
 
     # --- SearchRuns.Response with nested runs --------------------------------
     resp = service_pb2.SearchRuns.Response()
@@ -213,9 +201,7 @@ def _build_goldens() -> list[Golden]:
     r2.info.run_id = "r2"
     r2.info.start_time = 200
     resp.next_page_token = "next-123"
-    goldens.append(
-        Golden("search_runs_response", "mlflow.SearchRuns.Response", resp)
-    )
+    goldens.append(Golden("search_runs_response", "mlflow.SearchRuns.Response", resp))
 
     # --- RegisteredModel with latest_versions/tags/aliases -------------------
     rm = model_registry_pb2.RegisteredModel()
@@ -234,9 +220,7 @@ def _build_goldens() -> list[Golden]:
     alias = rm.aliases.add()
     alias.alias = "champion"
     alias.version = "3"
-    goldens.append(
-        Golden("registered_model", "mlflow.RegisteredModel", rm)
-    )
+    goldens.append(Golden("registered_model", "mlflow.RegisteredModel", rm))
 
     # --- ModelVersion full -------------------------------------------------
     mv = model_registry_pb2.ModelVersion()

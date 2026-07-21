@@ -101,7 +101,7 @@ async def main():
         ),
         "partial_stream": await run_stream(),
     }
-    print(json.dumps(output, separators=(",", ":"), sort_keys=True))  # noqa: T201
+    print(json.dumps(output, separators=(",", ":"), sort_keys=True))
 
 
 if __name__ == "__main__":

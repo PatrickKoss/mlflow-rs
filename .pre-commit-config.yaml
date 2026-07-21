@@ -15,7 +15,9 @@ repos:
     rev: "50c5478ed9e10bf360335449280cf2a67f4edb7a" # v2.7.1
     hooks:
       - id: prettier
-        files: '^(?!docs/|mlflow/server/js/|libs/typescript/).+\.(js|ts|md|json|ya?ml)$'
+        # The Rust tree contains generated reports, byte-level fixtures, and benchmark
+        # outputs whose formatting is owned by their generators.
+        files: '^(?!docs/|rust/|mlflow/server/js/|libs/typescript/).+\.(js|ts|md|json|ya?ml)$'
         require_serial: true
 
   - repo: local

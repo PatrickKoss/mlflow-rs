@@ -123,7 +123,7 @@ which match the requested experiment so its unpaginated response stays bounded;
 CRUD-only cancel/delete fixtures use a different job name. Gateway list reads
 page through a 10,000-policy corpus.
 
-“Large” follows each schema's realistic ceiling:
+"Large" follows each schema's realistic ceiling:
 
 - datasets: eight 64 KiB record outputs, about 512 KiB per upsert;
 - scorers: 64 KiB serialized scorer JSON;

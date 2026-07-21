@@ -319,14 +319,12 @@ def main() -> None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
             summary = {key: evidence[key] for key in ("status", "cases", "non_allowlisted_diffs")}
-            print(json.dumps(summary))  # noqa: T201
+            print(json.dumps(summary))
             if not equal:
                 raise SystemExit(1)
         except Exception:
             for log in logs:
-                print(  # noqa: T201
-                    f"--- {log.name} ---\n{log.read_text(errors='replace')}"
-                )
+                print(f"--- {log.name} ---\n{log.read_text(errors='replace')}")
             raise
         finally:
             for process in reversed(processes):

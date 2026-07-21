@@ -24,9 +24,11 @@ def response(content: str):
 def build() -> dict:
     sampling = []
     for n, k in [(10, 4), (120, 5), (5000, 100)]:
-        sampling.append(
-            {"population": n, "sample_size": k, "selected": random.Random(42).sample(range(n), k)}
-        )
+        sampling.append({
+            "population": n,
+            "sample_size": k,
+            "selected": random.Random(42).sample(range(n), k),
+        })
 
     values = [0.1, 0.2, 0.4, 1.0]
     computed = _compute_percentiles(values, [50, 75, 90, 95, 99])

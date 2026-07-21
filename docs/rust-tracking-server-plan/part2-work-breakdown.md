@@ -53,10 +53,9 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       **DONE (2026-07-18):** standalone spike (`rust/spikes/src/secrets.rs` +
       `verify_secrets.py`). Envelope pinned: random 32-byte DEK per secret;
       AES-256-GCM `nonce(12)||ct||tag(16)`; wrapped DEK always 60 bytes;
-      KEK = PBKDF2-HMAC-SHA256 600k iters, salt "mlflow-secrets-kek-v1-2025"
-      + kek_version as u32 BE; AAD "{secret_id}|{secret_name}" on the value
+      KEK = PBKDF2-HMAC-SHA256 600k iters, salt "mlflow-secrets-kek-v1-2025" + kek_version as u32 BE; AAD "{secret_id}|{secret_name}" on the value
       only; kek_version stored separately; rotation re-wraps only the DEK.
-      Masking: <8 chars or non-string → ***, else first3+...+last4. 32
+      Masking: <8 chars or non-string → \*\*\*, else first3+...+last4. 32
       Python→Rust + 32 Rust→Python envelopes + 2 rotations each + 19 masking
       fixtures all round-trip; wrong AAD/KEK, truncation, and corruption all
       fail closed on a constant error. 14 spike tests + workspace gates
@@ -70,15 +69,13 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       the Python fixtures, and the test environment has no Python executable.
       **VER:** spike tests + production-image-style PATH isolation green.
       **DONE (2026-07-18):** crates `mlflow-genai` (SerializedScorer,
-      ScorerExecutor, protocol envelopes, process-group-aware WorkerLauncher)
-      + `mlflow-genai-worker` (bounded stdin/stdout JSON worker) are
+      ScorerExecutor, protocol envelopes, process-group-aware WorkerLauncher) + `mlflow-genai-worker` (bounded stdin/stdout JSON worker) are
       workspace members. Persisted-scorer format pinned (metadata + exactly
       one representation field; genuine ResponseLength fixture with
       builtin_scorer_class/pydantic_data; instructions_judge_pydantic_data;
       unknown additive fields retained). §14.2 protocol: versioned request
       envelope, closed 6-value job_kind enum, succeeded/failed result tags;
-      unknown version fails before params parse. Spike proves: ResponseLength
-      + InstructionsJudge (via in-process mock gateway) match Python oracles
+      unknown version fails before params parse. Spike proves: ResponseLength + InstructionsJudge (via in-process mock gateway) match Python oracles
       (generate_oracles.py, real Python InstructionsJudge mocked at the
       provider boundary); scratch-sqlite jobs rows PENDING→RUNNING→SUCCEEDED;
       non_zero_exit / signal / malformed_output / timeout each propagate
@@ -321,7 +318,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       **DONE 2026-07-18** (codex gpt-5.6-sol, merge on top of T17.1 base):
       `online_scoring_scheduler.rs` (429 lines) — next-wall-clock-minute
       tick + 60s cadence, missed ticks skipped, all workspaces scanned.
-      Python reference: crontab */1 + Huey lock_task
+      Python reference: crontab \*/1 + Huey lock_task
       `online-scoring-scheduler-lock` (mlflow/server/jobs/utils.py) →
       Rust `scheduler_locks.rs`: reserved job-table row with atomic
       insert/takeover, owner fencing token, lease expiry, conditional
@@ -414,7 +411,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       diffs. Sentinel moved to `/ajax-api/3.0/mlflow/assistant/config`
       (§12.10, moves at T20.1). Gates fmt/clippy/test/parity/replay all 0.
 - [x] **T18.3 Runtime core**: unified invocations + `mlflow/v1/chat/
-      completions`, provider trait, native adapters for openai/azure,
+completions`, provider trait, native adapters for openai/azure,
       anthropic, gemini; SSE plumbing with the §12.9 exactness list; timing
       headers; endpoint-config resolution + cache.
       **AC:** mock-provider differential streams frame-identical to Python.
@@ -423,7 +420,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       (transform_request/response/stream_frame, map_error, inject_auth,
       cross-frame state for the D16 matrix); native openai/azure(+Azure AD)/
       anthropic/gemini adapters. Endpoints: `/gateway/{name}/mlflow/
-      invocations` + `/gateway/mlflow/v1/chat/completions` with FastAPI-
+invocations` + `/gateway/mlflow/v1/chat/completions` with FastAPI-
       style errors and representative Pydantic messages. §12.9 SSE honored:
       `data: {json}\n\n` compact reserialization, no [DONE], keep-alive/
       event/blank lines ignored, cross-chunk line buffering, OpenAI bad
@@ -467,9 +464,9 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       38 differential comparisons. Orchestrator-found+fixed bug
       (a6668d05d): manifest generator classified by exact name so aliases
       amazon-bedrock/databricks-model-serving fell to
-      pinned_litellm_transform while adapter_for() resolves them to
+      pinned*litellm_transform while adapter_for() resolves them to
       explicit native adapters — matrix test only passed with ambient
-      AWS_* env creds; generator now normalizes aliases. §12.9
+      AWS*\* env creds; generator now normalizes aliases. §12.9
       implemented=10, planned=0 — ALL §12 route families now fully
       accounted. Workspace 1,288+ tests. Gates all 0; corpus 188, zero
       non-allowlisted diffs.
@@ -540,7 +537,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       chat runs both, unified embeddings neither, passthrough embeddings
       BEFORE-only, raw proxy BEFORE + AFTER only on non-stream JSON/text.
       VALIDATION → 400 `{"detail":"Guardrail '<name>' blocked:
-      <rationale>"}` byte-exact. SANITIZATION → POST
+<rationale>"}` byte-exact. SANITIZATION → POST
       /gateway/{action_endpoint}/mlflow/invocations with
       X-MLflow-Guardrail-Bypass: 1, only Authorization forwarded, payload
       = sanitizer prompt + rationale + json.dumps(payload, indent=2) +
@@ -583,7 +580,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       top-k, semantic/episodic augmentation, retrieved-memory metadata.
       Real execution wired into Phase 17 worker; fixture mode intact. New
       oracles: rust/tools/scorer_oracle.py (run with `uv run --with
-      dspy==3.2.1`; 26/26/11) + judge_oracle.py (7 suites, 6 schemas).
+dspy==3.2.1`; 26/26/11) + judge_oracle.py (7 suites, 6 schemas).
       Zero live LLM calls. Gates all 0; corpus 188 unchanged; 1,321 tests.
 - [x] **T19.2 Evaluation, invoke, and online scoring**: native bounded
       concurrency/rate limiting/retries, scorer-result standardization,
@@ -874,12 +871,12 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       **DONE 2026-07-19** (codex agent, merged d088c9ab1; **D6 CLOSED**):
       `rust/crates/mlflow-store/src/store/trace_archival.rs` + server
       pass API in `trace_archival.rs`. Mirrors sqlalchemy_store.py
-      archive orchestration (_plan/_execute/_archive_trace_candidate),
-      finalize (_finalize_archived_trace + failure/archive-now cleanup),
-      archived reads (get_trace/_get_spans_with_trace_info,
+      archive orchestration (\_plan/\_execute/\_archive_trace_candidate),
+      finalize (\_finalize_archived_trace + failure/archive-now cleanup),
+      archived reads (get_trace/\_get_spans_with_trace_info,
       download_archived_trace_data, get-trace-artifact handler), 2-phase
-      delete (_select_archived_traces_for_delete/_delete_archived_trace
-      _payloads), retention/allowlist (trace_archival.py), workspace
+      delete (\_select_archived_traces_for_delete/\_delete_archived_trace
+      \_payloads), retention/allowlist (trace_archival.py), workspace
       resolve_trace_archival_config inheritance. Semantics: active
       experiments only, deterministic (timestamp_ms, trace_id) selection;
       archive-now priority sharing the pass budget; shorter retention
@@ -895,8 +892,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       archived OTLP spans; get-trace-artifact reconstructs compact
       {"spans": ...} JSON; missing payload → empty spans, corruption
       paths match Python. Scheduler API for T21.4: archive_traces (one
-      bounded pass), archive_traces_for_workspace (overrides/inheritance
-      + remaining budget), archive_traces_at (deterministic clock).
+      bounded pass), archive_traces_for_workspace (overrides/inheritance + remaining budget), archive_traces_at (deterministic clock).
       Differential `rust/tools/trace_archival_store_differential.py`
       (driven by trace_archival_store.rs, in cargo test): 6/6 sqlite,
       6/6 live docker Postgres 16. Post-merge gates 13/13 green (1,415
@@ -963,44 +959,43 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       `factory::repo_from_uri` (`rust/crates/mlflow-artifacts/src/repo.rs`) so
       `s3://bucket/prefix` resolves for the `--serve-artifacts` proxy
       (`--artifacts-destination s3://…`) and every internal factory consumer
-      (trace archival ARCHIVE_REPO, promptlab, genai artifacts). The crate's
+      (trace archival ARCHIVE*REPO, promptlab, genai artifacts). The crate's
       `aws` feature already exists but is never enabled; enable it for the
       server build so a stock deployment gets S3 without a rebuild. Config
       parity with Python's `_get_s3_client`
-      (`mlflow/store/artifact/s3_artifact_repo.py`): standard `AWS_*` env
-      creds, `AWS_REGION`/`AWS_DEFAULT_REGION`, `MLFLOW_S3_ENDPOINT_URL`
-      (S3-compatible endpoints incl. MinIO), `MLFLOW_S3_IGNORE_TLS`, and
-      `MLFLOW_BOTO_CLIENT_ADDRESSING_STYLE` (path-style for MinIO). Multipart
-      proxy endpoints match Python `S3ArtifactRepository`'s
-      `MultipartUploadMixin` semantics where the proxy exposes them; if
-      presigned-URL parity is not achievable with `object_store` alone, use the
-      raw S3 REST calls or document the divergence and match wire errors.
-      GCS/Azure stay documented seams (unchanged `NOT_IMPLEMENTED`). Surfaced
-      by the T14.2 soak and T23.4 (Rust artifact factory lacked S3; runbook
-      workaround was "route artifact-proxy traffic to Python", which T22.4
-      removes — hence pre-cutover).
-      **AC:** proxy put/get/list/delete + multipart lifecycle green against
-      MinIO; trace-archival pass with an `s3://` ARCHIVE_REPO green; Python-vs-
-      Rust proxy differential on MinIO shows zero non-allowlisted diffs;
-      local-FS behavior byte-identical to before.
-      **VER:** cargo integration suite gated on MinIO availability + the
-      differential run + T14.3 runbook updated to drop the Python-routing
-      workaround.
-      **DONE (2026-07-20, Codex):** `factory::repo_from_uri` now constructs an
-      `AmazonS3Builder`-backed repository for `s3://` URIs, with the AWS and
-      MLflow endpoint/TLS/addressing-style environment mappings enabled in
-      stock `mlflow-server` and `mlflow-store` builds. Multipart create,
-      presigned UploadPart URLs, complete, and abort use raw S3 REST requests
-      signed with SigV4 and credentials from object_store's AWS provider;
-      presigned artifact downloads use the same signer. GCS/Azure remain
-      unchanged `NOT_IMPLEMENTED` seams. Verification: 43 artifact, 288 store,
-      and 762 server tests passed; four MinIO-gated live tests passed (artifact
-      round trips + multipart, HTTP proxy + multipart, trace archival); strict
-      clippy, formatting, and the release server build passed. The Python/Rust
-      MinIO differential passed 10/10 request cases with zero non-allowlisted
-      differences; evidence is in
-      `rust/tools/results/t22_0_s3_differential.json` and
-      `rust/tools/results/t22_0_verification.md`. T14.3 deployment and migration
+      (`mlflow/store/artifact/s3_artifact_repo.py`): standard `AWS*\*`env
+ creds,`AWS_REGION`/`AWS_DEFAULT_REGION`, `MLFLOW_S3_ENDPOINT_URL`    (S3-compatible endpoints incl. MinIO),`MLFLOW_S3_IGNORE_TLS`, and
+ `MLFLOW_BOTO_CLIENT_ADDRESSING_STYLE`(path-style for MinIO). Multipart
+ proxy endpoints match Python`S3ArtifactRepository`'s
+ `MultipartUploadMixin`semantics where the proxy exposes them; if
+ presigned-URL parity is not achievable with`object_store`alone, use the
+ raw S3 REST calls or document the divergence and match wire errors.
+ GCS/Azure stay documented seams (unchanged`NOT_IMPLEMENTED`). Surfaced
+ by the T14.2 soak and T23.4 (Rust artifact factory lacked S3; runbook
+ workaround was "route artifact-proxy traffic to Python", which T22.4
+ removes — hence pre-cutover).
+ **AC:** proxy put/get/list/delete + multipart lifecycle green against
+ MinIO; trace-archival pass with an `s3://`ARCHIVE_REPO green; Python-vs-
+ Rust proxy differential on MinIO shows zero non-allowlisted diffs;
+ local-FS behavior byte-identical to before.
+ **VER:** cargo integration suite gated on MinIO availability + the
+ differential run + T14.3 runbook updated to drop the Python-routing
+ workaround.
+ **DONE (2026-07-20, Codex):**`factory::repo_from_uri`now constructs an
+`AmazonS3Builder`-backed repository for `s3://`URIs, with the AWS and
+ MLflow endpoint/TLS/addressing-style environment mappings enabled in
+ stock`mlflow-server`and`mlflow-store`builds. Multipart create,
+ presigned UploadPart URLs, complete, and abort use raw S3 REST requests
+ signed with SigV4 and credentials from object_store's AWS provider;
+ presigned artifact downloads use the same signer. GCS/Azure remain
+ unchanged`NOT_IMPLEMENTED`seams. Verification: 43 artifact, 288 store,
+ and 762 server tests passed; four MinIO-gated live tests passed (artifact
+ round trips + multipart, HTTP proxy + multipart, trace archival); strict
+ clippy, formatting, and the release server build passed. The Python/Rust
+ MinIO differential passed 10/10 request cases with zero non-allowlisted
+ differences; evidence is in
+`rust/tools/results/t22_0_s3_differential.json`and
+`rust/tools/results/t22_0_verification.md`. T14.3 deployment and migration
       docs now route S3 to Rust while retaining the Python exception for
       GCS/Azure.
 - [x] **T22.1 Differential corpus genai sections** for every Tier A surface,
@@ -1068,6 +1063,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       12 trace cases with zero non-allowlisted diffs, zero status mismatches, and
       zero errors. Required CI covers core + validator on both backends; the full
       exact-ID matrix remains nightly/manual. T22.3 is next.
+
 - [x] **T22.3 SSE/streaming differential** (gateway + assistant) green
       frame-by-frame against mocks/stubs.
       **AC/VER:** recorder CI job.
@@ -1086,6 +1082,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       pytest dependencies, runs the complete recorder directory serially, and
       uploads its pytest log and JUnit report on failure. This cleared the
       streaming-parity gate for the completed T22.4 cutover.
+
 - [x] **T22.4 nginx cutover**: delete the Python rows from §2.2 phase by
       phase; final state removes the Python server container from
       `rust/deploy/docker-compose.yml` and removes Python from every production
@@ -1113,6 +1110,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       config and Bash syntax validation passed; shellcheck was unavailable.
       The stack, volumes, and networks were removed after verification. T22.5
       is next.
+
 - [x] **T22.5 UI smoke (genai)**: gateway admin pages (secrets/endpoints/
       budgets/guardrails), scorers + evaluation runs pages, datasets, issues,
       review queues, labeling, prompt optimization, assistant panel.
@@ -1134,6 +1132,7 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
       native `ResponseLength` scorer worker job to reach `SUCCEEDED`. The compose
       stack, volumes, and browsers were removed after verification. T22.6
       followed.
+
 - [x] **T22.6 Ops docs**: extend T14.3 with KEK passphrase management +
       rotation, native worker concurrency/memory/process supervision, pinned
       scorer/provider/GEPA manifest upgrades, Redis budget tracker option,
@@ -1160,14 +1159,14 @@ T22.4 deletes the Python container, or use the bench compose which keeps both.
 
 ### Phase 23 — GenAI performance & resource evaluation (Python vs Rust)
 
-*Added 2026-07-19 per user directive: a Phase 14-style comparative evaluation
+_Added 2026-07-19 per user directive: a Phase 14-style comparative evaluation
 of ALL genai features — latency, error rates, memory, CPU (and whatever else
 fits) — Python vs Rust on identical infrastructure and identical seeded data,
 with every external dependency replaced by deterministic fakes we control so
 neither side's numbers include third-party flakiness. Reasonable volume:
 1,000–10,000+ requests per scenario cell. Must run while the Python server
 still exists (before T22.4 cutover), or via the bench compose which keeps
-both servers regardless of deploy-compose state.*
+both servers regardless of deploy-compose state._
 
 **Shared method (all tasks):** postgres:16 + MinIO in docker (T14.2 infra),
 fresh DB + bucket prefix per target; Python = 4 uvicorn workers + its real
@@ -1208,8 +1207,7 @@ zero live provider calls anywhere in this phase.
       **VER:** `rust/bench/genai/` harness + smoke-cell CI-runnable script,
       exit 0.
       **DONE 2026-07-19** (codex agent, merged 297664586): `rust/bench/
-      genai/` — mock_provider.py (OpenAI chat SSE/non-stream + embeddings
-      + models + Anthropic messages/SSE; body/IDs/tokens derived solely
+genai/` — mock_provider.py (OpenAI chat SSE/non-stream + embeddings + models + Anthropic messages/SSE; body/IDs/tokens derived solely
       from SHA256("<seed>:<route>:"+canonical-sorted-JSON); byte-identical
       across separate same-seed instances — tested; per-route fixed
       latency, default 0), runner.py (compose lifecycle, fresh DB/S3
@@ -1327,16 +1325,14 @@ zero live provider calls anywhere in this phase.
       real traces.pb (base64+SHA-256). Rust-slower only: TTFE p95 in
       gateway small-c64 and passthrough-large-c64 (socket-read frame
       batching under 64 streams) — for T23.5 report. Documented
-      limitations: Rust artifact factory does not yet wire S3, so archival
-      + promptlab used fresh local file:// repos (Python used MinIO);
+      limitations: Rust artifact factory does not yet wire S3, so archival + promptlab used fresh local file:// repos (Python used MinIO);
       post-LLM guardrails loaded-not-executed on streams per contract,
       budget accounting ran. Artifacts: `rust/bench/genai/results/t23_4/`
       (40 raw JSONs + `t23_4_summary.md`), driver `rust/bench/genai/t23_4.py`.
       Gates: ruff 0, harness tests 14 passed, route parity 372, replay 0.
 - [x] **T23.5 Mixed soak + final report**: one realistic mixed genai
       workload combining all of the above (dataset upserts + evaluation/
-      scorer jobs + gateway chat traffic incl. streams + assistant sessions
-      + review-queue/labeling reads + a background archival pass), ≥10,000
+      scorer jobs + gateway chat traffic incl. streams + assistant sessions + review-queue/labeling reads + a background archival pass), ≥10,000
       total requests per target, run identically against Python then Rust;
       then the Phase 14-style report `rust/bench/genai_eval.md`: per-family
       side-by-side latency/throughput/error tables, RSS + CPU over time

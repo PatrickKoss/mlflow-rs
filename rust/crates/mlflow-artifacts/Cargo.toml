@@ -40,7 +40,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 # Local filesystem object store (`fs` feature only — no cloud SDKs by default).
-object_store = { version = "0.14.0", default-features = false, features = ["fs"] }
+object_store = { version = "0.14.0", default-features = false, features = [
+  "fs",
+] }
 chrono = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }

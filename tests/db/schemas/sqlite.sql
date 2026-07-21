@@ -763,6 +763,17 @@ CREATE TABLE guardrails (
 )
 
 
+CREATE TABLE span_attributes (
+	trace_id VARCHAR(50) NOT NULL,
+	span_id VARCHAR(50) NOT NULL,
+	key VARCHAR(250) NOT NULL,
+	value VARCHAR(500) NOT NULL,
+	value_truncated BOOLEAN DEFAULT 0 NOT NULL,
+	CONSTRAINT span_attributes_pk PRIMARY KEY (trace_id, span_id, key),
+	CONSTRAINT fk_span_attributes_span FOREIGN KEY(trace_id, span_id) REFERENCES spans (trace_id, span_id) ON DELETE CASCADE
+)
+
+
 CREATE TABLE span_metrics (
 	trace_id VARCHAR(50) NOT NULL,
 	span_id VARCHAR(50) NOT NULL,

@@ -14,6 +14,10 @@ use mlflow_store::{Db, PoolConfig};
 
 #[tokio::test]
 async fn pg_registry_smoke() {
+    if std::env::var("MLFLOW_RUST_TEST_DIALECT").as_deref() != Ok("postgres") {
+        eprintln!("skipping: MLFLOW_RUST_TEST_DIALECT is not postgres");
+        return;
+    }
     let Ok(uri) = std::env::var("MLFLOW_RUST_TEST_PG_URI") else {
         eprintln!("skipping: MLFLOW_RUST_TEST_PG_URI not set");
         return;
@@ -23,6 +27,10 @@ async fn pg_registry_smoke() {
 
 #[tokio::test]
 async fn mysql_registry_smoke() {
+    if std::env::var("MLFLOW_RUST_TEST_DIALECT").as_deref() != Ok("mysql") {
+        eprintln!("skipping: MLFLOW_RUST_TEST_DIALECT is not mysql");
+        return;
+    }
     let Ok(uri) = std::env::var("MLFLOW_RUST_TEST_MYSQL_URI") else {
         eprintln!("skipping: MLFLOW_RUST_TEST_MYSQL_URI not set");
         return;

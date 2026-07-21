@@ -2,12 +2,12 @@
 
 Status: **COMPLETE (2026-07-21)** · From: `ee51c63ca0f541a47eb65a811b627755717da0a2` · To: `9f872c10cd88eaa062e612b6726b06cedbd75084`
 
-| Bucket | Commits |
-|---|---:|
-| `server-api` | 13 |
-| `ui` | 9 |
-| `client-sdk` | 9 |
-| `infra` | 10 |
+| Bucket       | Commits |
+| ------------ | ------: |
+| `server-api` |      13 |
+| `ui`         |       9 |
+| `client-sdk` |       9 |
+| `infra`      |      10 |
 
 Upstream merge commit: `e9c4da346` (merged 2026-07-20; one trivial import
 conflict in `tests/server/auth/test_auth.py`).

@@ -641,7 +641,7 @@ def main():
     }
     OUTPUT.write_text(json.dumps(corpus, indent=2, sort_keys=True) + "\n")
     WORKFLOW_OUTPUT.write_text(json.dumps(workflows, indent=2, sort_keys=True) + "\n")
-    print(  # noqa: T201 - command-line generator reports its result
+    print(
         json.dumps(
             {
                 "output": str(OUTPUT),

@@ -1,6 +1,6 @@
 # T22.1 Semantic Differential Corpus - Last Run
 
-- Profile: **oracle-refresh**
+- Profile: **required**
 - Cases run: **374**
 - Non-allowlisted diffs: **0**
 - Allowlisted diffs: **0**
@@ -31,7 +31,6 @@
 - **PASS** `online-scoring-shared-db-differential`
 - **PASS** `optimizer-python-rust-oracle`
 - **PASS** `guardrail-python-rust-matrix`
-- **PASS** `third-party-pinned-python-golden-refresh`
 
 The required profile uses deterministic loopback fakes and committed Python-reference
 goldens. The `oracle-refresh` profile regenerates the 112-entry third-party corpus

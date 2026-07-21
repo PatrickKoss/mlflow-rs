@@ -80,7 +80,7 @@ async def main() -> None:
             for outcome in ("pass", "violation"):
                 key = f"{stage}-{action}-{outcome}"
                 result[key] = await matrix_cell(base_url, stage, action, outcome)
-    print(json.dumps(result, separators=(",", ":")))  # noqa: T201
+    print(json.dumps(result, separators=(",", ":")))
 
 
 if __name__ == "__main__":

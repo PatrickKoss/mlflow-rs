@@ -35,14 +35,14 @@ PASSWORDS = [
 def gen_werkzeug() -> dict:
     entries = []
     for pw in PASSWORDS:
-        for method in ("scrypt", "pbkdf2:sha256"):
-            entries.append(
-                {
-                    "password": pw,
-                    "method": method,
-                    "hash": generate_password_hash(pw, method=method),
-                }
-            )
+        entries.extend(
+            {
+                "password": pw,
+                "method": method,
+                "hash": generate_password_hash(pw, method=method),
+            }
+            for method in ("scrypt", "pbkdf2:sha256")
+        )
     # Also capture whatever the library default is, so the Rust side proves it
     # handles the exact string a real auth DB would store.
     default_hash = generate_password_hash("test")

@@ -16,7 +16,6 @@ from mlflow.store.artifact.dbfs_artifact_repo import DbfsRestArtifactRepository
 from mlflow.tracing.trace_archival_config import load_trace_archival_server_config
 from mlflow.utils.server_cli_utils import artifacts_only_config_validation
 
-
 ROOT = Path(__file__).resolve().parents[2]
 RUST_ROOT = ROOT / "rust"
 BINARY = RUST_ROOT / "target" / "debug" / "mlflow-server"
@@ -148,9 +147,7 @@ def main() -> None:
             python_message = error.message
         else:
             raise AssertionError("Python unexpectedly accepted artifacts-only conflict")
-        rust_message = _rust_message(
-            "--artifacts-only", "--trace-archival-config", str(conflict)
-        )
+        rust_message = _rust_message("--artifacts-only", "--trace-archival-config", str(conflict))
         if rust_message != python_message:
             raise AssertionError(
                 "artifacts_only_conflict mismatch:\n"
