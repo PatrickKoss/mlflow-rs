@@ -49,12 +49,12 @@ docker pull ghcr.io/patrickkoss/mlflow-rust-ui:latest
 ```
 
 Linux x86-64 archives containing both native binaries are available from the
-[GitHub Releases page](https://github.com/PatrickKoss/mlflow/releases). To
+[GitHub Releases page](https://github.com/PatrickKoss/mlflow-rs/releases). To
 install the server and its sibling native job worker directly from Git:
 
 ```bash
-cargo install --git https://github.com/PatrickKoss/mlflow.git --tag rust-v0.1.0 mlflow-server
-cargo install --git https://github.com/PatrickKoss/mlflow.git --tag rust-v0.1.0 mlflow-genai-worker
+cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
+cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
 ```
 
 The database must already be at MLflow's expected Alembic head before a native

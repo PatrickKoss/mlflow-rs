@@ -78,7 +78,7 @@ jobs:
           Keep mlflow-server and mlflow-genai-worker in the same directory so
           native GenAI jobs can resolve the worker. The database must be migrated to
           the MLflow Alembic head before starting the server. See:
-          https://github.com/PatrickKoss/mlflow/tree/${RELEASE_TAG}/rust
+          https://github.com/PatrickKoss/mlflow-rs/tree/${RELEASE_TAG}/rust
           EOF
           tar -czf "dist/$archive" -C dist "$(basename "$package_dir")"
           (cd dist && sha256sum "$archive" > "$sums")

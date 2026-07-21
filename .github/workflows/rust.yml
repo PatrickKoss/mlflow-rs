@@ -427,7 +427,7 @@ jobs:
   # Python-internal unit tests remain classified and validator-covered, but are
   # not misrepresented as tests that can cross an HTTP process boundary.
   python-conformance-full:
-    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'PatrickKoss/mlflow-rs' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 240
@@ -484,7 +484,7 @@ jobs:
   # run; this job adds exact-pinned-package regeneration without extending PR
   # latency or making network package resolution part of the required gate.
   semantic-oracle-refresh:
-    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'PatrickKoss/mlflow-rs' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 90
@@ -526,7 +526,7 @@ jobs:
   # test skips itself when `MLFLOW_RUST_TEST_PG_URI` is unset, so it never runs
   # in the PR-path `test` job even though it lives in the same crate.
   chaos:
-    if: github.repository == 'PatrickKoss/mlflow' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'PatrickKoss/mlflow-rs' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     timeout-minutes: 30
