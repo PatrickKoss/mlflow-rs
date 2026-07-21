@@ -1169,12 +1169,11 @@ impl TrackingStore {
                     if !is_deadlock || attempt >= TRACE_WRITE_MAX_DEADLOCK_RETRIES {
                         return Err(e);
                     }
-                    // Exponential backoff with jitter (matches Python's
-                    // `(2**attempt) - 1 + uniform(0,1)` in seconds), scaled down
-                    // so tests stay fast while keeping the shape.
+                    // Exponential backoff with jitter, matching Python's
+                    // `(2**attempt) - 1 + uniform(0,1)` in seconds.
                     let base = (1u64 << attempt).saturating_sub(1);
                     let jitter = pseudo_jitter_ms();
-                    tokio::time::sleep(Duration::from_millis(base * 100 + jitter)).await;
+                    tokio::time::sleep(Duration::from_millis(base * 1_000 + jitter)).await;
                     attempt += 1;
                 }
             }
@@ -1431,13 +1430,13 @@ fn expected_num_spans(info: &TraceInfo) -> Option<i64> {
     value.get("num_spans").and_then(|v| v.as_i64())
 }
 
-/// Cheap non-cryptographic jitter in `[0, 100)` ms derived from the wall clock,
+/// Cheap non-cryptographic jitter in `[0, 1000)` ms derived from the wall clock,
 /// so retries don't thundering-herd. (The magnitude is small; correctness does
 /// not depend on it, only deadlock-recovery latency does.)
 fn pseudo_jitter_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| (d.subsec_nanos() as u64) % 100)
+        .map(|d| (d.subsec_nanos() as u64) % 1_000)
         .unwrap_or(0)
 }
