@@ -35,23 +35,21 @@ fn main() {
     generate_model_catalog(repo_root);
 }
 
-/// Generate an ordered table of bundled provider catalogs. Python's
-/// `importlib.resources.glob("*.json")` preserves the directory iteration
-/// order, and `get_models()` uses that order when no provider filter is given.
-/// Keeping the same `read_dir` order here makes the compiled-in, Python-free
-/// catalog reproduce that observable ordering.
+/// Generate a deterministically ordered table of bundled provider catalogs.
+/// Filesystem directory iteration order varies between checkouts, while the
+/// provider order is observable when all models are returned.
 fn generate_model_catalog(repo_root: &Path) {
     let catalog_dir = repo_root.join("mlflow/utils/model_catalog");
     println!("cargo::rerun-if-changed={}", catalog_dir.display());
 
     let mut generated = String::from("pub static BUNDLED_MODEL_CATALOGS: &[(&str, &str)] = &[\n");
-    for entry in fs::read_dir(&catalog_dir)
+    let mut paths = fs::read_dir(&catalog_dir)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", catalog_dir.display()))
-    {
-        let path = entry.expect("model catalog directory entry").path();
-        if path.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
+        .map(|entry| entry.expect("model catalog directory entry").path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    paths.sort_unstable_by(|left, right| left.file_stem().cmp(&right.file_stem()));
+    for path in paths {
         let provider = path
             .file_stem()
             .and_then(|value| value.to_str())

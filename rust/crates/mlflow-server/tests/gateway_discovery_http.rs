@@ -265,7 +265,7 @@ async fn discovery_json_matches_python_with_empty_and_populated_gateway_stores()
             (
                 "/ajax-api/3.0/mlflow/gateway/supported-models",
                 1021913,
-                "3e2d61fb17c531b0154e49c2e88560ca855a8fed05dcf7bd29a89367aaf99c87",
+                "f0b63d237434b89a0c19353df96a2c51f9762d98d2c05cef4f2f955976711e39",
             ),
             (
                 "/ajax-api/3.0/mlflow/gateway/supported-models?provider=gemini",
