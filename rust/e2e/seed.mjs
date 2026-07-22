@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const baseURL = (process.env.MLFLOW_E2E_BASE_URL ?? "http://127.0.0.1").replace(/\/$/, "");
+const enableWorkspaces = process.env.MLFLOW_E2E_ENABLE_WORKSPACES !== "false";
 
 async function request(method, route, body, expected = 200, headers = {}) {
   const response = await fetch(`${baseURL}${route}`, {
@@ -128,17 +129,22 @@ function otlpTrace(traceHex, rootSpanHex, childSpanHex, index) {
 
 await waitForHealth();
 
-const experiment = await request("POST", "/api/2.0/mlflow/experiments/create", {
-  name: "T22.5 GenAI UI Smoke",
-});
+const existingExperimentId = process.env.MLFLOW_E2E_EXPERIMENT_ID;
+const experiment = existingExperimentId
+  ? { experiment_id: existingExperimentId }
+  : await request("POST", "/api/2.0/mlflow/experiments/create", {
+      name: "T22.5 GenAI UI Smoke",
+    });
 const experimentId = experiment.experiment_id;
-const secondWorkspaceName = "t11-part1-secondary";
-await request(
-  "POST",
-  "/api/3.0/mlflow/workspaces",
-  { name: secondWorkspaceName, description: "T11.6 deterministic selector workspace" },
-  201,
-);
+const secondWorkspaceName = enableWorkspaces ? "t11-part1-secondary" : null;
+if (secondWorkspaceName) {
+  await request(
+    "POST",
+    "/api/3.0/mlflow/workspaces",
+    { name: secondWorkspaceName, description: "T11.6 deterministic selector workspace" },
+    201,
+  );
+}
 const traceHexes = [
   "11111111111111111111111111111111",
   "22222222222222222222222222222222",

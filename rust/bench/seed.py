@@ -44,7 +44,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import create_engine, insert
+from sqlalchemy import create_engine, insert, select
 
 _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parents[1]
@@ -93,6 +93,7 @@ class Scale:
     spans_per_trace: int
     model_versions: int
     experiments: int
+    experiment_prefix: str
     prompt_fraction: float
     seed: int
 
@@ -106,7 +107,8 @@ def _seed_schema(db_uri: str) -> None:
 
     client = MlflowClient(tracking_uri=db_uri)
     # Creating an experiment triggers ``mlflow db upgrade`` internally.
-    client.create_experiment("_bench_bootstrap")
+    if client.get_experiment_by_name("_bench_bootstrap") is None:
+        client.create_experiment("_bench_bootstrap")
 
 
 def _batched(engine, table, rows: list[dict]) -> None:
@@ -121,7 +123,7 @@ def _batched(engine, table, rows: list[dict]) -> None:
 def _gen_experiments(rng: random.Random, scale: Scale, now_ms: int) -> list[dict]:
     return [
         {
-            "name": f"bench_exp_{i}",
+            "name": f"{scale.experiment_prefix}_{i}",
             "artifact_location": f"/tmp/bench-artifacts/exp_{i}",
             "lifecycle_stage": "active",
             "creation_time": now_ms - rng.randint(0, 10_000_000),
@@ -160,14 +162,17 @@ def generate(db_uri: str, scale: Scale) -> dict[str, int]:
 
     exp_rows = _gen_experiments(rng, scale, now_ms)
     _batched(engine, SqlExperiment.__table__, exp_rows)
-    # The bootstrap experiment is id 0; ours start at 1..N. Reflect ids back.
+    # Reflect the generated experiment IDs back from the database.
+    experiment_names = [row["name"] for row in exp_rows]
     with engine.begin() as conn:
-        exp_ids = [
-            r[0]
-            for r in conn.exec_driver_sql(
-                "SELECT experiment_id FROM experiments WHERE name LIKE 'bench_exp_%'"
-            ).fetchall()
-        ]
+        exp_ids = (
+            conn
+            .execute(
+                select(SqlExperiment.experiment_id).where(SqlExperiment.name.in_(experiment_names))
+            )
+            .scalars()
+            .all()
+        )
     counts["experiments"] = len(exp_ids)
 
     _gen_runs(engine, rng, scale, exp_ids, now_ms, counts)
@@ -446,6 +451,7 @@ def build_scale(args: argparse.Namespace) -> Scale:
         spans_per_trace=args.spans_per_trace,
         model_versions=args.model_versions,
         experiments=args.experiments,
+        experiment_prefix=args.experiment_prefix,
         prompt_fraction=args.prompt_fraction,
         seed=args.seed,
     )
@@ -461,6 +467,7 @@ def main() -> int:
     p.add_argument("--spans-per-trace", type=int, default=5)
     p.add_argument("--model-versions", type=int, default=10_000)
     p.add_argument("--experiments", type=int, default=50)
+    p.add_argument("--experiment-prefix", default="bench_exp")
     p.add_argument("--prompt-fraction", type=float, default=0.3)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--metadata", help="write scale, counts, and seed timing as JSON")
@@ -481,6 +488,8 @@ def main() -> int:
         p.error("all scale counts must be positive")
     if not 0 <= args.prompt_fraction <= 1:
         p.error("--prompt-fraction must be between 0 and 1")
+    if not args.experiment_prefix:
+        p.error("--experiment-prefix must not be empty")
 
     db_uri = args.db if "://" in args.db else f"sqlite:///{Path(args.db).resolve()}"
     scale = build_scale(args)
