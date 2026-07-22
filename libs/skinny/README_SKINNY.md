@@ -44,7 +44,7 @@ Pull the server image, or run the complete Postgres + migration + Rust server + 
 docker pull ghcr.io/patrickkoss/mlflow-rust:latest
 ```
 
-Linux x86-64 binaries are attached to [Rust server releases](https://github.com/PatrickKoss/mlflow-rs/releases). To build both binaries from source:
+Linux x86-64 binaries are attached to [Rust server releases](https://github.com/PatrickKoss/mlflow-rs/releases). Building or installing from source requires Rust 1.89 or newer. To build both binaries from source:
 
 ```bash
 cargo build --manifest-path rust/Cargo.toml --release -p mlflow-server -p mlflow-genai-worker
@@ -53,8 +53,8 @@ cargo build --manifest-path rust/Cargo.toml --release -p mlflow-server -p mlflow
 Or install them directly from a release tag:
 
 ```bash
-cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
-cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
 ```
 
 The fork tracks [`mlflow/mlflow` master](https://github.com/mlflow/mlflow) through [periodic upstream syncs](docs/rust-sync/README.md). The Python client/SDK is unchanged and remains the supported client, so [upstream client documentation](https://mlflow.org/docs/latest/ml/tracking/) continues to apply. Read the [full implementation journey and compatibility record](docs/rust-tracking-server-plan/README.md).

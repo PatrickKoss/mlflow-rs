@@ -50,11 +50,12 @@ docker pull ghcr.io/patrickkoss/mlflow-rust-ui:latest
 
 Linux x86-64 archives containing both native binaries are available from the
 [GitHub Releases page](https://github.com/PatrickKoss/mlflow-rs/releases). To
-install the server and its sibling native job worker directly from Git:
+install the server and its sibling native job worker directly from Git, use
+Rust 1.89 or newer:
 
 ```bash
-cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
-cargo install --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
 ```
 
 The database must already be at MLflow's expected Alembic head before a native
@@ -76,7 +77,7 @@ schemes.
 ## Versioning and releases
 
 Rust server releases use independent semantic versions tagged as
-`rust-vMAJOR.MINOR.PATCH`. The first planned tag is `rust-v0.1.0`. Each GitHub
+`rust-vMAJOR.MINOR.PATCH`. The initial release is `rust-v0.1.0`. Each GitHub
 release records the upstream MLflow commit/version to which it was synced and
 publishes:
 
