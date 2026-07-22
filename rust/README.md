@@ -38,7 +38,7 @@ docker compose -f docker-compose.release.yml up -d --wait
 
 MLflow is then available at <http://localhost:80>. The default image tag is
 `latest`; select a release explicitly with, for example,
-`MLFLOW_RUST_VERSION=0.1.0`. See the
+`MLFLOW_RUST_VERSION=0.2.0`. See the
 [deployment guide](deploy/README.md) for verification and cleanup commands.
 
 The images can also be pulled independently:
@@ -54,8 +54,8 @@ install the server and its sibling native job worker directly from Git, use
 Rust 1.89 or newer:
 
 ```bash
-cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-server
-cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.1.0 mlflow-genai-worker
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.2.0 mlflow-server
+cargo install --locked --git https://github.com/PatrickKoss/mlflow-rs.git --tag rust-v0.2.0 mlflow-genai-worker
 ```
 
 The database must already be at MLflow's expected Alembic head before a native
@@ -77,9 +77,9 @@ schemes.
 ## Versioning and releases
 
 Rust server releases use independent semantic versions tagged as
-`rust-vMAJOR.MINOR.PATCH`. The initial release is `rust-v0.1.0`. Each GitHub
-release records the upstream MLflow commit/version to which it was synced and
-publishes:
+`rust-vMAJOR.MINOR.PATCH`. The current release is `rust-v0.2.0`; the initial
+release was `rust-v0.1.0`. Each GitHub release records the upstream MLflow
+commit/version to which it was synced and publishes:
 
 - `ghcr.io/patrickkoss/mlflow-rust:MAJOR.MINOR.PATCH` and `:latest`;
 - `ghcr.io/patrickkoss/mlflow-rust-ui:MAJOR.MINOR.PATCH` and `:latest`;

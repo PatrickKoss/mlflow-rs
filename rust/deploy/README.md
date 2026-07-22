@@ -33,7 +33,7 @@ This uses `ghcr.io/patrickkoss/mlflow-rust:latest` and
 setting the shared version before the command, for example:
 
 ```bash
-MLFLOW_RUST_VERSION=0.1.0 docker compose -f docker-compose.release.yml up -d --wait
+MLFLOW_RUST_VERSION=0.2.0 docker compose -f docker-compose.release.yml up -d --wait
 ```
 
 The release stack still uses the digest-pinned stock MLflow image for its
