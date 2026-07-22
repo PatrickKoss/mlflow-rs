@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import hashlib
 import json
@@ -186,6 +187,8 @@ class ProviderHandler(BaseHTTPRequestHandler):
             response = self._embedding_response(body, digest)
         elif route == "anthropic_messages":
             response = self._anthropic_response(body, digest)
+        elif route == "responses":
+            response = self._responses_response(body, digest)
         else:
             response = self._openai_response(body, digest)
         self.provider.state.observe(route, request, response)
@@ -202,7 +205,109 @@ class ProviderHandler(BaseHTTPRequestHandler):
             return "anthropic_messages"
         if path.endswith("/chat/completions"):
             return "chat_completions"
+        if path.endswith("/responses"):
+            return "responses"
         return None
+
+    def _responses_response(self, body: dict[str, Any], digest: str) -> bytes:
+        model = str(body.get("model") or "genai-bench-model")
+        text = f"bench-{digest[:12]} {digest[12:20]}"
+        input_tokens = 5 + int(digest[20:22], 16) % 19
+        output_tokens = 2 + int(digest[22:24], 16) % 7
+        usage = {
+            "input_tokens": input_tokens,
+            "input_tokens_details": {"cached_tokens": 0},
+            "output_tokens": output_tokens,
+            "output_tokens_details": {"reasoning_tokens": 0},
+            "total_tokens": input_tokens + output_tokens,
+        }
+        response_id = f"resp-{digest[:24]}"
+        message_id = f"msg-{digest[:24]}"
+        content = {
+            "annotations": [],
+            "logprobs": [],
+            "text": text,
+            "type": "output_text",
+        }
+        message = {
+            "content": [content],
+            "id": message_id,
+            "role": "assistant",
+            "status": "completed",
+            "type": "message",
+        }
+        completed = {
+            "created_at": int(digest[:8], 16),
+            "error": None,
+            "id": response_id,
+            "incomplete_details": None,
+            "model": model,
+            "object": "response",
+            "output": [message],
+            "parallel_tool_calls": True,
+            "status": "completed",
+            "usage": usage,
+        }
+        if not body.get("stream"):
+            return _json_bytes(completed)
+
+        in_progress = {**completed, "output": [], "status": "in_progress", "usage": None}
+        pending_message = {**message, "content": [], "status": "in_progress"}
+        pending_content = {**content, "text": ""}
+        events = [
+            {"response": in_progress, "sequence_number": 0, "type": "response.created"},
+            {
+                "item": pending_message,
+                "output_index": 0,
+                "sequence_number": 1,
+                "type": "response.output_item.added",
+            },
+            {
+                "content_index": 0,
+                "item_id": message_id,
+                "output_index": 0,
+                "part": pending_content,
+                "sequence_number": 2,
+                "type": "response.content_part.added",
+            },
+            {
+                "content_index": 0,
+                "delta": text,
+                "item_id": message_id,
+                "logprobs": [],
+                "output_index": 0,
+                "sequence_number": 3,
+                "type": "response.output_text.delta",
+            },
+            {
+                "content_index": 0,
+                "item_id": message_id,
+                "logprobs": [],
+                "output_index": 0,
+                "sequence_number": 4,
+                "text": text,
+                "type": "response.output_text.done",
+            },
+            {
+                "content_index": 0,
+                "item_id": message_id,
+                "output_index": 0,
+                "part": content,
+                "sequence_number": 5,
+                "type": "response.content_part.done",
+            },
+            {
+                "item": message,
+                "output_index": 0,
+                "sequence_number": 6,
+                "type": "response.output_item.done",
+            },
+            {"response": completed, "sequence_number": 7, "type": "response.completed"},
+        ]
+        return b"".join(
+            f"event: {event['type']}\n".encode() + b"data: " + _json_bytes(event) + b"\n\n"
+            for event in events
+        )
 
     def _openai_response(self, body: dict[str, Any], digest: str) -> bytes:
         model = str(body.get("model") or "genai-bench-model")
@@ -406,3 +511,23 @@ def deterministic_payloads(seed: int, count: int) -> list[dict[str, Any]]:
         }
         for index in range(count)
     ]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--seed", type=int, default=20260722)
+    args = parser.parse_args()
+    server = DeterministicProvider((args.host, args.port), args.seed)
+    print(f"Mock provider listening on http://{args.host}:{server.server_port}", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

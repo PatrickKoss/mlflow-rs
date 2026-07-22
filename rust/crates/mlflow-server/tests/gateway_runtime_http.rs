@@ -587,6 +587,11 @@ fn stream_provider_response(
             Bytes::from_static(b"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"fixture \"}}\n\n"),
             Bytes::from_static(b"data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\n"),
         ]
+    } else if path.ends_with("/responses") {
+        vec![
+            Bytes::from_static(b"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-fixture\",\"status\":\"in_progress\",\"output\":[]}}\n\n"),
+            Bytes::from_static(b"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-fixture\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"fixture response\"}]}],\"usage\":{\"input_tokens\":2,\"output_tokens\":3,\"total_tokens\":5}}}\n\n"),
+        ]
     } else if path.contains("streamGenerateContent") {
         vec![
             Bytes::from_static(b": keep-alive\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"fixture \"}]}}]}\n"),
@@ -746,6 +751,128 @@ async fn usage_tracked_invocations_persist_gateway_and_cost_spans() {
             .unwrap(),
         3.0 * cost["total_cost"].as_f64().unwrap()
     );
+}
+
+#[tokio::test]
+async fn streaming_trace_persists_when_client_stops_before_terminal_event() {
+    let fixture = Fixture::new().await;
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/openai/v1/chat/completions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "model": "traced-openai-endpoint",
+                        "messages": [{"role": "user", "content": "stop after done"}],
+                        "stream": true,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let mut body = response.into_body().into_data_stream();
+    let received = body.next().await.unwrap().unwrap();
+    assert!(!received.windows(12).any(|window| window == b"data: [DONE]"));
+    drop(body);
+
+    let persisted = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let page = fixture
+                .store
+                .search_traces(
+                    WORKSPACE_DEFAULT_NAME,
+                    std::slice::from_ref(&fixture.trace_experiment_id),
+                    None,
+                    10,
+                    &[],
+                    None,
+                )
+                .await
+                .unwrap();
+            if page.trace_infos.len() == 1 {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    assert!(persisted.is_ok());
+}
+
+#[tokio::test]
+async fn usage_tracking_bounds_large_request_metadata() {
+    let fixture = Fixture::new().await;
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/gateway/openai/v1/responses")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "model": "traced-openai-endpoint",
+                        "input": [
+                            {"content": [{"text": "developer context", "type": "input_text"}], "role": "developer", "type": "message"},
+                            {"content": [{"text": "large coding agent request", "type": "input_text"}], "role": "user", "type": "message"},
+                        ],
+                        "stream": true,
+                        "tools": [{"description": "x".repeat(9_000), "name": "shell"}],
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.into_body().collect().await.unwrap();
+
+    let page = fixture
+        .store
+        .search_traces(
+            WORKSPACE_DEFAULT_NAME,
+            std::slice::from_ref(&fixture.trace_experiment_id),
+            None,
+            10,
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.trace_infos.len(), 1);
+    let inputs = page.trace_infos[0]
+        .trace_metadata
+        .iter()
+        .find(|(key, _)| key == "mlflow.traceInputs")
+        .unwrap()
+        .1
+        .as_deref()
+        .unwrap();
+    let inputs: Value = serde_json::from_str(inputs).unwrap();
+    assert_eq!(inputs["_mlflow_truncated"], true);
+    assert!(inputs["original_char_count"].as_u64().unwrap() > 8_000);
+    assert_eq!(inputs["preview"], "large coding agent request");
+    assert_eq!(
+        page.trace_infos[0].request_preview.as_deref(),
+        Some("large coding agent request")
+    );
+    assert_eq!(
+        page.trace_infos[0].response_preview.as_deref(),
+        Some("fixture response")
+    );
+    assert!(page.trace_infos[0]
+        .metadata("mlflow.trace.tokenUsage")
+        .is_some());
 }
 
 #[tokio::test]

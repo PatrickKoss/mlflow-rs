@@ -42,6 +42,11 @@ def test_mock_provider_is_byte_stable_for_every_protocol_route() -> None:
                 "stream": True,
             },
         ),
+        ("/v1/responses", {"input": "hello", "model": "fixture"}),
+        (
+            "/v1/responses",
+            {"input": "hello", "model": "fixture", "stream": True},
+        ),
         ("/v1/embeddings", {"input": ["alpha", "beta"], "model": "fixture"}),
         (
             "/v1/messages",

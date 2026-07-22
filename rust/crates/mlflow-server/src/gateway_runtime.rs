@@ -43,6 +43,8 @@ const ROUTE_TIMEOUT_ENV: &str = "MLFLOW_GATEWAY_ROUTE_TIMEOUT_SECONDS";
 const ALLOWED_PROVIDERS_ENV: &str = "MLFLOW_GATEWAY_ALLOWED_PROVIDERS";
 const TEST_FIXED_TIME_ENV: &str = "MLFLOW_GATEWAY_TEST_FIXED_TIME";
 const ACCEPT_ENCODING: &str = "gzip, deflate, identity";
+const MAX_TRACE_METADATA_VALUE_CHARS: usize = 8_000;
+const TRUNCATED_TRACE_PREVIEW_CHARS: usize = 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InvocationKind {
@@ -1333,6 +1335,8 @@ async fn persist_gateway_trace(
 
     let request_json = python_json_dumps(&trace.request, false);
     let output_json = python_json_dumps(output, false);
+    let request_metadata_json = bounded_trace_metadata_json(&trace.request);
+    let output_metadata_json = bounded_trace_metadata_json(output);
     let mut metadata = vec![
         (
             "mlflow.gateway.endpointId".to_string(),
@@ -1342,8 +1346,8 @@ async fn persist_gateway_trace(
             "mlflow.gateway.requestType".to_string(),
             trace.request_type.to_string(),
         ),
-        ("mlflow.traceInputs".to_string(), request_json.clone()),
-        ("mlflow.traceOutputs".to_string(), output_json.clone()),
+        ("mlflow.traceInputs".to_string(), request_metadata_json),
+        ("mlflow.traceOutputs".to_string(), output_metadata_json),
         ("mlflow.trace_schema.version".to_string(), "3".to_string()),
     ];
     if let Some(usage) = usage {
@@ -1510,6 +1514,7 @@ fn stream_usage_output(bytes: &[u8]) -> Value {
     let mut input_tokens = None;
     let mut output_tokens = None;
     let mut total_tokens = None;
+    let mut completed_response = None;
 
     for line in String::from_utf8_lossy(bytes).lines() {
         let line = line.trim();
@@ -1520,10 +1525,14 @@ fn stream_usage_output(bytes: &[u8]) -> Value {
         let Ok(value) = serde_json::from_str::<Value>(payload) else {
             continue;
         };
+        if value.get("type").and_then(Value::as_str) == Some("response.completed") {
+            completed_response = value.get("response").cloned();
+        }
         let Some(usage) = value
             .get("usage")
             .or_else(|| value.get("usageMetadata"))
             .or_else(|| value.pointer("/message/usage"))
+            .or_else(|| value.pointer("/response/usage"))
         else {
             continue;
         };
@@ -1540,6 +1549,9 @@ fn stream_usage_output(bytes: &[u8]) -> Value {
         total_tokens = first_u64(usage, &["total_tokens", "totalTokenCount"]).or(total_tokens);
     }
 
+    if let Some(response) = completed_response {
+        return response;
+    }
     let total_tokens = total_tokens.or_else(|| {
         input_tokens
             .zip(output_tokens)
@@ -1725,12 +1737,39 @@ fn request_preview(request: &Value) -> Option<String> {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         })
+        .or_else(|| {
+            request
+                .get("input")
+                .and_then(Value::as_array)
+                .and_then(|items| {
+                    items.iter().rev().find_map(|item| {
+                        if item.get("role").and_then(Value::as_str) != Some("user") {
+                            return None;
+                        }
+                        item.get("content")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                            .or_else(|| {
+                                item.get("content")
+                                    .and_then(Value::as_array)
+                                    .and_then(|content| {
+                                        content.iter().rev().find_map(|part| {
+                                            part.get("text")
+                                                .and_then(Value::as_str)
+                                                .map(str::to_string)
+                                        })
+                                    })
+                            })
+                    })
+                })
+        })
 }
 
 fn response_preview(output: &Value) -> Option<String> {
     output
         .pointer("/choices/0/message/content")
         .or_else(|| output.pointer("/choices/0/delta/content"))
+        .or_else(|| output.pointer("/output/0/content/0/text"))
         .and_then(Value::as_str)
         .map(str::to_string)
 }
@@ -2417,6 +2456,32 @@ struct RawProviderStream {
     trace_bytes: Vec<u8>,
 }
 
+impl Drop for RawProviderStream {
+    fn drop(&mut self) {
+        if self.trace.is_none() {
+            return;
+        }
+        let Some(mut upstream) = self.upstream.take() else {
+            return;
+        };
+        let (trace, model, method) = self.trace.take().expect("trace checked above");
+        let mut trace_bytes = std::mem::take(&mut self.trace_bytes);
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        runtime.spawn(async move {
+            while let Some(chunk) = upstream.next().await {
+                match chunk {
+                    Ok(bytes) => trace_bytes.extend_from_slice(&bytes),
+                    Err(_) => return,
+                }
+            }
+            let output = stream_usage_output(&trace_bytes);
+            complete_gateway_trace(&trace, &model, method, &output, "OK").await;
+        });
+    }
+}
+
 fn raw_stream_response(
     request: ProviderRequest,
     trace: Option<(
@@ -2481,20 +2546,48 @@ async fn next_raw_stream_chunk(mut state: RawProviderStream) -> Option<(Bytes, R
     match state.upstream.as_mut()?.next().await {
         Some(Ok(bytes)) => {
             state.trace_bytes.extend_from_slice(&bytes);
+            if stream_has_terminal_event(&state.trace_bytes) {
+                if let Some((trace, model, method)) = state.trace.take() {
+                    let output = stream_usage_output(&state.trace_bytes);
+                    complete_gateway_trace(&trace, &model, method, &output, "OK").await;
+                }
+            }
             Some((bytes, state))
         }
         Some(Err(error)) => {
             state.done = true;
+            state.trace = None;
             Some((sse_error(&error.to_string(), "ClientPayloadError"), state))
         }
         None => {
-            if let Some((trace, model, method)) = state.trace.as_ref() {
+            if let Some((trace, model, method)) = state.trace.take() {
                 let output = stream_usage_output(&state.trace_bytes);
-                complete_gateway_trace(trace, model, method, &output, "OK").await;
+                complete_gateway_trace(&trace, &model, method, &output, "OK").await;
             }
             None
         }
     }
+}
+
+fn stream_has_terminal_event(bytes: &[u8]) -> bool {
+    String::from_utf8_lossy(bytes).lines().any(|line| {
+        let line = line.trim();
+        if line == "data: [DONE]" || line == "event: message_stop" {
+            return true;
+        }
+        let Some(payload) = line.strip_prefix("data:").map(str::trim) else {
+            return false;
+        };
+        serde_json::from_str::<Value>(payload)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .is_some_and(|kind| kind == "response.completed" || kind == "message_stop")
+    })
 }
 
 async fn raw_proxy_response(
@@ -2983,6 +3076,28 @@ fn validate_payload(payload: &Value, kind: InvocationKind) -> Result<(), Gateway
         ));
     }
     Ok(())
+}
+
+fn bounded_trace_metadata_json(value: &Value) -> String {
+    let serialized = python_json_dumps(value, false);
+    let original_char_count = serialized.chars().count();
+    if original_char_count <= MAX_TRACE_METADATA_VALUE_CHARS {
+        return serialized;
+    }
+    let preview = request_preview(value)
+        .or_else(|| response_preview(value))
+        .unwrap_or_else(|| serialized.clone())
+        .chars()
+        .take(TRUNCATED_TRACE_PREVIEW_CHARS)
+        .collect::<String>();
+    python_json_dumps(
+        &json!({
+            "_mlflow_truncated": true,
+            "original_char_count": original_char_count,
+            "preview": preview,
+        }),
+        false,
+    )
 }
 
 fn parse_body(body: &[u8]) -> Result<Value, GatewayRuntimeError> {
