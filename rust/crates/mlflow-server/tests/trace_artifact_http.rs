@@ -5,6 +5,7 @@
 //!
 //! * TRACKING_STORE-backed spans JSON (body + headers).
 //! * ARTIFACT_REPO-backed spans JSON (`traces.json` on local FS).
+//! * `mlflow-artifacts:/` trace roots resolved through the proxy destination.
 //! * attachment fetch via `path=` (a canonical-UUID attachment file).
 //! * traversal `path=` → 400.
 //! * missing `request_id` → 400.
@@ -78,6 +79,10 @@ struct TestServer {
 
 impl TestServer {
     async fn start(tag: &str) -> Self {
+        Self::start_with_proxy_destination(tag, None).await
+    }
+
+    async fn start_with_proxy_destination(tag: &str, destination: Option<&Path>) -> Self {
         let db_file = TempDb::new(tag);
         let db = Db::connect(&db_file.uri(), PoolConfig::default())
             .await
@@ -97,7 +102,19 @@ impl TestServer {
             ..Default::default()
         };
         let recorder = PrometheusBuilder::new().build_recorder().handle();
-        let app = build_app_with_recorder(&config, recorder, Some(AppState::new(store.clone())));
+        let state = if let Some(destination) = destination {
+            AppState::with_artifacts(
+                store.clone(),
+                true,
+                Some(std::sync::Arc::new(
+                    mlflow_artifacts::repo::local_repo(destination).expect("local proxy repo"),
+                )),
+                Some(destination.display().to_string()),
+            )
+        } else {
+            AppState::new(store.clone())
+        };
+        let app = build_app_with_recorder(&config, recorder, Some(state));
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
         let addr = listener.local_addr().expect("addr");
@@ -425,6 +442,49 @@ async fn artifact_repo_explicit_tag_also_falls_back() {
     let res = get(&server, "/ajax-api/2.0", &format!("request_id={trace_id}")).await;
     assert_eq!(res.status, StatusCode::OK, "{}", res.body_str());
     assert_eq!(res.json()["spans"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn proxied_artifact_repo_resolves_single_slash_uri() {
+    let destination = tempfile::TempDir::new().unwrap();
+    let server =
+        TestServer::start_with_proxy_destination("artifact_proxy", Some(destination.path())).await;
+    let trace_id = "tr-artifact-proxy";
+    start_trace(&server.store, trace_id).await;
+    server
+        .store
+        .set_trace_tag(
+            "default",
+            trace_id,
+            "mlflow.artifactLocation",
+            "mlflow-artifacts:/proxy/traces/tr-artifact-proxy/artifacts",
+        )
+        .await
+        .unwrap();
+    server
+        .store
+        .set_trace_tag(
+            "default",
+            trace_id,
+            "mlflow.trace.spansLocation",
+            "ARTIFACT_REPO",
+        )
+        .await
+        .unwrap();
+
+    let artifact_dir = destination
+        .path()
+        .join("proxy/traces/tr-artifact-proxy/artifacts");
+    std::fs::create_dir_all(&artifact_dir).unwrap();
+    std::fs::write(
+        artifact_dir.join("traces.json"),
+        serde_json::to_vec(&json!({"spans": [{"name": "from-proxy"}]})).unwrap(),
+    )
+    .unwrap();
+
+    let res = get(&server, "/ajax-api/3.0", &format!("request_id={trace_id}")).await;
+    assert_eq!(res.status, StatusCode::OK, "{}", res.body_str());
+    assert_eq!(res.json()["spans"][0]["name"], "from-proxy");
 }
 
 #[tokio::test]

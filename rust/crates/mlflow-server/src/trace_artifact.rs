@@ -83,8 +83,13 @@ pub async fn get_trace_artifact(
     if let Some(path) = path {
         let safe_path = mlflow_artifacts::validate_path_is_safe(&path)?;
         let trace_info = store.get_trace_info(workspace.name(), &request_id).await?;
-        let repo = repo_for_trace(&trace_info)?;
-        let content_bytes = download_trace_attachment(repo.as_ref(), &safe_path).await?;
+        validate_attachment_path(&safe_path)?;
+        let resolved = state.resolve_artifact(
+            trace_artifact_uri(&trace_info)?,
+            &format!("attachments/{safe_path}"),
+        )?;
+        let content_bytes =
+            download_trace_attachment(resolved.repo.as_ref(), &resolved.path, &safe_path).await?;
         return Ok(attachment_response(&safe_path, content_bytes));
     }
 
@@ -96,8 +101,9 @@ pub async fn get_trace_artifact(
             if trace_info.tag(TRACE_TAG_SPANS_LOCATION) == Some(SPANS_LOCATION_ARCHIVE_REPO) {
                 crate::trace_archival::download_archived_trace_json(&trace_info).await?
             } else {
-                let repo = repo_for_trace(&trace_info)?;
-                download_trace_data(repo.as_ref()).await?
+                let resolved = state
+                    .resolve_artifact(trace_artifact_uri(&trace_info)?, TRACE_DATA_FILE_NAME)?;
+                download_trace_data(resolved.repo.as_ref(), &resolved.path).await?
             }
         }
     };
@@ -158,23 +164,13 @@ fn trace_data_to_json(spans: &[StoredSpan]) -> Result<serde_json::Value, MlflowE
     Ok(serde_json::json!({ "spans": out }))
 }
 
-/// Resolve the [`mlflow_artifacts::ArtifactRepo`] for a trace's artifact
-/// location, mirroring `_get_trace_artifact_repo` /
-/// `get_artifact_uri_for_trace` (`mlflow/tracing/utils/artifact_utils.py:13`):
+/// Return a trace's artifact location, mirroring `get_artifact_uri_for_trace`
+/// (`mlflow/tracing/utils/artifact_utils.py:13`):
 /// the `mlflow.artifactLocation` tag IS the artifact URI (written by
 /// `start_trace`/`log_spans`, plan T2.10). A missing tag mirrors Python's
 /// `MlflowTraceDataCorrupted` (a trace should always carry this tag).
-///
-/// Unlike Python, this does not resolve `mlflow-artifacts://` proxy URIs to
-/// the server's `--artifacts-destination` root (that resolution — and the
-/// full run/registry artifact-URI plumbing generally — is Phase 5 (T5.1/T5.2)
-/// server wiring, not yet landed); such schemes fall through to
-/// [`mlflow_artifacts::factory::repo_from_uri`]'s own `NOT_IMPLEMENTED` for
-/// unrecognized/unsupported schemes.
-fn repo_for_trace(
-    trace_info: &TraceInfo,
-) -> Result<std::sync::Arc<dyn mlflow_artifacts::ArtifactRepo>, MlflowError> {
-    let artifact_uri = trace_info.tag(MLFLOW_ARTIFACT_LOCATION).ok_or_else(|| {
+fn trace_artifact_uri(trace_info: &TraceInfo) -> Result<&str, MlflowError> {
+    trace_info.tag(MLFLOW_ARTIFACT_LOCATION).ok_or_else(|| {
         MlflowError::new(
             format!(
                 "Trace data is corrupted for request_id={}",
@@ -182,8 +178,7 @@ fn repo_for_trace(
             ),
             ErrorCode::InvalidState,
         )
-    })?;
-    mlflow_artifacts::factory::repo_from_uri(artifact_uri)
+    })
 }
 
 /// `ArtifactRepositoryBase.download_trace_data` as overridden by
@@ -202,8 +197,9 @@ fn repo_for_trace(
 /// matching the style `send_artifact`'s own not-found message already uses.
 async fn download_trace_data(
     repo: &dyn mlflow_artifacts::ArtifactRepo,
+    path: &str,
 ) -> Result<serde_json::Value, MlflowError> {
-    let bytes = match repo.get(TRACE_DATA_FILE_NAME).await {
+    let bytes = match repo.get(path).await {
         Ok(dl) => collect(dl).await?,
         Err(e) if e.error_code == ErrorCode::ResourceDoesNotExist => {
             return Err(trace_data_not_found());
@@ -234,11 +230,10 @@ fn trace_data_not_found() -> MlflowError {
 /// must be a canonical (lowercase, hyphenated) UUID string.
 async fn download_trace_attachment(
     repo: &dyn mlflow_artifacts::ArtifactRepo,
-    path: &str,
+    resolved_path: &str,
+    display_path: &str,
 ) -> Result<Vec<u8>, MlflowError> {
-    validate_attachment_path(path)?;
-    let full = format!("attachments/{path}");
-    let dl = repo.get(&full).await.map_err(|e| {
+    let dl = repo.get(resolved_path).await.map_err(|e| {
         // Mirrors the handler's `except Exception` catch-all around
         // `download_trace_attachment` (any non-`MlflowException` failure is
         // wrapped); a repo miss IS an `MlflowException`
@@ -248,7 +243,7 @@ async fn download_trace_attachment(
             e
         } else {
             MlflowError::internal_error(format!(
-                "Failed to download attachment '{path}' for trace."
+                "Failed to download attachment '{display_path}' for trace."
             ))
         }
     })?;

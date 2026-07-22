@@ -10,8 +10,11 @@
 #      |         to start against an unmigrated DB (`Db::connect_and_verify`), so
 #      |         this init step MUST complete before `rust` boots.
 #      v  (service_completed_successfully)
-#   rust  --  waits on `migrate`, then serves every API route and launches the
-#      |       co-installed native GenAI worker for all six job kinds.
+#   minio + minio-init -- object storage plus one-shot bucket creation.
+#      |
+#      v  (service_completed_successfully)
+#   rust  --  waits on `migrate` and `minio-init`, then serves every API route
+#      |       and launches the co-installed native GenAI worker for all six job kinds.
 #      v  (service_healthy)
 #   nginx  --  reverse proxy on :80; serves the built React assets directly.
 #
@@ -32,6 +35,39 @@ services:
       timeout: 3s
       retries: 20
     # No host port published; only the compose network needs it.
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MLFLOW_S3_BUCKET: ${MLFLOW_S3_BUCKET:-mlflow}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing "local/$$MLFLOW_S3_BUCKET"
+    restart: "no"
 
   # One-shot: migrate the empty DB to the Alembic head, then exit 0.
   migrate:
@@ -60,9 +96,17 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
     environment:
       # Rust pool / logging.
       RUST_LOG: info
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MLFLOW_S3_IGNORE_TLS: "true"
     command:
       - --host
       - 0.0.0.0
@@ -72,9 +116,9 @@ services:
       - postgresql://mlflow:mlflow@postgres:5432/mlflow
       - --serve-artifacts
       - --artifacts-destination
-      - /mlartifacts
+      - s3://${MLFLOW_S3_BUCKET:-mlflow}
       - --default-artifact-root
-      - /mlartifacts
+      - mlflow-artifacts:/
     volumes:
       - artifacts:/mlartifacts
     healthcheck:
@@ -99,3 +143,4 @@ services:
 
 volumes:
   artifacts:
+  minio-data:

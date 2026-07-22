@@ -63,24 +63,53 @@ docker compose -f deploy/docker-compose.yml down -v
 ```
 
 MLflow is reachable at `http://localhost:80` while the stack is running.
+MinIO's S3 API is published at `http://localhost:9000` and its console at
+`http://localhost:9001`. The local defaults are bucket `mlflow` and credentials
+`minioadmin` / `minioadmin`; override them with `MLFLOW_S3_BUCKET`,
+`MINIO_ROOT_USER`, and `MINIO_ROOT_PASSWORD` before starting Compose.
 
 ## Service graph
 
 ```text
-postgres --healthy--> migrate --completed--> rust --healthy--> nginx :80
+postgres --healthy--> migrate ---------\
+                                      +--> rust --healthy--> nginx :80
+minio --healthy--> minio-init --------/
 ```
 
 - `postgres`: tracking, registry, GenAI, and job state.
 - `migrate`: Python/Alembic one-shot init; exits before serving begins.
+- `minio`: S3-compatible artifact storage; publishes the API on `:9000` and
+  console on `:9001`.
+- `minio-init`: one-shot creation of the configured artifact bucket.
 - `rust`: `mlflow-server` plus the co-installed `mlflow-genai-worker`; owns all
   API, gateway, Assistant, PromptLab, and job traffic.
 - `nginx`: serves the UI build and proxies every non-static request to Rust.
 
-The compose artifact destination is the local `/mlartifacts` volume. Full-Rust
-serving is supported for local/file and S3-compatible destinations. GCS and
-Azure artifact proxy destinations remain fail-loud `NOT_IMPLEMENTED` seams;
-use client-direct uploads or retain a separately managed Python artifact plane
-until those backends are ported.
+The compose artifact destination is `s3://mlflow` in MinIO and the default
+artifact root is `mlflow-artifacts:/`, so normal clients upload artifacts through
+the tracking server. Full-Rust serving is supported for local/file and
+S3-compatible destinations. GCS and Azure artifact proxy destinations remain
+fail-loud `NOT_IMPLEMENTED` seams; use client-direct uploads or retain a
+separately managed Python artifact plane until those backends are ported.
+
+## Seed object-backed traces
+
+From the repository root, seed 6,000 traces split evenly across two experiments:
+
+```bash
+uv run --frozen python rust/tools/seed_minio_traces.py --total 6000
+```
+
+The `Tracking Server Proxy` experiment uses an `mlflow-artifacts:/` root. Its
+`traces.json` payloads travel through nginx and the Rust artifact proxy before
+being written to MinIO. The `Client Direct` experiment uses an `s3://` root, so
+the Python client uploads `traces.json` directly to MinIO. Trace metadata is
+always registered with the tracking server in both modes; only the artifact
+payload route differs.
+
+Use `--mode proxy` or `--mode direct` to exercise one route. The script accepts
+`--tracking-uri`, `--s3-endpoint`, bucket and credential flags, prints progress,
+and reports the experiment UI URLs plus the resulting object counts.
 
 ## Building the UI
 

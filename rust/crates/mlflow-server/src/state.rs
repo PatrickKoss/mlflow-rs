@@ -438,8 +438,12 @@ fn is_proxied_scheme(uri: &str) -> bool {
 
 /// The URI scheme (lowercased), or `None` for a bare path.
 fn scheme_of(uri: &str) -> Option<String> {
-    let (scheme, _) = uri.split_once("://")?;
-    Some(scheme.to_ascii_lowercase())
+    let (scheme, _) = uri.split_once(':')?;
+    (!scheme.is_empty()
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+    .then(|| scheme.to_ascii_lowercase())
 }
 
 /// `_get_proxied_run_artifact_destination_path(proxied_artifact_root,
@@ -459,15 +463,17 @@ pub(crate) fn proxied_run_artifact_destination_path(
     let scheme = scheme_of(proxied_artifact_root);
     let root_path = match scheme.as_deref() {
         Some("mlflow-artifacts") => {
-            // `mlflow-artifacts://<netloc>/path/to/artifact` — everything after
-            // the netloc (Python reads `parsed.path`), leading slash stripped.
             let after_scheme = proxied_artifact_root
-                .split_once("://")
+                .split_once(':')
                 .map(|(_, rest)| rest)
                 .unwrap_or("");
-            let path = match after_scheme.split_once('/') {
-                Some((_netloc, path)) => path,
-                None => "",
+            let path = if let Some(authority_and_path) = after_scheme.strip_prefix("//") {
+                authority_and_path
+                    .split_once('/')
+                    .map(|(_, path)| path)
+                    .unwrap_or("")
+            } else {
+                after_scheme
             };
             path.trim_start_matches('/').to_string()
         }
@@ -514,6 +520,7 @@ mod tests {
 
     #[test]
     fn proxied_scheme_detection() {
+        assert!(is_proxied_scheme("mlflow-artifacts:/exp/run"));
         assert!(is_proxied_scheme("mlflow-artifacts://host/exp/run"));
         assert!(is_proxied_scheme(
             "http://host/api/2.0/mlflow-artifacts/artifacts/x"
@@ -528,6 +535,13 @@ mod tests {
 
     #[test]
     fn mlflow_artifacts_uri_destination_path() {
+        let p = proxied_run_artifact_destination_path(
+            "mlflow-artifacts:/1/abc/artifacts",
+            Some("traces.json"),
+        )
+        .unwrap();
+        assert_eq!(p, "1/abc/artifacts/traces.json");
+
         let p = proxied_run_artifact_destination_path(
             "mlflow-artifacts://host/1/abc/artifacts",
             Some("model/data.txt"),
